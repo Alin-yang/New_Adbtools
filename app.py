@@ -195,6 +195,7 @@ class ADBToolApp:
         else:
             self.update_status(output, False)
 
+
     @require_device_connected
     def clear_cache(self):
         """清除应用缓存"""
