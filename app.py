@@ -107,6 +107,7 @@ class ADBToolApp:
         self.progress.stop()
         self.progress.grid_remove()
 
+
     @require_device_connected
     def force_install(self):
         """带进度显示的强制安装"""
