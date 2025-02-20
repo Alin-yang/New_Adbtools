@@ -1,3 +1,5 @@
+import sys
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import threading
@@ -26,6 +28,7 @@ class ADBToolApp:
         self.root.title("ADB Tool")
         self._init_variables()
         self._setup_gui()
+
 
     def _init_variables(self):
         """初始化实例变量"""
@@ -304,25 +307,39 @@ class ADBToolApp:
             return
 
         self.stop_event.set()
-        self.logcat_thread.join(timeout=5)
 
-        if os.path.exists(self.log_file_path):
-            new_name = f"D:\\{timestamp_time()}.log"
-            os.rename(self.log_file_path, new_name)
-            self.update_status(f"日志文件已保存至: {new_name}", True)
-        else:
-            self.update_status("未找到日志文件", False)
+        # 确保进程终止
+        self._terminate_logcat()
+
+        # 重试机制（最多3次）
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if os.path.exists(self.log_file_path):
+                    new_name = f"D:\\{timestamp_time()}.log"
+                    os.rename(self.log_file_path, new_name)
+                    self.update_status(f"日志已保存到 {new_name}", True)
+                    break
+            except PermissionError:
+                if attempt < max_retries - 1:
+                    time.sleep(1)  # 每次重试间隔1秒
+                    continue
+                self.update_status("文件占用，重命名失败", False)
         self.logging_active = False
 
     def _run_logcat(self):
         """实际执行日志捕获"""
         try:
             with open(self.log_file_path, "w") as f:
+                # Windows 系统添加 CREATE_NO_WINDOW 标志
+                creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+
                 self.logcat_subprocess = subprocess.Popen(
                     ["adb", "logcat", "-v", "time", "*:V"],
                     stdout=f,
                     stderr=subprocess.PIPE,
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                    creationflags=creation_flags,
+                    text=True
                 )
 
                 while self.logcat_subprocess.poll() is None:
@@ -331,18 +348,29 @@ class ADBToolApp:
                         break
         except Exception as e:
             self.update_status(f"日志错误: {str(e)}", False)
+        finally:
+            if hasattr(f, "close"):
+                f.close()
 
     def _terminate_logcat(self):
-        """终止日志进程"""
+        '''终止日志捕获进程'''
         if self.logcat_subprocess and self.logcat_subprocess.poll() is None:
             try:
-                self.logcat_subprocess.send_signal(subprocess.signal.CTRL_BREAK_EVENT)
+                # 先尝试正常终止
+                self.logcat_subprocess.terminate()
                 self.logcat_subprocess.wait(timeout=3)
-            except (subprocess.TimeoutExpired, AttributeError):
+            except (subprocess.TimeoutExpired, psutil.NoSuchProcess):
+                # 强制终止进程树
                 parent = psutil.Process(self.logcat_subprocess.pid)
                 for child in parent.children(recursive=True):
-                    child.kill()
-                parent.kill()
+                    try:
+                        child.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+                try:
+                    parent.kill()
+                except psutil.NoSuchProcess:
+                    pass
 
     # 帮助文档
     def show_help(self):
