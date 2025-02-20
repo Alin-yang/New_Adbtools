@@ -19,6 +19,7 @@ class ADBToolApp:
     ip_entry:ttk.Entry
     pkg_entry:ttk.Entry
     status_text:tk.Text
+    progress: ttk.Progressbar # 进度条声明
 
     def __init__(self, root):
         self.root = root
@@ -33,12 +34,14 @@ class ADBToolApp:
         self.logging_active = False
         self.logcat_subprocess = None
         self.stop_event = threading.Event()
+        self.progress = None  # 添加进度条引用
 
     def _setup_gui(self):
         from gui.layout import setup_gui
         # print("调试：加载GUI前是否有ip_entry属性?", hasattr(self, 'ip_entry'))  # 应输出False
         setup_gui(self)
         # print("调试：加载GUI后是否有ip_entry属性?", hasattr(self, 'ip_entry'))  # 应输出True
+
     # 状态更新方法
     def update_status(self, message, success):
         """更新状态文本框"""
@@ -55,7 +58,7 @@ class ADBToolApp:
             self.apk_entry.insert(0, file_path)
 
     # 核心ADB操作方法
-    @require_device_connected
+    # @require_device_connected
     def connect_adb(self):
         """连接ADB设备"""
         ip_address = self.ip_entry.get()
@@ -94,16 +97,82 @@ class ADBToolApp:
             return False
         return True
 
+    def _show_progress(self):
+        """显示进度条动画"""
+        self.progress.grid()
+        self.progress.start()
+
+    def _hide_progress(self):
+        """隐藏进度条"""
+        self.progress.stop()
+        self.progress.grid_remove()
+
+
     @require_device_connected
     def force_install(self):
-        """强制安装APK"""
+        """带进度显示的强制安装"""
         apk_path = self.apk_entry.get()
         if not apk_path:
             self.update_status("请选择APK文件", False)
             return
 
-        output, success = run_adb_command(f"adb install -r -d {apk_path}")
-        self.update_status(output, success)
+        # 显示进度条
+        self._show_progress()
+        self.update_status("开始安装应用...", True)
+
+        # 启动安装线程
+        install_thread = threading.Thread(
+            target=self._run_install_with_progress,
+            args=(apk_path,),
+            daemon=True
+        )
+        install_thread.start()
+
+    def _run_install_with_progress(self, apk_path):
+        """实际执行安装并捕获输出"""
+        try:
+            process = subprocess.Popen(
+                f"adb install -r -d {apk_path}",
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True
+            )
+
+            # 定义需要过滤的关键词
+            filter_keywords = ["Performing Streamed Install"]
+
+            # 实时捕获输出
+            while True:
+                output = process.stdout.readline()
+                if output == '' and process.poll() is not None:
+                    break
+                if output:
+                    stripped_output = output.strip()
+                    if not any(keyword in stripped_output for keyword in filter_keywords):
+                        self._update_install_status(stripped_output)  # 仅传递有效内容
+
+            # 获取最终结果
+            return_code = process.poll()
+            success = return_code == 0
+            final_output = "安装成功" if success else f"安装失败 (code {return_code})"
+
+        except Exception as e:
+            final_output = f"安装异常: {str(e)}"
+            success = False
+
+        # 更新最终状态
+        self.root.after(0, lambda: [
+            self._hide_progress(),
+            self.update_status(final_output, success)
+        ])
+
+
+    def _update_install_status(self, message):
+        """线程安全的状态更新"""
+        self.root.after(0, lambda: self.status_text.insert(
+            tk.END, f"\n{message}\n", "success" if "Success" in message else "error"
+        ))
 
     @require_device_connected
     def uninstall(self):
