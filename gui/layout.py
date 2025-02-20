@@ -28,6 +28,11 @@ def setup_gui(app):
     app.status_text.tag_configure("success", foreground="green")
     app.status_text.tag_configure("error", foreground="red")
 
+    # 添加进度条组件（确保挂载到app实例）
+    app.progress = ttk.Progressbar(app.root, mode="indeterminate", length=280)
+    app.progress.grid(row=10, column=0, columnspan=3, sticky=tk.EW, padx=10, pady=5)
+    app.progress.grid_remove()  # 默认隐藏
+
     # 功能按钮
     buttons = [
         ("Connect ADB", 3, 0, app.connect_adb),
