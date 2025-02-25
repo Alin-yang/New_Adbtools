@@ -48,6 +48,8 @@ def setup_gui(app):
         ("Get Version", 6, 1, app.get_version),
         ("Reboot", 6, 2, app.reboot),
         ("Android Version", 7, 0, app.get_android_version),
+        ("LogClear", 8, 1, app.log_clear),
+        ("Get_Packagename", 8, 2, app.get_package_name),
         ("Screencap", 0, 2, app.screencap),
         ("Get_SN", 1, 2, app.get_serial_number),
         ("Start Logcat", 7, 1, app.start_logcat),

@@ -372,6 +372,29 @@ class ADBToolApp:
                 except psutil.NoSuchProcess:
                     pass
 
+    @require_device_connected
+    def log_clear(self):
+        """清除日志"""
+        output, success = run_adb_command("adb logcat -c")
+        if success:
+            self.update_status("日志清除成功", True)
+        else:
+            self.update_status(output, False)
+
+    @require_device_connected
+    def get_package_name(self):
+        """获取包名, 自动填充"""
+        output, success = run_adb_command('adb shell dumpsys window windows | findstr "mCurrentFocus"')
+        # print(output)#   mCurrentFocus=Window{306dbef u0 com.ypfun.video/com.ypfun.video.module.column.ColumnActivity}
+        if success:
+            package_name = output.split("u0 ")[1].split("/")[0]
+            # print(package_name)
+            self.pkg_entry.delete(0, tk.END)
+            self.pkg_entry.insert(0, package_name)
+            self.update_status(f"包名已自动填充为: {package_name}", True)
+        else:
+            self.update_status(output, False)
+
     # 帮助文档
     def show_help(self):
         """显示帮助信息"""
