@@ -20,6 +20,7 @@ class ADBToolApp:
     apk_entry:ttk.Entry
     ip_entry:ttk.Entry
     pkg_entry:ttk.Entry
+    log_path_entry:ttk.Entry
     status_text:tk.Text
     progress: ttk.Progressbar # 进度条声明
 
@@ -59,6 +60,22 @@ class ADBToolApp:
         if file_path:
             self.apk_entry.delete(0, tk.END)
             self.apk_entry.insert(0, file_path)
+
+    def choose_log_path(self):
+        """打开目录选择对话框"""
+        selected_path = filedialog.askdirectory(
+            initialdir=self.log_path_entry.get(),
+            title="选择日志存储路径"
+        )
+
+        # 仅当用户选择有效路径时更新输入框
+        if selected_path:
+            # 标准化路径（去除末尾斜杠）
+            cleaned_path = os.path.normpath(selected_path)
+            self.log_path_entry.delete(0, tk.END)
+            self.log_path_entry.insert(0, cleaned_path + os.sep)  # 添加分隔符
+
+
 
     # 核心ADB操作方法
     # @require_device_connected
@@ -291,13 +308,37 @@ class ADBToolApp:
             self.update_status("日志捕获已在运行", False)
             return
 
+        # 获取用户输入的日志路径
+        user_log_path = self.log_path_entry.get().strip()
+        if not user_log_path:
+            user_log_path = "D:\\TV日志"
+            self.log_path_entry.delete(0, tk.END)
+            self.log_path_entry.insert(0, user_log_path)
+        # 确保路径以分隔符结尾
+        user_log_path = os.path.normpath(user_log_path)
+        if not os.path.isdir(user_log_path):
+            os.makedirs(user_log_path,exist_ok=True)
+
+
+        log_file_name = f"{timestamp_time()}.log"
+        self.log_file_path = os.path.join(user_log_path, log_file_name)
         self.logging_active = True
         self.stop_event.clear()
-        self.log_file_path = f"D:\\{timestamp_time()}.log"
+
 
         self.logcat_thread = threading.Thread(target=self._run_logcat)
         self.logcat_thread.start()
         self.update_status("日志捕获已启动", True)
+
+        # 检查路径
+        try:
+            test_file = os.path.join(user_log_path, "test_write.tmp")
+            with open(test_file, 'w') as tf:
+                tf.write("test")
+            os.remove(test_file)
+        except PermissionError:
+            self.update_status("无权限写入C盘根目录，请以管理员身份运行程序", False)
+            return
 
     @require_device_connected
     def stop_logcat(self):
@@ -307,29 +348,43 @@ class ADBToolApp:
             return
 
         self.stop_event.set()
-
         # 确保进程终止
         self._terminate_logcat()
+
+        # 确保文件路径存在
+        if not os.path.exists(self.log_file_path):
+            self.update_status("日志文件不存在", False)
+            self.logging_active = False
+            return
+
+        original_path = os.path.dirname(self.log_file_path)
+        new_name = os.path.join(original_path, f"{timestamp_time()}.log")
 
         # 重试机制（最多3次）
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                if os.path.exists(self.log_file_path):
-                    new_name = f"D:\\{timestamp_time()}.log"
-                    os.rename(self.log_file_path, new_name)
-                    self.update_status(f"日志已保存到 {new_name}", True)
-                    break
+                os.rename(self.log_file_path, new_name)
+                self.update_status(f"日志已保存到 {new_name}", True)
+                break
             except PermissionError:
                 if attempt < max_retries - 1:
                     time.sleep(1)  # 每次重试间隔1秒
                     continue
                 self.update_status("文件占用，重命名失败", False)
+            except Exception as e: # 捕获其他异常（如路径无效）
+                self.update_status(f"保存失败: {str(e)}", False)
+                break
         self.logging_active = False
 
     def _run_logcat(self):
         """实际执行日志捕获"""
         try:
+            # 再次验证路径可写
+            log_dir = os.path.dirname(self.log_file_path)
+            if not os.access(log_dir, os.W_OK):
+                self.update_status(f"日志文件目录不可写: {log_dir}", False)
+
             with open(self.log_file_path, "w") as f:
                 # Windows 系统添加 CREATE_NO_WINDOW 标志
                 creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
@@ -420,6 +475,7 @@ class ADBToolApp:
             "18. 点击'Help'查看帮助信息。\n"
             "19. 点击'Get Package Name'自动获取当前应用包名并填充包名。\n"
             "20. 点击'LogClear'清除设备日志缓冲区（包括系统日志和应用日志）。\n"
+            "21. 点击'Browse_Log_Path'选择日志保存路径，若不选择，默认保存到D盘根目录。\n"
             
 
             "\n注意事项:\n"
