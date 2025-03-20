@@ -3,14 +3,10 @@
 
 a = Analysis(
     ['main.py'],
-     datas=[
-        ('gui/layout_en.py', 'gui'),
-        ('gui/layout_zh.py', 'gui')
-    ],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=['decorators', 'layout', 'utils'],
+    hiddenimports=['decorators', 'layout_en', 'layout_zh', 'utils'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

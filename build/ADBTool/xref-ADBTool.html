@@ -22,6 +22,7 @@ imports:
  &#8226;   <a href="#_weakrefset">_weakrefset</a>
  &#8226;   <a href="#abc">abc</a>
  &#8226;   <a href="#app">app</a>
+ &#8226;   <a href="#argparse">argparse</a>
  &#8226;   <a href="#codecs">codecs</a>
  &#8226;   <a href="#collections">collections</a>
  &#8226;   <a href="#collections.abc">collections.abc</a>
@@ -152,6 +153,9 @@ imports:
  &#8226;   <a href="#enum">enum</a>
  &#8226;   <a href="#functools">functools</a>
  &#8226;   <a href="#genericpath">genericpath</a>
+ &#8226;   <a href="#gui">gui</a>
+ &#8226;   <a href="#gui.layout_en">gui.layout_en</a>
+ &#8226;   <a href="#gui.layout_zh">gui.layout_zh</a>
  &#8226;   <a href="#heapq">heapq</a>
  &#8226;   <a href="#io">io</a>
  &#8226;   <a href="#keyword">keyword</a>
@@ -235,7 +239,7 @@ imported by:
   <a target="code" href="" type="text/plain"><tt>'org.python'</tt></a>
 <span class="moduletype">MissingModule</span>  <div class="import">
 imported by:
-    <a href="#pickle">pickle</a>
+    <a href="#copy">copy</a>
 
   </div>
 
@@ -1077,7 +1081,6 @@ imported by:
 imports:
     <a href="#decorators">decorators</a>
  &#8226;   <a href="#glob">glob</a>
- &#8226;   <a href="#gui.layout">gui.layout</a>
  &#8226;   <a href="#os">os</a>
  &#8226;   <a href="#psutil">psutil</a>
  &#8226;   <a href="#subprocess">subprocess</a>
@@ -1121,6 +1124,7 @@ imported by:
  &#8226;   <a href="#dis">dis</a>
  &#8226;   <a href="#gzip">gzip</a>
  &#8226;   <a href="#inspect">inspect</a>
+ &#8226;   <a href="#main.py">main.py</a>
  &#8226;   <a href="#py_compile">py_compile</a>
  &#8226;   <a href="#tarfile">tarfile</a>
  &#8226;   <a href="#tokenize">tokenize</a>
@@ -1576,8 +1580,8 @@ imported by:
   <a target="code" href="///D:/python/Lib/copy.py" type="text/plain"><tt>copy</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
-    <a href="#copyreg">copyreg</a>
- &#8226;   <a href="#org">org</a>
+    <a href="#'org.python'">'org.python'</a>
+ &#8226;   <a href="#copyreg">copyreg</a>
  &#8226;   <a href="#types">types</a>
  &#8226;   <a href="#weakref">weakref</a>
 
@@ -5037,18 +5041,26 @@ imported by:
 
 <div class="node">
   <a name="gui"></a>
-  <a target="code" href="-" type="text/plain"><tt>gui</tt></a>
-<span class="moduletype">NamespacePackage</span>  <div class="import">
+  <a target="code" href="///D:/N_ADBtools/gui/__init__.py" type="text/plain"><tt>gui</tt></a>
+<span class="moduletype">Package</span>  <div class="import">
+imports:
+    <a href="#gui.layout_en">gui.layout_en</a>
+ &#8226;   <a href="#gui.layout_zh">gui.layout_zh</a>
+
+  </div>
+  <div class="import">
 imported by:
-    <a href="#gui.layout">gui.layout</a>
+    <a href="#gui.layout_en">gui.layout_en</a>
+ &#8226;   <a href="#gui.layout_zh">gui.layout_zh</a>
+ &#8226;   <a href="#main.py">main.py</a>
 
   </div>
 
 </div>
 
 <div class="node">
-  <a name="gui.layout"></a>
-  <a target="code" href="///D:/N_ADBtools/gui/layout.py" type="text/plain"><tt>gui.layout</tt></a>
+  <a name="gui.layout_en"></a>
+  <a target="code" href="///D:/N_ADBtools/gui/layout_en.py" type="text/plain"><tt>gui.layout_en</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#gui">gui</a>
@@ -5058,7 +5070,27 @@ imports:
   </div>
   <div class="import">
 imported by:
-    <a href="#app">app</a>
+    <a href="#gui">gui</a>
+ &#8226;   <a href="#main.py">main.py</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="gui.layout_zh"></a>
+  <a target="code" href="///D:/N_ADBtools/gui/layout_zh.py" type="text/plain"><tt>gui.layout_zh</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#gui">gui</a>
+ &#8226;   <a href="#tkinter">tkinter</a>
+ &#8226;   <a href="#tkinter.ttk">tkinter.ttk</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#gui">gui</a>
+ &#8226;   <a href="#main.py">main.py</a>
 
   </div>
 
@@ -6040,7 +6072,7 @@ imported by:
   <a target="code" href="" type="text/plain"><tt>org</tt></a>
 <span class="moduletype">MissingModule</span>  <div class="import">
 imported by:
-    <a href="#copy">copy</a>
+    <a href="#pickle">pickle</a>
 
   </div>
 
@@ -6176,14 +6208,14 @@ imported by:
   <a target="code" href="///D:/python/Lib/pickle.py" type="text/plain"><tt>pickle</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
-    <a href="#'org.python'">'org.python'</a>
- &#8226;   <a href="#_compat_pickle">_compat_pickle</a>
+    <a href="#_compat_pickle">_compat_pickle</a>
  &#8226;   <a href="#_pickle">_pickle</a>
  &#8226;   <a href="#codecs">codecs</a>
  &#8226;   <a href="#copyreg">copyreg</a>
  &#8226;   <a href="#functools">functools</a>
  &#8226;   <a href="#io">io</a>
  &#8226;   <a href="#itertools">itertools</a>
+ &#8226;   <a href="#org">org</a>
  &#8226;   <a href="#pprint">pprint</a>
  &#8226;   <a href="#re">re</a>
  &#8226;   <a href="#struct">struct</a>
@@ -7299,7 +7331,8 @@ imports:
   <div class="import">
 imported by:
     <a href="#app">app</a>
- &#8226;   <a href="#gui.layout">gui.layout</a>
+ &#8226;   <a href="#gui.layout_en">gui.layout_en</a>
+ &#8226;   <a href="#gui.layout_zh">gui.layout_zh</a>
  &#8226;   <a href="#main.py">main.py</a>
  &#8226;   <a href="#tkinter.commondialog">tkinter.commondialog</a>
  &#8226;   <a href="#tkinter.constants">tkinter.constants</a>
@@ -7434,7 +7467,8 @@ imports:
   <div class="import">
 imported by:
     <a href="#app">app</a>
- &#8226;   <a href="#gui.layout">gui.layout</a>
+ &#8226;   <a href="#gui.layout_en">gui.layout_en</a>
+ &#8226;   <a href="#gui.layout_zh">gui.layout_zh</a>
  &#8226;   <a href="#tkinter">tkinter</a>
 
   </div>
