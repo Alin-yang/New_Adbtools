@@ -13,7 +13,6 @@ from utils import (
     extract_version_info, ensure_directory,
     get_next_filename
 )
-from gui.layout import setup_gui
 
 class ADBToolApp:
     # 预先声明所有动态绑定的GUI组件
@@ -24,9 +23,10 @@ class ADBToolApp:
     status_text:tk.Text
     progress: ttk.Progressbar # 进度条声明
 
-    def __init__(self, root):
+    def __init__(self, root, layout_module):
         self.root = root
         self.root.title("ADB Tool")
+        self.layout_module = layout_module
         self._init_variables()
         self._setup_gui()
 
@@ -41,10 +41,8 @@ class ADBToolApp:
         self.progress = None  # 添加进度条引用
 
     def _setup_gui(self):
-        from gui.layout import setup_gui
-        # print("调试：加载GUI前是否有ip_entry属性?", hasattr(self, 'ip_entry'))  # 应输出False
-        setup_gui(self)
-        # print("调试：加载GUI后是否有ip_entry属性?", hasattr(self, 'ip_entry'))  # 应输出True
+        # 动态调用布局模块的 setup_gui 方法
+        self.layout_module.setup_gui(self)
 
     # 状态更新方法
     def update_status(self, message, success):

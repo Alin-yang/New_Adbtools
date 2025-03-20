@@ -3,6 +3,10 @@
 
 a = Analysis(
     ['main.py'],
+     datas=[
+        ('gui/layout_en.py', 'gui'),
+        ('gui/layout_zh.py', 'gui')
+    ],
     pathex=[],
     binaries=[],
     datas=[],
