@@ -30,9 +30,9 @@ def setup_gui(app):
     app.log_path_btn.grid(row=3, column=2, padx=5, pady=5, sticky=tk.EW)
 
     # Status Display
-    ttk.Label(app.root, text="输出窗口:").grid(row=9, column=0, sticky=tk.W, padx=5, pady=5)
+    ttk.Label(app.root, text="输出窗口:").grid(row=10, column=0, sticky=tk.W, padx=5, pady=5)
     app.status_text = tk.Text(app.root, height=30, width=70)
-    app.status_text.grid(row=10, column=0, columnspan=3, padx=10, pady=10)
+    app.status_text.grid(row=11, column=0, columnspan=3, padx=10, pady=10)
     app.status_text.tag_configure("success", foreground="green")
     app.status_text.tag_configure("error", foreground="red")
 
@@ -62,6 +62,7 @@ def setup_gui(app):
         ("获取设备串号", 1, 2, app.get_serial_number),
         ("启动日志捕获", 8, 1, app.start_logcat),
         ("停止日志捕获", 8, 2, app.stop_logcat),
+        ("终止当前包名所有进程", 9, 0, app.kill_app_process),
     ]
 
     for text, row, col, cmd in buttons:

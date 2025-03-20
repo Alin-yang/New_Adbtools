@@ -73,6 +73,9 @@ class ADBToolApp:
             self.log_path_entry.delete(0, tk.END)
             self.log_path_entry.insert(0, cleaned_path + os.sep)  # 添加分隔符
 
+    def kill_app_process(self):
+        """强制停止应用进程"""
+        # pass
 
 
     # 核心ADB操作方法
