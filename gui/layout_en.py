@@ -31,9 +31,9 @@ def setup_gui(app):
 
 
     # Status Display
-    ttk.Label(app.root, text="Status:").grid(row=9, column=0, sticky=tk.W, padx=5, pady=5)
-    app.status_text = tk.Text(app.root, height=20, width=70)
-    app.status_text.grid(row=10, column=0, columnspan=3, padx=10, pady=10)
+    ttk.Label(app.root, text="Status:").grid(row=10, column=0, sticky=tk.W, padx=5, pady=5)
+    app.status_text = tk.Text(app.root, height=35, width=70)
+    app.status_text.grid(row=11, column=0, columnspan=3, padx=10, pady=10)
     app.status_text.tag_configure("success", foreground="green")
     app.status_text.tag_configure("error", foreground="red")
 
@@ -63,6 +63,7 @@ def setup_gui(app):
         ("Get_SN", 1, 2, app.get_serial_number),
         ("Start Logcat", 8, 1, app.start_logcat),
         ("Stop Logcat", 8, 2, app.stop_logcat),
+        ("Kill_All_Processes", 9, 0, app.kill_app_process),
     ]
 
     for text, row, col, cmd in buttons:

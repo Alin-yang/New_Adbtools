@@ -73,9 +73,23 @@ class ADBToolApp:
             self.log_path_entry.delete(0, tk.END)
             self.log_path_entry.insert(0, cleaned_path + os.sep)  # 添加分隔符
 
+    @require_device_connected
     def kill_app_process(self):
         """强制停止应用进程"""
-        # pass
+        pkg_name = self.pkg_entry.get()
+        if not pkg_name:
+            self.update_status("请输入需要终止进程的应用包名", False)
+            return
+
+        if pkg_name:
+            try:
+                output, success = run_adb_command(f"adb shell am force-stop {pkg_name}")
+                if success:
+                    self.update_status(f"成功终止{pkg_name}应用所处进程", True)
+                else:
+                    self.update_status(f"终止{pkg_name}进程失败", False)
+            except:
+                self.update_status(f"未找到{pkg_name}所属进程:", False)
 
 
     # 核心ADB操作方法

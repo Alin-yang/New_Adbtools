@@ -31,7 +31,7 @@ def setup_gui(app):
 
     # Status Display
     ttk.Label(app.root, text="输出窗口:").grid(row=10, column=0, sticky=tk.W, padx=5, pady=5)
-    app.status_text = tk.Text(app.root, height=30, width=70)
+    app.status_text = tk.Text(app.root, height=35, width=70)
     app.status_text.grid(row=11, column=0, columnspan=3, padx=10, pady=10)
     app.status_text.tag_configure("success", foreground="green")
     app.status_text.tag_configure("error", foreground="red")
