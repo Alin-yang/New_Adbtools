@@ -67,7 +67,7 @@ def setup_gui(app):
         ("获取当前包名版本号", 7, 1, app.get_version),
         ("重启设备", 7, 2, app.reboot),
         ("获取Android版本号", 8, 0, app.get_android_version),
-        ("秦楚日志缓存", 9, 1, app.log_clear),
+        ("清除日志缓存", 9, 1, app.log_clear),
         ("获取当前打开应用包名", 9, 2, app.get_package_name),
         ("截取当前屏幕", 0, 2, app.screencap),
         ("获取设备串号", 1, 2, app.get_serial_number),
