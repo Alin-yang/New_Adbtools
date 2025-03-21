@@ -26,6 +26,8 @@ class ADBToolApp:
     def __init__(self, root, layout_module):
         self.root = root
         self.root.title("ADB Tool")
+        self.root.geometry("1078x464") # 设置初始窗口尺寸
+        # self.root.minsize(width=1026, height=422) # 设置最小尺寸
         self.layout_module = layout_module
         self._init_variables()
         self._setup_gui()
@@ -93,7 +95,7 @@ class ADBToolApp:
 
 
     # 核心ADB操作方法
-    # @require_device_connected
+    @require_device_connected
     def connect_adb(self):
         """连接ADB设备"""
         ip_address = self.ip_entry.get()
@@ -491,17 +493,20 @@ class ADBToolApp:
             "19. 点击'Get Package Name'自动获取当前应用包名并填充包名。\n"
             "20. 点击'LogClear'清除设备日志缓冲区（包括系统日志和应用日志）。\n"
             "21. 点击'Browse_Log_Path'选择日志保存路径，若不选择，默认保存到D盘根目录。\n"
+            "22. 点击'Kill_All_Processes'强制kill当前应用进程。\n"
+            "23. 点击'Get_PackageName'获取当前打开应用包名,包名会自动填充到输入框中。\n"
             
-
             "\n注意事项:\n"
-            "1. 确保设备已连接到同一网络。\n"
-            "2. 使用期间请保持ADB连接。\n"
-            "3. 使用前请备份重要数据。\n"
-            "4. 查询应用版本、清缓存、卸载应用时需输入对应的包名。\n"
-            "5. 抓取ANR文件、日志、TV截屏功能，会保存在指定目录，提示框会给出存储路径。\n"
-            "6. 串号查询功能，由于串号格式差异的原因，某些设备可能无法获取到正确的串号，请自行判断。\n"
+            "1.确保设备已连接到同一网络。\n"
+            "2.使用期间请保持ADB连接。\n"
+            "3.查询应用版本、清缓存、卸载应用、kill进程时需输入对应的包名。\n"
+            "4.抓取ANR文件、日志、TV截屏功能，会保存在指定目录，提示框会给出存储路径。\n"
+            "5.串号查询功能,由于串号格式差异的原因,某些设备可能无法获取到正确的串号,请自行判断\n"
+            "6.可自行调整输出框高度，鼠标可滚动查看历史信息。\n"
         )
-        messagebox.showinfo("操作说明和注意事项", help_text)
+        # messagebox.showinfo("操作说明和注意事项", help_text)
+        self.update_status(help_text, True)
+
 
 if __name__ == "__main__":
     root = tk.Tk()
