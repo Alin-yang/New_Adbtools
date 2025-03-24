@@ -95,15 +95,19 @@ class ADBToolApp:
 
 
     # 核心ADB操作方法
-    @require_device_connected
+    # @require_device_connected
     def connect_adb(self):
         """连接ADB设备"""
         ip_address = self.ip_entry.get()
         output, success = run_adb_command(f"adb connect {ip_address}")
-        if "connected" in output.lower():
+        if not ip_address:
+            self.update_status(f"请输入IP地址", False)
+            return False
+        elif "connected" in output.lower():
             self.update_status(output, True)
         else:
             self.update_status(output, False)
+
 
     @require_device_connected
     def disconnect_adb(self):
