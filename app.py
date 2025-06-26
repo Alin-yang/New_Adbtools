@@ -11,14 +11,14 @@ from decorators import require_device_connected
 from utils import (
     run_adb_command, timestamp_time,
     extract_version_info, ensure_directory,
-    get_next_filename
+    get_next_filename, load_ip_history, save_ip_history
 )
 import concurrent.futures
 
 class ADBToolApp:
     # 预先声明所有动态绑定的GUI组件
     apk_entry:ttk.Entry
-    ip_entry:ttk.Entry
+    ip_combobox:ttk.Combobox  # 修改为Combobox
     pkg_entry:ttk.Entry
     log_path_entry:ttk.Entry
     status_text:tk.Text
@@ -32,7 +32,8 @@ class ADBToolApp:
         self.layout_module = layout_module
         self._init_variables()
         self._setup_gui()
-
+        # 加载IP历史记录
+        self._load_ip_history()
 
     def _init_variables(self):
         """初始化实例变量"""
@@ -47,6 +48,14 @@ class ADBToolApp:
         self._package_cache = {}
         self._cache_timeout = 300  # 缓存超时时间(秒)
         self._last_cache_cleanup = time.time()
+        # 添加IP历史记录列表
+        self.ip_history = []
+
+    def _load_ip_history(self):
+        """加载IP历史记录到下拉框"""
+        self.ip_history = load_ip_history()
+        if hasattr(self, 'ip_combobox'):
+            self.ip_combobox['values'] = self.ip_history
 
     def _cache_cleanup(self):
         """清理过期缓存"""
@@ -120,12 +129,18 @@ class ADBToolApp:
     # @require_device_connected
     def connect_adb(self):
         """连接ADB设备"""
-        ip_address = self.ip_entry.get()
-        output, success = run_adb_command(f"adb connect {ip_address}")
+        ip_address = self.ip_combobox.get()
         if not ip_address:
             self.update_status(f"请输入IP地址", False)
             return False
-        elif "connected" in output.lower():
+        
+        output, success = run_adb_command(f"adb connect {ip_address}")
+        if "connected" in output.lower():
+            # 保存新的IP到历史记录
+            if ip_address not in self.ip_history:
+                self.ip_history.insert(0, ip_address)
+                save_ip_history(self.ip_history)
+                self.ip_combobox['values'] = self.ip_history
             self.update_status(output, True)
         else:
             self.update_status(output, False)
@@ -165,7 +180,7 @@ class ADBToolApp:
 
     def ensure_device_connected(self):
         """设备连接验证"""
-        ip_address = self.ip_entry.get()
+        ip_address = self.ip_combobox.get()
         if not ip_address:
             self.update_status("请输入IP地址", False)
             return False
@@ -582,17 +597,33 @@ class ADBToolApp:
 
     @require_device_connected
     def get_package_name(self):
-        """获取包名, 自动填充"""
-        output, success = run_adb_command('adb shell dumpsys window windows | findstr "mCurrentFocus"')
-        # print(output)#   mCurrentFocus=Window{306dbef u0 com.ypfun.video/com.ypfun.video.module.column.ColumnActivity}
-        if success:
-            package_name = output.split("u0 ")[1].split("/")[0]
-            # print(package_name)
-            self.pkg_entry.delete(0, tk.END)
-            self.pkg_entry.insert(0, package_name)
-            self.update_status(f"包名已自动填充为: {package_name}", True)
-        else:
-            self.update_status(output, False)
+        """获取当前打开应用包名"""
+        try:
+            output, success = run_adb_command("adb shell dumpsys window | grep mCurrentFocus")
+            if not success or not output:
+                self.update_status("获取当前应用包名失败", False)
+                return
+            
+            # 处理不同格式的输出
+            if "u0" in output:
+                # 标准格式: mCurrentFocus=Window{...u0 包名/活动名}
+                package_name = output.split("u0 ")[1].split("/")[0]
+            elif "Window{" in output:
+                # 备选格式1: mCurrentFocus=Window{...包名/活动名}
+                package_name = output.split("Window{")[1].split("/")[0].split()[-1]
+            else:
+                # 备选格式2: 直接提取最后一个点之前的内容
+                package_name = output.split("/")[0].split(".")[-1]
+            
+            if package_name:
+                self.update_status(f"当前应用包名: {package_name}", True)
+                # 自动填充包名到输入框
+                self.pkg_entry.delete(0, tk.END)
+                self.pkg_entry.insert(0, package_name)
+            else:
+                self.update_status("无法解析应用包名", False)
+        except Exception as e:
+            self.update_status(f"获取应用包名时出错: {str(e)}", False)
 
     @require_device_connected
     def get_package_path(self):

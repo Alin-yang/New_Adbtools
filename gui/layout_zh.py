@@ -27,10 +27,13 @@ def setup_gui(app):
     # ========== 所有组件必须挂在main_frame的子容器里 ==========
     # ========== 左侧组件 ==========
 
-    # IP Address
+    # IP Address (改用Combobox)
     ttk.Label(left_panel, text="IP 地址:").grid(row=0, column=0, padx=5, pady=2)
-    app.ip_entry = ttk.Entry(left_panel)
-    app.ip_entry.grid(row=0, column=1, padx=5, pady=2, sticky=tk.EW)
+    app.ip_combobox = ttk.Combobox(left_panel)
+    app.ip_combobox.grid(row=0, column=1, padx=5, pady=2, sticky=tk.EW)
+    # 设置Combobox属性
+    app.ip_combobox['height'] = 10  # 下拉列表显示的最大行数
+    app.ip_combobox['width'] = 20   # 输入框宽度
 
     # Package Name
     ttk.Label(left_panel, text="应用包名:").grid(row=1, column=0, padx=5, pady=5)

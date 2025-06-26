@@ -39,3 +39,29 @@ def get_next_filename(pattern, ext):
     """获取自增文件名"""
     file_count = len(glob.glob(f"{pattern}*{ext}"))
     return f"{pattern}_{file_count+1}{ext}"
+
+def load_ip_history():
+    """加载IP历史记录"""
+    history_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ip_history.txt')
+    try:
+        if os.path.exists(history_file):
+            with open(history_file, 'r') as f:
+                return [line.strip() for line in f.readlines() if line.strip()]
+    except Exception as e:
+        print(f"加载IP历史记录失败: {e}")
+    return []
+
+def save_ip_history(ip_list):
+    """保存IP历史记录"""
+    history_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ip_history.txt')
+    try:
+        # 确保列表中没有重复项，且最新的IP在最前面
+        unique_ips = []
+        for ip in ip_list:
+            if ip not in unique_ips and ip.strip():
+                unique_ips.append(ip)
+        # 只保留最近的10个IP
+        with open(history_file, 'w') as f:
+            f.write('\n'.join(unique_ips[:10]))
+    except Exception as e:
+        print(f"保存IP历史记录失败: {e}")
