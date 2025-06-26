@@ -38,7 +38,8 @@ class ADBToolApp:
     def _init_variables(self):
         """初始化实例变量"""
         self.logcat_process = None
-        self.log_file_path = f"D:\\{timestamp_time()}.log"
+        self.default_log_path = "D:\\实时log"  # 设置默认日志路径
+        self.log_file_path = None
         self.logging_active = False
         self.logcat_subprocess = None
         self.stop_event = threading.Event()
@@ -76,6 +77,10 @@ class ADBToolApp:
         self.status_text.tag_configure("success", foreground="green")
         self.status_text.tag_configure("error", foreground="red")
         self.status_text.tag_configure("info", foreground="blue")
+
+        # 设置日志路径输入框的默认值
+        self.log_path_entry.delete(0, tk.END)
+        self.log_path_entry.insert(0, self.default_log_path)
 
     # 状态更新方法
     def update_status(self, message, success):
@@ -441,14 +446,72 @@ class ADBToolApp:
     @require_device_connected
     def screencap(self):
         """屏幕截图"""
-        output, success = run_adb_command("adb shell screencap -p /sdcard/screenshot.png")
-        if success:
+        try:
+            # 先显示提示信息
+            self.update_status("正在截图，请稍候...", True)
+            # 强制更新界面
+            self.root.update()
+            # 短暂延迟，确保提示信息显示
+            time.sleep(0.5)
+            
+            # 先清理可能存在的旧截图
+            run_adb_command("adb shell rm -f /sdcard/screenshot.png")
+            
+            # 创建保存目录
             save_dir = ensure_directory("D:\\TV截图")
             new_file = get_next_filename(os.path.join(save_dir, "截图"), ".png")
-            run_adb_command(f"adb pull /sdcard/screenshot.png {new_file}")
-            self.update_status(f"截图已保存至路径: {new_file}", True)
-        else:
-            self.update_status(output, False)
+            
+            # 最多尝试3次截图
+            max_retries = 3
+            success = False
+            error_msg = ""
+            
+            for attempt in range(max_retries):
+                # 截图到设备
+                output1, success1 = run_adb_command("adb shell screencap -p /sdcard/screenshot.png")
+                if not success1:
+                    error_msg = output1
+                    time.sleep(1)  # 等待1秒后重试
+                    continue
+                
+                # 验证文件是否生成
+                output2, success2 = run_adb_command("adb shell ls -l /sdcard/screenshot.png")
+                if not success2 or "No such file" in output2:
+                    error_msg = "截图文件未生成"
+                    time.sleep(1)  # 等待1秒后重试
+                    continue
+                
+                # 拉取文件到电脑
+                output3, success3 = run_adb_command(f"adb pull /sdcard/screenshot.png {new_file}")
+                if not success3:
+                    error_msg = output3
+                    time.sleep(1)  # 等待1秒后重试
+                    continue
+                
+                # 验证本地文件
+                if os.path.exists(new_file):
+                    success = True
+                    break
+                else:
+                    error_msg = "本地文件保存失败"
+                    time.sleep(1)  # 等待1秒后重试
+                    continue
+            
+            # 清理设备上的临时文件
+            run_adb_command("adb shell rm -f /sdcard/screenshot.png")
+            
+            if success:
+                self.update_status(f"截图已保存至路径: {new_file}", True)
+                # 尝试打开截图所在文件夹
+                try:
+                    os.startfile(os.path.dirname(new_file))
+                except:
+                    pass
+            else:
+                self.update_status(f"截图失败: {error_msg}", False)
+                
+        except Exception as e:
+            self.update_status(f"截图过程出错: {str(e)}", False)
 
     @require_device_connected
     def get_serial_number(self):
@@ -470,34 +533,36 @@ class ADBToolApp:
         # 获取用户输入的日志路径
         user_log_path = self.log_path_entry.get().strip()
         if not user_log_path:
-            user_log_path = "D:\\TV日志"
+            # 使用默认路径
+            user_log_path = self.default_log_path
             self.log_path_entry.delete(0, tk.END)
             self.log_path_entry.insert(0, user_log_path)
-        # 确保路径以分隔符结尾
-        user_log_path = os.path.normpath(user_log_path)
-        if not os.path.isdir(user_log_path):
-            os.makedirs(user_log_path,exist_ok=True)
 
-
-        log_file_name = f"{timestamp_time()}.log"
-        self.log_file_path = os.path.join(user_log_path, log_file_name)
-        self.logging_active = True
-        self.stop_event.clear()
-
-
-        self.logcat_thread = threading.Thread(target=self._run_logcat)
-        self.logcat_thread.start()
-        self.update_status("日志捕获已启动", True)
-
-        # 检查路径
+        # 确保路径存在
         try:
+            os.makedirs(user_log_path, exist_ok=True)
+            # 测试写入权限
             test_file = os.path.join(user_log_path, "test_write.tmp")
             with open(test_file, 'w') as tf:
                 tf.write("test")
             os.remove(test_file)
         except PermissionError:
-            self.update_status("无权限写入C盘根目录，请以管理员身份运行程序", False)
+            self.update_status("无权限写入该目录，请以管理员身份运行程序或选择其他目录", False)
             return
+        except Exception as e:
+            self.update_status(f"创建日志目录失败: {str(e)}", False)
+            return
+
+        # 设置日志文件路径
+        log_file_name = f"{timestamp_time()}.log"
+        self.log_file_path = os.path.join(user_log_path, log_file_name)
+        self.logging_active = True
+        self.stop_event.clear()
+
+        # 启动日志捕获线程
+        self.logcat_thread = threading.Thread(target=self._run_logcat)
+        self.logcat_thread.start()
+        self.update_status("日志捕获已启动", True)
 
     @require_device_connected
     def stop_logcat(self):
@@ -521,20 +586,32 @@ class ADBToolApp:
 
         # 重试机制（最多3次）
         max_retries = 3
+        success_save = False
         for attempt in range(max_retries):
             try:
                 os.rename(self.log_file_path, new_name)
-                self.update_status(f"日志已保存到 {new_name}", True)
+                success_save = True
+                # 构建提示信息
+                save_path = os.path.abspath(new_name)  # 获取完整路径
+                self.update_status(f"日志捕获已停止\n日志文件已保存到: {save_path}", True)
+                # 尝试打开日志所在文件夹
+                try:
+                    os.startfile(os.path.dirname(new_name))
+                except:
+                    pass
                 break
             except PermissionError:
                 if attempt < max_retries - 1:
                     time.sleep(1)  # 每次重试间隔1秒
                     continue
                 self.update_status("文件占用，重命名失败", False)
-            except Exception as e: # 捕获其他异常（如路径无效）
+            except Exception as e:
                 self.update_status(f"保存失败: {str(e)}", False)
                 break
+
         self.logging_active = False
+        if not success_save:
+            self.update_status("日志捕获已停止，但文件保存失败", False)
 
     def _run_logcat(self):
         """实际执行日志捕获"""
@@ -599,29 +676,65 @@ class ADBToolApp:
     def get_package_name(self):
         """获取当前打开应用包名"""
         try:
-            output, success = run_adb_command("adb shell dumpsys window | grep mCurrentFocus")
+            # 尝试第一个命令
+            output, success = run_adb_command("adb shell dumpsys window windows | findstr mCurrentFocus")
             if not success or not output:
-                self.update_status("获取当前应用包名失败", False)
-                return
+                # 如果第一个命令失败，尝试第二个命令
+                output, success = run_adb_command("adb shell dumpsys window | findstr mCurrentFocus")
+                if not success or not output:
+                    # 如果还是失败，尝试第三个命令
+                    output, success = run_adb_command("adb shell dumpsys activity activities | findstr mResumedActivity")
+                    if not success or not output:
+                        self.update_status("获取当前应用包名失败", False)
+                        return
+
+            # 调试输出
+            self.update_status(f"原始输出: {output}", True)
             
-            # 处理不同格式的输出
+            package_name = None
+            # 尝试多种格式匹配
             if "u0" in output:
-                # 标准格式: mCurrentFocus=Window{...u0 包名/活动名}
-                package_name = output.split("u0 ")[1].split("/")[0]
-            elif "Window{" in output:
-                # 备选格式1: mCurrentFocus=Window{...包名/活动名}
-                package_name = output.split("Window{")[1].split("/")[0].split()[-1]
-            else:
-                # 备选格式2: 直接提取最后一个点之前的内容
-                package_name = output.split("/")[0].split(".")[-1]
+                # 格式1: mCurrentFocus=Window{...u0 包名/活动名}
+                try:
+                    package_name = output.split("u0 ")[1].split("/")[0].strip()
+                except:
+                    pass
             
+            if not package_name and "Window{" in output:
+                # 格式2: mCurrentFocus=Window{...包名/活动名}
+                try:
+                    package_name = output.split("Window{")[1].split("/")[0].split()[-1].strip()
+                except:
+                    pass
+            
+            if not package_name and "ResumedActivity" in output:
+                # 格式3: ResumedActivity: ActivityRecord{...包名/活动名}
+                try:
+                    package_name = output.split("ResumedActivity")[1].split("/")[0].split()[-1].strip()
+                except:
+                    pass
+            
+            if not package_name:
+                # 格式4: 尝试直接从/分隔的内容中提取
+                try:
+                    parts = output.split("/")
+                    if len(parts) > 1:
+                        package_name = parts[0].split()[-1].strip()
+                except:
+                    pass
+
             if package_name:
-                self.update_status(f"当前应用包名: {package_name}", True)
-                # 自动填充包名到输入框
-                self.pkg_entry.delete(0, tk.END)
-                self.pkg_entry.insert(0, package_name)
+                # 验证包名格式
+                if "." in package_name and not package_name.startswith(".") and not package_name.endswith("."):
+                    self.update_status(f"当前应用包名: {package_name}", True)
+                    # 自动填充包名到输入框
+                    self.pkg_entry.delete(0, tk.END)
+                    self.pkg_entry.insert(0, package_name)
+                else:
+                    self.update_status("解析出的包名格式不正确", False)
             else:
                 self.update_status("无法解析应用包名", False)
+                
         except Exception as e:
             self.update_status(f"获取应用包名时出错: {str(e)}", False)
 
