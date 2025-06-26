@@ -20,8 +20,8 @@ def setup_gui(app):
 
 
     # 配置网格权重
-    main_frame.grid_columnconfigure(0, weight=30)
-    main_frame.grid_columnconfigure(1, weight=1)  # 右侧区域更宽
+    main_frame.grid_columnconfigure(0, weight=100)  # 增加左侧权重
+    main_frame.grid_columnconfigure(1, weight=0)  # 右侧区域权重
     main_frame.grid_rowconfigure(0, weight=1)
 
     # ========== 所有组件必须挂在main_frame的子容器里 ==========
@@ -74,6 +74,7 @@ def setup_gui(app):
         ("启动日志捕获", 8, 1, app.start_logcat),
         ("停止日志捕获", 8, 2, app.stop_logcat),
         ("终止当前包名所有进程", 9, 0, app.kill_app_process),
+        ("获取当前包名应用安装路径", 10, 0, app.get_package_path),
     ]
 
     for text, row, col, cmd in buttons:

@@ -13,6 +13,7 @@ from utils import (
     extract_version_info, ensure_directory,
     get_next_filename
 )
+import concurrent.futures
 
 class ADBToolApp:
     # 预先声明所有动态绑定的GUI组件
@@ -40,11 +41,32 @@ class ADBToolApp:
         self.logging_active = False
         self.logcat_subprocess = None
         self.stop_event = threading.Event()
-        self.progress = None  # 添加进度条引用
+        self.progress = None
+        # 添加缓存
+        self._device_cache = {}
+        self._package_cache = {}
+        self._cache_timeout = 300  # 缓存超时时间(秒)
+        self._last_cache_cleanup = time.time()
+
+    def _cache_cleanup(self):
+        """清理过期缓存"""
+        current_time = time.time()
+        if current_time - self._last_cache_cleanup > 60:  # 每分钟最多清理一次
+            expired = current_time - self._cache_timeout
+            self._device_cache = {k: v for k, v in self._device_cache.items() 
+                                if v.get('timestamp', 0) > expired}
+            self._package_cache = {k: v for k, v in self._package_cache.items() 
+                                 if v.get('timestamp', 0) > expired}
+            self._last_cache_cleanup = current_time
 
     def _setup_gui(self):
         # 动态调用布局模块的 setup_gui 方法
         self.layout_module.setup_gui(self)
+        
+        # 配置状态文本框的标签样式
+        self.status_text.tag_configure("success", foreground="green")
+        self.status_text.tag_configure("error", foreground="red")
+        self.status_text.tag_configure("info", foreground="blue")
 
     # 状态更新方法
     def update_status(self, message, success):
@@ -119,12 +141,26 @@ class ADBToolApp:
             self.update_status(output, False)
 
     def check_device_connected(self, ip_address=None):
-        """检查设备连接状态"""
+        """检查设备连接状态(带缓存)"""
+        cache_key = ip_address or 'default'
+        cache_data = self._device_cache.get(cache_key, {})
+        
+        # 如果缓存未过期，直接返回缓存结果
+        if time.time() - cache_data.get('timestamp', 0) < 5:  # 5秒缓存
+            return cache_data.get('connected', False)
+            
         output, success = run_adb_command("adb devices")
         if success:
             devices = [line.split("\t")[0] for line in output.splitlines()[1:] if "device" in line]
             ip_with_port = f"{ip_address}:5555" if ip_address else None
-            return ip_address in devices or ip_with_port in devices
+            is_connected = ip_address in devices or ip_with_port in devices
+            
+            # 更新缓存
+            self._device_cache[cache_key] = {
+                'connected': is_connected,
+                'timestamp': time.time()
+            }
+            return is_connected
         return False
 
     def ensure_device_connected(self):
@@ -172,6 +208,10 @@ class ADBToolApp:
     def _run_install_with_progress(self, apk_path):
         """实际执行安装并捕获输出"""
         try:
+            # 获取APK大小用于计算进度
+            apk_size = os.path.getsize(apk_path)
+            current_size = 0
+            
             process = subprocess.Popen(
                 f"adb install -r -d {apk_path}",
                 shell=True,
@@ -182,6 +222,7 @@ class ADBToolApp:
 
             # 定义需要过滤的关键词
             filter_keywords = ["Performing Streamed Install"]
+            installing_started = False
 
             # 实时捕获输出
             while True:
@@ -190,30 +231,55 @@ class ADBToolApp:
                     break
                 if output:
                     stripped_output = output.strip()
-                    if not any(keyword in stripped_output for keyword in filter_keywords):
-                        self._update_install_status(stripped_output)  # 仅传递有效内容
+                    
+                    # 检测安装开始
+                    if "Performing Streamed Install" in stripped_output:
+                        installing_started = True
+                        self.progress["mode"] = "determinate"
+                        self.progress["maximum"] = 100
+                        self.progress["value"] = 0
+                        current_size = 0
+                        continue
+
+                    # 更新进度
+                    if installing_started:
+                        # 估算进度
+                        current_size += len(output)  # 增加已处理的数据大小
+                        progress = min(95, int((current_size / apk_size) * 100))
+                        self.progress["value"] = progress
+                        
+                        if "Success" in stripped_output:
+                            self.progress["value"] = 100
+                            self._update_install_status("安装成功")
+                        elif "Failure" in stripped_output:
+                            self._update_install_status(f"安装失败: {stripped_output}")
+                        elif not any(keyword in stripped_output for keyword in filter_keywords):
+                            self._update_install_status(stripped_output)
 
             # 获取最终结果
             return_code = process.poll()
             success = return_code == 0
+            
+            # 重置进度条模式
+            self.progress["mode"] = "indeterminate"
+            self._hide_progress()
+            
             final_output = "安装成功" if success else f"安装失败 (code {return_code})"
-
+            self._update_install_status(final_output)
+            
         except Exception as e:
-            final_output = f"安装异常: {str(e)}"
-            success = False
-
-        # 更新最终状态
-        self.root.after(0, lambda: [
-            self._hide_progress(),
-            self.update_status(final_output, success)
-        ])
-
+            self._update_install_status(f"安装过程出错: {str(e)}")
+            self._hide_progress()
 
     def _update_install_status(self, message):
-        """线程安全的状态更新"""
-        self.root.after(0, lambda: self.status_text.insert(
-            tk.END, f"\n{message}\n", "success" if "Success" in message else "error"
-        ))
+        """更新安装状态"""
+        if "成功" in message:
+            self.status_text.insert(tk.END, f"\n{message}\n", "success")
+        elif "失败" in message or "错误" in message:
+            self.status_text.insert(tk.END, f"\n{message}\n", "error")
+        else:
+            self.status_text.insert(tk.END, f"\n{message}\n")
+        self.status_text.see(tk.END)
 
     @require_device_connected
     def uninstall(self):
@@ -228,14 +294,71 @@ class ADBToolApp:
 
     @require_device_connected
     def package_list(self):
-        """显示已安装包列表"""
-        output, success = run_adb_command("adb shell pm list packages")
-        if success:
-            packages = "\n".join(output.strip().split("\n")[1:])
-            self.update_status(f"已安装应用包名:\n{packages}", True)
-        else:
-            self.update_status(output, False)
+        """获取已安装应用包名列表及其版本(优化版)"""
+        try:
+            self._cache_cleanup()  # 清理过期缓存
+            
+            # 获取所有已安装包名
+            output, success = run_adb_command("adb shell pm list packages")
+            if not success:
+                self.update_status("获取应用列表失败", False)
+                return
 
+            # 清理并获取包名列表
+            packages = [line.replace("package:", "").strip() 
+                       for line in output.splitlines() if line.strip()]
+            
+            self.update_status("正在获取应用列表和版本信息...", True)
+            
+            # 使用线程池并行获取版本信息
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                future_to_package = {
+                    executor.submit(self.get_package_version, package): package 
+                    for package in packages
+                }
+                
+                for future in concurrent.futures.as_completed(future_to_package):
+                    package = future_to_package[future]
+                    try:
+                        version = future.result()
+                        version_str = version if version else "未知"
+                        self.status_text.insert(
+                            tk.END, 
+                            f"\n{package} (版本: {version_str})", 
+                            "info"
+                        )
+                    except Exception as e:
+                        self.status_text.insert(
+                            tk.END,
+                            f"\n{package} (版本: 获取失败 - {str(e)})",
+                            "error"
+                        )
+                    self.status_text.see(tk.END)
+                    
+            self.update_status("\n获取应用列表完成", True)
+            
+        except Exception as e:
+            self.update_status(f"获取应用列表时出错: {str(e)}", False)
+
+    def get_package_version(self, package_name):
+        """获取应用版本号(带缓存)"""
+        # 检查缓存
+        cache_data = self._package_cache.get(package_name, {})
+        if time.time() - cache_data.get('timestamp', 0) < self._cache_timeout:
+            return cache_data.get('version')
+            
+        cmd = f'adb shell dumpsys package {package_name} | findstr "versionName"'
+        version_output, success = run_adb_command(cmd)
+        
+        if success and version_output:
+            version = version_output.strip().split("=")[-1].strip()
+            # 更新缓存
+            self._package_cache[package_name] = {
+                'version': version,
+                'timestamp': time.time()
+            }
+            return version
+        return None
 
     @require_device_connected
     def clear_cache(self):
@@ -470,6 +593,26 @@ class ADBToolApp:
             self.update_status(f"包名已自动填充为: {package_name}", True)
         else:
             self.update_status(output, False)
+
+    @require_device_connected
+    def get_package_path(self):
+        """获取当前包名应用安装路径"""
+        pkg_name = self.pkg_entry.get()
+        if not pkg_name:
+            self.update_status("请输入包名", False)
+            return
+        
+        try:
+            output, success = run_adb_command(f"adb shell pm path {pkg_name}")
+            if success and output:
+                # 移除"package:"前缀并清理输出
+                path = output.replace("package:", "").strip()
+                self.status_text.insert(tk.END, f"\n应用安装路径: {path}\n", "info")
+                self.status_text.see(tk.END)
+            else:
+                self.update_status(f"未找到包名 {pkg_name} 的安装路径", False)
+        except Exception as e:
+            self.update_status(f"获取安装路径失败: {str(e)}", False)
 
     # 帮助文档
     def show_help(self):

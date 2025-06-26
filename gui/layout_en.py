@@ -19,9 +19,9 @@ def setup_gui(app):
     right_panel.grid_propagate(False)   # 防止子组件大小影响父组件
 
 
-    # 配置网格权重
-    main_frame.grid_columnconfigure(0, weight=30)
-    main_frame.grid_columnconfigure(1, weight=1)  # 右侧区域更宽
+    # Configure grid weights
+    main_frame.grid_columnconfigure(0, weight=100)  # Increase left panel weight
+    main_frame.grid_columnconfigure(1, weight=0)  # Right panel weight
     main_frame.grid_rowconfigure(0, weight=1)
 
     # ========== 所有组件必须挂在main_frame的子容器里 ==========
@@ -55,25 +55,26 @@ def setup_gui(app):
     # 功能按钮
     buttons = [
         ("Connect ADB", 4, 0, app.connect_adb),
-        ("Disconnect ADB", 4, 1, app.disconnect_adb),
-        ("Help", 4, 2, app.show_help),
-        ("Force Install", 5, 0, app.force_install),
-        ("Uninstall", 5, 1, app.uninstall),
-        ("Package List", 5, 2, app.package_list),
-        ("Clear Cache", 6, 0, app.clear_cache),
-        ("Root", 6, 1, app.root_device),
-        ("Pull_ANR", 6, 2, app.pull_anr_file),
-        ("Remount", 7, 0, app.remount),
-        ("Get Version", 7, 1, app.get_version),
-        ("Reboot", 7, 2, app.reboot),
-        ("Android Version", 8, 0, app.get_android_version),
-        ("LogClear", 9, 1, app.log_clear),
-        ("Get_Packagename", 9, 2, app.get_package_name),
-        ("Screencap", 0, 2, app.screencap),
-        ("Get_SN", 1, 2, app.get_serial_number),
+        ("Disconnect All ADB", 4, 1, app.disconnect_adb),
+        ("Show Help", 4, 2, app.show_help),
+        ("Force Install APK", 5, 0, app.force_install),
+        ("Uninstall Current Package", 5, 1, app.uninstall),
+        ("Get Package List", 5, 2, app.package_list),
+        ("Clear App Cache", 6, 0, app.clear_cache),
+        ("Get Root Access", 6, 1, app.root_device),
+        ("Export ANR File", 6, 2, app.pull_anr_file),
+        ("Remount Partition", 7, 0, app.remount),
+        ("Get Current Package Version", 7, 1, app.get_version),
+        ("Reboot Device", 7, 2, app.reboot),
+        ("Get Android Version", 8, 0, app.get_android_version),
+        ("Clear Log Cache", 9, 1, app.log_clear),
+        ("Get Current Package Name", 9, 2, app.get_package_name),
+        ("Take Screenshot", 0, 2, app.screencap),
+        ("Get Device Serial", 1, 2, app.get_serial_number),
         ("Start Logcat", 8, 1, app.start_logcat),
         ("Stop Logcat", 8, 2, app.stop_logcat),
-        ("Kill_All_Processes", 9, 0, app.kill_app_process),
+        ("Kill Package Process", 9, 0, app.kill_app_process),
+        ("Get Package Install Path", 10, 0, app.get_package_path),
     ]
 
     for text, row, col, cmd in buttons:

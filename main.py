@@ -8,7 +8,7 @@ from gui import layout_zh
 # 解析命令行参数
 parser = argparse.ArgumentParser()
 # 打包exe文件时，需修改default参数为zh或en
-parser.add_argument("--lang", choices=["en", "zh"], default="en", help="选择语言: en (英文) 或 zh (中文)")
+parser.add_argument("--lang", choices=["en", "zh"], default="zh", help="选择语言: en (英文) 或 zh (中文)")
 args = parser.parse_args()
 
 
