@@ -19,7 +19,7 @@ def setup_gui(app):
     right_panel.grid_propagate(False)   # 防止子组件大小影响父组件
 
 
-    # Configure grid weights
+    # 配置网格权重
     main_frame.grid_columnconfigure(0, weight=100)  # Increase left panel weight
     main_frame.grid_columnconfigure(1, weight=0)  # Right panel weight
     main_frame.grid_rowconfigure(0, weight=1)
