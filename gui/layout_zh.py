@@ -12,16 +12,20 @@ def setup_gui(app):
     left_panel = ttk.Frame(main_frame)
     left_panel.grid(row=0, column=0, sticky=tk.NSEW, padx=5)
     left_panel.grid_propagate(False)  # 防止子组件大小影响父组件
+    
+    # 设置左侧面板的列宽权重，确保三列按钮等宽
+    left_panel.grid_columnconfigure(0, weight=1)
+    left_panel.grid_columnconfigure(1, weight=1)
+    left_panel.grid_columnconfigure(2, weight=1)
 
     # 右侧输出面板
     right_panel = ttk.Frame(main_frame)
-    right_panel.grid(row=0, column=1, sticky=tk.NSEW, padx=5)
+    right_panel.grid(row=0, column=1, sticky=tk.NSEW, padx=(10, 5))  # 调整左右边距
     right_panel.grid_propagate(False)   # 防止子组件大小影响父组件
 
-
     # 配置网格权重
-    main_frame.grid_columnconfigure(0, weight=100)  # 增加左侧权重
-    main_frame.grid_columnconfigure(1, weight=0)  # 右侧区域权重
+    main_frame.grid_columnconfigure(0, weight=50)  # 左侧权重大幅增加
+    main_frame.grid_columnconfigure(1, weight=40)  # 右侧权重减小
     main_frame.grid_rowconfigure(0, weight=1)
 
     # ========== 所有组件必须挂在main_frame的子容器里 ==========
@@ -33,27 +37,27 @@ def setup_gui(app):
     app.ip_combobox.grid(row=0, column=1, padx=5, pady=2, sticky=tk.EW)
     # 设置Combobox属性
     app.ip_combobox['height'] = 10  # 下拉列表显示的最大行数
-    app.ip_combobox['width'] = 20   # 输入框宽度
+    app.ip_combobox['width'] = 10   # 输入框宽度
 
     # Package Name
     ttk.Label(left_panel, text="应用包名:").grid(row=1, column=0, padx=5, pady=5)
     app.pkg_entry = ttk.Entry(left_panel)
-    app.pkg_entry.grid(row=1, column=1, padx=5, pady=5)
+    app.pkg_entry.grid(row=1, column=1, padx=5, pady=5, sticky=tk.EW)
 
     # APK File
     ttk.Label(left_panel, text="APK 文件:").grid(row=2, column=0, padx=5, pady=5)
     app.apk_entry = ttk.Entry(left_panel)
-    app.apk_entry.grid(row=2, column=1, padx=5, pady=5)
+    app.apk_entry.grid(row=2, column=1, padx=5, pady=5, sticky=tk.EW)
     app.browse_btn = ttk.Button(left_panel, text="选择安装包路径", command=app.browse_apk)
     app.browse_btn.grid(row=2, column=2, sticky=tk.EW, padx=5, pady=5)
 
     # 日志存储路径框
     ttk.Label(left_panel, text="日志存储路径:").grid(row=3, column=0, padx=5, pady=5)
     app.log_path_entry = ttk.Entry(left_panel)
-    app.log_path_entry.grid(row=3, column=1,  padx=5, pady=5)
+    app.log_path_entry.grid(row=3, column=1, padx=5, pady=5, sticky=tk.EW)
     app.log_path_entry.insert(0, "D:\\")
     app.log_path_btn = ttk.Button(left_panel, text="选择日志存储路径", command=app.choose_log_path)
-    app.log_path_btn.grid(row=3, column=2,  padx=5, pady=5,sticky=tk.EW)
+    app.log_path_btn.grid(row=3, column=2, padx=5, pady=5, sticky=tk.EW)
 
     # 功能按钮
     buttons = [
@@ -87,13 +91,13 @@ def setup_gui(app):
 
     # ========== 右侧组件 ==========
     # 输出窗口
-    app.status_text = tk.Text(right_panel, wrap=tk.WORD)
+    app.status_text = tk.Text(right_panel, wrap=tk.WORD, width=25)  # 设置固定宽度
     app.status_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
     app.status_text.tag_configure("success", foreground="green")
     app.status_text.tag_configure("error", foreground="red")
 
     # 进度条调整到右侧底部
-    app.progress = ttk.Progressbar(right_panel, mode="indeterminate",length=600)
-    app.progress.pack( fill=tk.X, pady=5)
+    app.progress = ttk.Progressbar(right_panel, mode="indeterminate", length=150)  # 调整进度条长度
+    app.progress.pack(fill=tk.X, pady=5)
     app.progress.pack_forget() # 默认隐藏
 
