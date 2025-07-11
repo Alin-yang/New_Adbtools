@@ -1,25 +1,22 @@
 from app import ADBToolApp
 import tkinter as tk
-import argparse
-from gui import layout_en
-from gui import layout_zh
+from gui import layout_zh as layout
 
-
-# 解析命令行参数
-parser = argparse.ArgumentParser()
-# 打包exe文件时，需修改default参数为zh或en
-parser.add_argument("--lang", choices=["en", "zh"], default="zh", help="选择语言: en (英文) 或 zh (中文)")
-args = parser.parse_args()
-
-
-# 根据参数加载对应语言布局
-if args.lang == "zh":
-    layout = layout_zh
-else: # 确保这个模块存在
-    layout = layout_en
+# 尝试使用支持拖拽的Tk
+try:
+    from tkinterdnd2 import TkinterDnD
+    use_dnd = True
+except ImportError:
+    use_dnd = False
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
+    if use_dnd:
+        # 使用支持拖拽的根窗口
+        root = TkinterDnD.Tk()
+    else:
+        # 使用普通的根窗口
+        root = tk.Tk()
+    
     app = ADBToolApp(root, layout_module=layout)
     root.mainloop()

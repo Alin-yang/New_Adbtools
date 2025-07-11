@@ -1,0 +1,1407 @@
+--------- beginning of system
+09-08 16:19:09.923 I/chatty  ( 2994): uid=1000(system) Binder:2994_A expire 3 lines
+09-08 16:19:10.627 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 com.konka.smartcontrolsdk.speech.SpeechManagerProxy.startIntentService:3 com.konka.smartcontrolsdk.speech.SpeechManagerProxy.initPlugin:22 com.konka.smartcontrolsdk.speech.SpeechManagerProxy.init:2 
+09-08 16:19:10.639 I/chatty  ( 2994): uid=1000(system) Binder:2994_B expire 29 lines
+09-08 16:19:10.720 I/chatty  ( 2994): uid=1000(system) Binder:2994_2 expire 34 lines
+09-08 16:19:10.754 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 com.konka.smartcontrolsdk.epgplugin.EpgNlpHandler.startIntentService:3 com.konka.smartcontrolsdk.epgplugin.EpgNlpHandler.<init>:18 com.konka.smartcontrolsdk.speech.SpeechManagerProxy.initPlugin:42 
+09-08 16:19:10.770 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 com.konka.smartcontrolsdk.speech.SpeechManagerProxy.initLivePlugin:2 com.konka.smartcontrolsdk.speech.SpeechManagerProxy.initPlugin:45 com.konka.smartcontrolsdk.speech.SpeechManagerProxy.init:2 
+09-08 16:19:10.801 W/ContextImpl( 3951): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.ktcp.docking.KTCPDockingHelper$2.update:76 com.tencent.ktsdk.main.TvTencentSdk.notifyObserver:174 com.tencent.ktsdk.common.tvid.tvguid.TvGuidUtils.notifyGuidFetched:788 
+09-08 16:19:10.861 I/chatty  ( 2994): uid=1000(system) Binder:2994_D expire 2 lines
+09-08 16:19:10.951 W/ContextImpl( 3951): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.ktcp.devtype.broadcast.DevCapReceiver.registerToContext:53 com.ktcp.devtype.type.DevType.init:53 com.tencent.qqlive.projection.config.DevConfig.init:107 
+09-08 16:19:10.978 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 mtopsdk.common.util.AsyncServiceBinder.asyncBind:125 mtopsdk.xstate.XState.init:94 mtopsdk.mtop.global.init.OpenMtopInitTask.executeCoreTask:45 
+09-08 16:19:11.568 W/ContextImpl( 3964): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.konka.localserver.service.RemoteControlService.sendStandardBroadcast:141 com.konka.localserver.service.RemoteControlService.access$0:96 com.konka.localserver.service.RemoteControlService$1.onInputDeviceAdded:41 
+09-08 16:19:11.739 I/chatty  ( 2994): uid=1000(system) backup expire 10 lines
+09-08 16:19:12.041 I/chatty  ( 2994): uid=1000(system) InputDispatcher expire 17 lines
+09-08 16:19:12.357 I/chatty  ( 2994): uid=1000(system) Binder:2994_14 expire 2 lines
+09-08 16:19:12.458 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.athenasdk.aidl.SpeechManager.init:91 com.konka.smartcontrolsdk.speech.SpeechManagerProxy.init:6 com.konka.smartcontrolsdk.KKSpeechService.onCreate:89 
+09-08 16:19:12.643 W/ContextImpl( 3381): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.alibaba.analytics.AnalyticsMgr.b:237 com.alibaba.analytics.AnalyticsMgr.c:34 com.alibaba.analytics.AnalyticsMgr$c.run:603 
+09-08 16:19:13.052 I/chatty  ( 2994): uid=1000(system) Binder:2994_11 expire 1 line
+09-08 16:19:13.139 I/chatty  ( 2994): uid=1000(system) Binder:2994_19 expire 42 lines
+09-08 16:19:13.161 I/chatty  ( 2994): uid=1000(system) Binder:2994_17 expire 5 lines
+09-08 16:19:13.330 W/ContextImpl( 3964): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.konka.localserver.service.RemoteControlService.sendStandardBroadcast:141 com.konka.localserver.service.RemoteControlService.access$0:96 com.konka.localserver.service.RemoteControlService$1.onInputDeviceAdded:41 
+09-08 16:19:13.885 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.familycontrolcenterservice.DataTransect.BindService:7 com.konka.smartcontrolsdk.devicecontrol.KONKASDKSmartControl.<init>:25 com.konka.smartcontrolsdk.devicecontrol.DeviceControlService.initOperator:6 
+09-08 16:19:13.994 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.konka.smartcontrolsdk.devicecontrol.DeviceControlService.reportOperatorStatus:13 com.konka.smartcontrolsdk.devicecontrol.DeviceControlService$1.onReportStatus:1 com.konka.smartcontrolsdk.devicecontrol.KONKASDKSmartControl$1.onReturn:3 
+09-08 16:19:14.103 W/ContextImpl( 3951): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.huawei.connection.nearby.c.h:79 com.huawei.connection.nearby.c.a:12 com.huawei.hisight.b.a.d:10 
+09-08 16:19:14.120 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.konka.smartcontrolsdk.devicecontrol.DeviceControlService.reportOperatorStatus:13 com.konka.smartcontrolsdk.devicecontrol.DeviceControlService$1.onReportStatus:1 com.konka.smartcontrolsdk.devicecontrol.KONKASDKSmartControl.uninitOperator:11 
+09-08 16:19:14.159 I/chatty  ( 2994): uid=1000(system) Binder:2994_10 expire 60 lines
+09-08 16:19:14.223 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.familycontrolcenterservice.DataTransect.BindService:7 com.konka.smartcontrolsdk.devicecontrol.KONKASDKSmartControl.<init>:25 com.konka.smartcontrolsdk.devicecontrol.DeviceControlService.initOperator:6 
+09-08 16:19:14.306 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:19:14.387 W/ContextImpl( 4537): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.alibaba.analytics.core.d.b.b:55 com.alibaba.analytics.core.d$2.run:222 java.lang.Thread.run:764 
+09-08 16:19:14.571 W/ContextImpl( 4562): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.permissionmgr.MyApplication.onCreate:49 android.app.Instrumentation.callApplicationOnCreate:1154 android.app.ActivityThread.handleBindApplication:5908 
+09-08 16:19:14.974 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 com.konka.smartcontrolsdk.speech.SpeechManagerProxy.startIntentService:3 com.konka.smartcontrolsdk.speech.SpeechManagerProxy.initPlugin:22 com.konka.smartcontrolsdk.speech.SpeechManagerProxy.init:2 
+09-08 16:19:15.015 W/ContextImpl( 4537): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.alibaba.analytics.core.a.h.f:50 com.alibaba.analytics.core.a.d.d:167 com.alibaba.analytics.core.a.d.c:149 
+09-08 16:19:15.048 W/ContextImpl( 4537): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.alibaba.analytics.core.a.h.f:50 com.alibaba.analytics.core.a.d.d:167 com.alibaba.analytics.core.a.d.c:149 
+09-08 16:19:15.438 W/ActivityThread( 3964): ClassLoader.loadClass: The class loader returned by Thread.getContextClassLoader() may fail for processes that host multiple applications. You should explicitly specify a context class loader. For example: Thread.setContextClassLoader(getClass().getClassLoader());
+09-08 16:19:15.604 W/ContextImpl( 3964): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.SmartControl.toolkit.SCWrapper.bindService:166 com.konka.localserver.service.stb.SmartControlAdapter.bindSmartControlService:53 com.konka.localserver.service.stb.SmartControlAdapter$CheckConnectRunnable.run:244 
+09-08 16:19:15.619 W/ContextImpl( 3964): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.SmartControl.toolkit.SCWrapper.bindService:166 com.konka.localserver.service.stb.SmartControlAdapter.bindSmartControlService:53 com.konka.localserver.service.stb.SmartControlAdapter$CheckConnectRunnable.run:244 
+09-08 16:19:15.643 W/ContextImpl( 3964): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.SmartControl.toolkit.SCWrapper.bindService:166 com.konka.localserver.service.stb.SmartControlAdapter.bindSmartControlService:53 com.konka.localserver.service.stb.SmartControlAdapter$CheckConnectRunnable.run:244 
+09-08 16:19:15.678 W/ContextImpl( 3964): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.konka.localserver.util.MultiUser.sendBroadcast:62 com.konka.localserver.service.MessageService$1.handleMessage:118 android.os.Handler.dispatchMessage:106 
+09-08 16:19:15.700 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:19:15.722 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 org.eclipse.paho.android.service.MqttAndroidClient.connect:414 com.konka.alipush.AliPushImpl.connect:122 com.konka.alipush.AliPushFactory.lambda$createPushInstance$0:43 
+09-08 16:19:15.732 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 org.eclipse.paho.android.service.MqttAndroidClient.connect:425 com.konka.alipush.AliPushImpl.connect:122 com.konka.alipush.AliPushFactory.lambda$createPushInstance$0:43 
+09-08 16:19:15.875 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.athenasdk.aidl.SpeechManager.init:91 com.konka.smartcontrolsdk.speech.SpeechManagerProxy.init:6 com.konka.smartcontrolsdk.speech.SpeechManagerProxy$AthenaInitBroadcastReceiver.onReceive:2 
+09-08 16:19:16.399 W/ContextImpl( 4537): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.alibaba.analytics.core.a.h.f:50 com.alibaba.analytics.core.a.f.a:20 com.alibaba.analytics.core.a.e.b:257 
+09-08 16:19:16.647 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.downloadcenter.FileDownloader.bindService:467 com.konka.downloadcenter.FileDownloader.create:217 com.konka.smartcontrolsdk.liveplugin.channel.HDPChannelControl.prepareHDPChannelData:12 
+09-08 16:19:16.977 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.liulishuo.filedownloader.services.BaseFileServiceUIGuard.bindStartByContext:157 com.liulishuo.filedownloader.services.BaseFileServiceUIGuard.bindStartByContext:126 com.liulishuo.filedownloader.FileDownloadServiceProxy.bindStartByContext:115 
+09-08 16:19:16.993 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 com.liulishuo.filedownloader.services.BaseFileServiceUIGuard.bindStartByContext:162 com.liulishuo.filedownloader.services.BaseFileServiceUIGuard.bindStartByContext:126 com.liulishuo.filedownloader.FileDownloadServiceProxy.bindStartByContext:115 
+09-08 16:19:17.016 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 android.content.ContextWrapper.startService:664 com.konka.smartcontrolsdk.receiver.KKBootCompleteReceiver.onReceive:7 android.app.ActivityThread.handleReceiver:3416 
+09-08 16:19:17.022 W/ContextImpl( 3977): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 android.content.ContextWrapper.startService:664 com.konka.smartcontrolsdk.receiver.KKBootCompleteReceiver.onReceive:11 android.app.ActivityThread.handleReceiver:3416 
+09-08 16:19:17.501 E/ActivityThread( 3977): Failed to find provider info for com.yunos.tvtaobao.voiceProvider
+09-08 16:19:17.504 I/chatty  ( 3977): uid=1000(system) com.konka.SmartControl identical 6 lines
+09-08 16:19:17.537 W/ContextImpl( 4756): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 com.konka.downloadcenter.APP.onCreate:38 android.app.Instrumentation.callApplicationOnCreate:1154 android.app.ActivityThread.handleBindApplication:5908 
+09-08 16:19:19.490 W/ContextImpl( 4890): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 android.content.ContextWrapper.startService:664 com.konka.systemadvert.boot.BootCompleteReceiver.startDaemonService:26 com.konka.systemadvert.boot.BootCompleteReceiver.onReceive:19 
+09-08 16:19:19.571 W/ActivityThread( 4890): ClassLoader.getResourceAsStream: The class loader returned by Thread.getContextClassLoader() may fail for processes that host multiple applications. You should explicitly specify a context class loader. For example: Thread.setContextClassLoader(getClass().getClassLoader());
+09-08 16:19:19.627 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #6
+09-08 16:19:19.627 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #7
+09-08 16:19:19.627 W/PackageParser( 3719): Ignoring duplicate uses-permissions/uses-permissions-sdk-m: android.permission.GET_TASKS in package: com.cibn.tv at: Binary XML file line #19
+09-08 16:19:19.628 W/PackageParser( 3719): Ignoring duplicate uses-permissions/uses-permissions-sdk-m: android.permission.boot_tvshop_service in package: com.cibn.tv at: Binary XML file line #56
+09-08 16:19:19.631 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #96
+09-08 16:19:19.638 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.639 I/chatty  ( 3719): uid=10022(com.cibn.tv) aplugin-1-t-2 identical 43 lines
+09-08 16:19:19.642 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.645 W/PackageParser( 3719): No actions in intent filter at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #665
+09-08 16:19:19.649 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.662 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.665 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.671 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.671 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.679 I/chatty  ( 2994): uid=1000(system) Binder:2994_1 expire 40 lines
+09-08 16:19:19.687 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.687 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #6
+09-08 16:19:19.687 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #7
+09-08 16:19:19.688 W/PackageParser( 3719): Ignoring duplicate uses-permissions/uses-permissions-sdk-m: android.permission.GET_TASKS in package: com.cibn.tv at: Binary XML file line #19
+09-08 16:19:19.691 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.691 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.694 W/PackageParser( 3719): Ignoring duplicate uses-permissions/uses-permissions-sdk-m: android.permission.boot_tvshop_service in package: com.cibn.tv at: Binary XML file line #56
+09-08 16:19:19.697 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.707 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #96
+09-08 16:19:19.712 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.713 I/chatty  ( 3719): uid=10022(com.cibn.tv) aplugin-1-t-1 identical 53 lines
+09-08 16:19:19.713 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.713 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.753 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 23 lines
+09-08 16:19:19.782 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.783 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.788 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.790 W/PackageParser( 3719): No actions in intent filter at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #665
+09-08 16:19:19.791 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.793 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.806 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.823 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.827 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.835 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.838 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.838 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.839 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.839 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.839 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.839 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.839 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.840 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.840 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.845 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.846 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.848 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.848 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.852 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.853 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.854 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.854 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.854 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.854 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.855 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.855 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.855 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.884 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:19.941 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.youku.dynamic.plugin/212021005/plugin.apk Binary XML file line #11
+09-08 16:19:19.948 I/chatty  ( 3977): uid=1000(system) Analytics_Clien expire 1 line
+09-08 16:19:20.127 E/ActivityThread( 4890): Failed to find provider info for com.konka.hotelmenu
+09-08 16:19:20.186 E/ActivityThread( 4890): Failed to find provider info for com.konka.hotelmenu
+09-08 16:19:20.189 W/ContextImpl( 4890): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 com.konka.systemadvert.util.Util.startScreenSaverService:555 com.konka.systemadvert.boot.DaemonService.startService:98 com.konka.systemadvert.boot.DaemonService.access$200:22 
+09-08 16:19:20.196 W/ContextImpl( 4890): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 com.konka.systemadvert.util.Util.startAdFloatingWindowService:572 com.konka.systemadvert.boot.DaemonService.startService:100 com.konka.systemadvert.boot.DaemonService.access$200:22 
+09-08 16:19:20.219 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 31 lines
+09-08 16:19:20.494 W/ContextImpl( 4969): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.alibaba.analytics.core.d.b.b:55 com.alibaba.analytics.core.d$2.run:222 java.lang.Thread.run:764 
+09-08 16:19:20.644 W/ContextImpl( 4969): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.alibaba.analytics.core.a.h.f:50 com.alibaba.analytics.core.a.d.d:167 com.alibaba.analytics.core.a.d.c:149 
+09-08 16:19:20.665 W/ContextImpl( 4969): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.alibaba.analytics.core.a.h.f:50 com.alibaba.analytics.core.a.d.d:167 com.alibaba.analytics.core.a.d.c:149 
+09-08 16:19:20.693 W/ContextImpl( 4969): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.alibaba.analytics.core.a.h.f:50 com.alibaba.analytics.core.a.d.d:167 com.alibaba.analytics.core.a.d.c:149 
+09-08 16:19:21.056 W/ContextImpl( 4969): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.alibaba.analytics.core.a.h.f:50 com.alibaba.analytics.core.a.f.a:20 com.alibaba.analytics.core.a.e.b:257 
+09-08 16:19:21.339 W/ContextImpl( 3964): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.SmartControl.toolkit.SCWrapper.bindService:166 com.konka.localserver.service.stb.SmartControlAdapter.bindSmartControlService:53 com.konka.localserver.service.stb.SmartControlAdapter$CheckConnectRunnable.run:244 
+09-08 16:19:21.430 W/ContextImpl( 3964): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.SmartControl.toolkit.SCWrapper.bindService:166 com.konka.localserver.service.stb.SmartControlAdapter.bindSmartControlService:53 com.konka.localserver.service.stb.SmartControlAdapter$CheckConnectRunnable.run:244 
+09-08 16:19:22.259 W/ActivityThread( 5090): ClassLoader.getResourceAsStream: The class loader returned by Thread.getContextClassLoader() may fail for processes that host multiple applications. You should explicitly specify a context class loader. For example: Thread.setContextClassLoader(getClass().getClassLoader());
+09-08 16:19:22.716 W/ContextImpl( 5090): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:696 com.konka.iotbusiness.IotBusiness.initVolumeService:189 com.konka.iotbusiness.IotBusiness.init:58 
+09-08 16:19:23.062 W/ContextImpl( 5090): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:696 com.konka.kksmarthome.App.onCreate:72 android.app.Instrumentation.callApplicationOnCreate:1154 
+09-08 16:19:23.143 W/ContextImpl( 5090): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 android.content.ContextWrapper.startForegroundService:669 com.konka.iotbusiness.receiver.IotBroadcastReceiver.onReceive:43 android.app.ActivityThread.handleReceiver:3416 
+09-08 16:19:23.151 W/ContextImpl( 5090): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 com.konka.iotbusiness.iotmessage.IotMessageTool.bindIotService:68 com.konka.iotbusiness.iotmessage.IotMessageTool$bind$1.invoke:190 com.konka.iotbusiness.iotmessage.IotMessageTool$bind$1.invoke:26 
+09-08 16:19:23.152 W/ContextImpl( 3923): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 android.content.ContextWrapper.startService:664 com.konka.mirror.receiver.BootCompleteReceiver.onReceive:16 android.app.ActivityThread.handleReceiver:3416 
+09-08 16:19:23.155 W/ContextImpl( 5090): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.iotbusiness.iotmessage.IotMessageTool.bindIotService:69 com.konka.iotbusiness.iotmessage.IotMessageTool$bind$1.invoke:190 com.konka.iotbusiness.iotmessage.IotMessageTool$bind$1.invoke:26 
+09-08 16:19:23.240 W/ContextImpl( 5090): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.android.bus.ServiceProxy2.initService:102 com.konka.android.bus.ServiceProxy2.isServiceAvailable:45 com.konka.android.bus.ServiceProxy2.bindServer:112 
+09-08 16:19:23.347 I/chatty  ( 2994): uid=1000(system) Binder:2994_2 expire 11 lines
+09-08 16:19:23.550 W/ContextImpl( 5212): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:696 com.konka.iotserver.IotServerApplication.bindIotService:39 com.konka.iotserver.IotServerApplication.onCreate:33 
+09-08 16:19:24.037 I/chatty  ( 2994): uid=1000 system_server expire 14 lines
+09-08 16:19:24.113 W/ActivityThread( 5212): ClassLoader.getResourceAsStream: The class loader returned by Thread.getContextClassLoader() may fail for processes that host multiple applications. You should explicitly specify a context class loader. For example: Thread.setContextClassLoader(getClass().getClassLoader());
+09-08 16:19:24.257 W/ContextImpl( 5212): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 android.content.ContextWrapper.startForegroundService:669 com.konka.iotserver.receiver.IotBroadcastReceiver.onReceive:41 android.app.ActivityThread.handleReceiver:3416 
+09-08 16:19:24.351 I/chatty  ( 2994): uid=1000(system) InputReader expire 34 lines
+09-08 16:19:24.404 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:19:24.454 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 11 lines
+09-08 16:19:24.506 I/chatty  ( 2994): uid=1000(system) android.bg expire 8 lines
+09-08 16:19:24.981 I/chatty  ( 2994): uid=1000(system) android.io expire 1 line
+09-08 16:19:25.108 W/ContextImpl( 5341): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat$Api26Impl.startForegroundService:933 androidx.core.content.ContextCompat.startForegroundService:701 
+09-08 16:19:25.709 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:19:26.272 W/ContextImpl( 3923): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 com.konka.wfdmodel.BusinessWfdService$WorkHandler.handleMessage:130 android.os.Handler.dispatchMessage:106 android.os.Looper.loop:193 
+09-08 16:19:26.340 I/chatty  ( 2994): uid=1000(system) WifiP2pService expire 17 lines
+09-08 16:19:27.568 W/ContextImpl( 3381): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 android.content.ContextWrapper.startService:664 com.konka.livelauncher.utils.CommonFunction.startService:624 com.konka.livelauncher.utils.OpenFunction.openSettings:298 
+09-08 16:19:28.959 W/ContextImpl( 5212): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 org.eclipse.paho.android.service.MqttAndroidClient.connect:417 org.eclipse.paho.android.service.MqttAndroidClient.connect:335 com.konka.iotmqtt.mqtt.IotMqttClient.doConnect:128 
+09-08 16:19:28.968 W/ContextImpl( 5212): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 org.eclipse.paho.android.service.MqttAndroidClient.connect:432 org.eclipse.paho.android.service.MqttAndroidClient.connect:335 com.konka.iotmqtt.mqtt.IotMqttClient.doConnect:128 
+09-08 16:19:29.581 E/ActivityThread( 3434): Failed to find provider info for com.konka.hotelmenu
+09-08 16:19:29.595 D/BroadcastQueue( 2994): process parallel broadcast: action=android.net.wifi.STATE_CHANGE; package=com.konka.tvsettings
+09-08 16:19:29.719 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:29.719 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:29.722 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:29.894 I/ActivityManager( 2994): Start proc 5602:com.konka.upgrade/1000 for broadcast com.konka.upgrade/.common.BootCompleteReceiver
+09-08 16:19:30.122 I/AlarmManager( 2994): Setting Wakeup Alarm type[0] for com.konka.upgrade @2072679570121 and next wakeup alarm is @Mon Sep 08 16:20:29 GMT+08:00 2025
+09-08 16:19:30.161 V/SettingsProvider( 2994): Notifying for 0: content://settings/system/led_scene_internal
+09-08 16:19:30.163 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.164 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.168 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.225 D/BroadcastQueue( 2994): enqueueBroadcastLocked acion = android.net.conn.CONNECTIVITY_CHANGE, order=false
+09-08 16:19:30.226 D/BroadcastQueue( 2994): enqueue broadcast: action=android.net.conn.CONNECTIVITY_CHANGE, order=false, package=com.konka.upgrade, priority=2, reason=back-white
+09-08 16:19:30.226 D/BroadcastQueue( 2994): process parallel broadcast: action=android.net.conn.CONNECTIVITY_CHANGE; package=com.konka.upgrade
+09-08 16:19:30.263 W/ContextImpl( 5602): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:675 com.konka.upgrade.common.BootCompleteReceiver.onReceive:21 
+09-08 16:19:30.264 D/AMS     ( 2994): startService: Intent { cmp=com.konka.upgrade/.UpgradeService (has extras) }
+09-08 16:19:30.268 W/BroadcastQueue( 2994): Permission Denial: receiving Intent { act=android.intent.action.BOOT_COMPLETED flg=0x9000010 pkg=com.cibn.tv (has extras) } to com.cibn.tv/com.yunos.tv.yingshi.boutique.boot.TotalActionReceiver requires android.permission.RECEIVE_BOOT_COMPLETED due to sender null (uid 1000)
+09-08 16:19:30.269 D/BroadcastQueue( 2994): callback caller app: action=android.intent.action.BOOT_COMPLETED; package=null
+09-08 16:19:30.269 I/ActivityManager( 2994): Finished processing BOOT_COMPLETED for u0
+09-08 16:19:30.282 W/ContextImpl( 5602): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:675 com.konka.upgrade.common.NetworkChangedReceiver.onReceive:26 android.app.LoadedApk$ReceiverDispatcher$Args.lambda$getRunnable$0:1391 
+09-08 16:19:30.283 D/AMS     ( 2994): startService: Intent { cmp=com.konka.upgrade/.UpgradeService (has extras) }
+09-08 16:19:30.291 I/ActivityManager( 2994): Start proc 5626:com.konka.kkrcotawn/1000 for broadcast com.konka.kkrcotawn/.receiver.UpgradeReceiver
+09-08 16:19:30.305 V/ActivityManager( 2994): Attempted to start a foreground service (ComponentInfo{com.konka.upgrade/com.konka.upgrade.UpgradeService}) with a broken notification (no icon: Notification(channel=id pri=0 contentView=null vibrate=null sound=null defaults=0x0 flags=0x40 color=0x00000000 vis=PRIVATE))
+09-08 16:19:30.328 V/ActivityManager( 2994): Attempted to start a foreground service (ComponentInfo{com.konka.upgrade/com.konka.upgrade.UpgradeService}) with a broken notification (no icon: Notification(channel=id pri=0 contentView=null vibrate=null sound=null defaults=0x0 flags=0x40 color=0x00000000 vis=PRIVATE))
+09-08 16:19:30.328 E/ActivityThread( 5602): Failed to find provider info for com.konka.hotelmenu
+09-08 16:19:30.435 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.435 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.438 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.450 D/BroadcastQueue( 2994): process broadcast for static receiver: action=konka.inputdevice.action.CONNECT_STATE_CHANGED; package=com.konka.kkrcotawn
+09-08 16:19:30.464 D/BroadcastQueue( 2994): process broadcast for static receiver: action=konka.inputdevice.action.CONNECT_STATE_CHANGED; package=com.konka.kkrcotawn
+09-08 16:19:30.471 V/SettingsProvider( 2994): Notifying for 0: content://settings/system/led_scene_internal
+09-08 16:19:30.475 V/ActivityManager( 2994): Attempted to start a foreground service (ComponentInfo{com.konka.upgrade/com.konka.upgrade.UpgradeService}) with a broken notification (no icon: Notification(channel=id pri=0 contentView=null vibrate=null sound=null defaults=0x0 flags=0x40 color=0x00000000 vis=PRIVATE))
+09-08 16:19:30.483 E/ActivityThread( 5602): Failed to find provider info for com.konka.hotelmenu
+09-08 16:19:30.504 I/ActivityManager( 2994): Start proc 5653:com.konka.apkhall.edu/u0a35 for broadcast com.konka.apkhall.edu/.receiver.InstallReceiver
+09-08 16:19:30.544 V/SettingsProvider( 2994): Notifying for 0: content://settings/system/led_scene_internal
+09-08 16:19:30.545 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.546 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.548 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.625 W/ContextImpl( 5602): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.konka.upgrade.statistics.KonkaStatistics$initSdk$1.onInitSDK:69 com.konka.bigdata.init.task.LoadConfigTask.restoreConfigFromLocal:320 com.konka.bigdata.init.task.LoadConfigTask.run:142 
+09-08 16:19:30.627 D/AMS     ( 2994): bindService: Intent { act=com.konka.localserver.service.LOCAL_SERVER_SERVICE }
+09-08 16:19:30.751 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.751 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.758 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.786 V/SettingsProvider( 2994): Notifying for 0: content://settings/system/led_scene_internal
+09-08 16:19:30.791 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.791 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:30.795 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:31.072 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:31.072 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:31.080 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:31.363 D/BroadcastQueue( 2994): enqueueBroadcastLocked acion = android.net.conn.CONNECTIVITY_CHANGE, order=false
+09-08 16:19:31.364 D/BroadcastQueue( 2994): enqueue broadcast: action=android.net.conn.CONNECTIVITY_CHANGE, order=false, package=com.konka.apkhall.edu, priority=2, reason=back-white
+09-08 16:19:31.364 D/BroadcastQueue( 2994): process parallel broadcast: action=android.net.conn.CONNECTIVITY_CHANGE; package=com.konka.apkhall.edu
+09-08 16:19:31.452 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 org.eclipse.paho.android.service.MqttAndroidClient.connect:414 com.konka.alipush.AliPushImpl.connect:122 com.konka.alipush.AliPushFactory.lambda$createPushInstance$0:43 
+09-08 16:19:31.453 D/AMS     ( 2994): startService: Intent { cmp=com.konka.messagedispatcher/org.eclipse.paho.android.service.MqttService }
+09-08 16:19:31.463 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 org.eclipse.paho.android.service.MqttAndroidClient.connect:425 com.konka.alipush.AliPushImpl.connect:122 com.konka.alipush.AliPushFactory.lambda$createPushInstance$0:43 
+09-08 16:19:31.465 D/AMS     ( 2994): bindService: Intent { cmp=com.konka.messagedispatcher/org.eclipse.paho.android.service.MqttService }
+09-08 16:19:31.484 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:31.485 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:31.487 V/SettingsProvider( 2994): Notifying for 0: content://settings/system/led_scene_internal
+09-08 16:19:31.492 V/ActivityManager( 2994): konkaPatch getTopActivity=ComponentInfo{com.konka.livelauncher/com.konka.livelauncher.TrueLauncher}
+09-08 16:19:31.663 D/AMS     ( 2994): startService: Intent { pkg=com.newtv.login cmp=com.newtv.login/.UserInfoService }
+09-08 16:19:31.663 W/ActivityManager( 2994): Unable to start service Intent { pkg=com.newtv.login cmp=com.newtv.login/.UserInfoService } U=0: not found
+09-08 16:19:31.670 D/BroadcastQueue( 2994): process broadcast for static receiver: action=konka.inputdevice.action.CONNECT_STATE_CHANGED; package=com.konka.kkrcotawn
+09-08 16:19:31.689 I/chatty  ( 2994): uid=1000(system) Binder:2994_19 identical 9 lines
+09-08 16:19:32.189 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 11 lines
+09-08 16:19:34.460 I/chatty  ( 4254): uid=1000(system) com.konka.messagedispatcher expire 10 lines
+09-08 16:19:35.706 I/chatty  ( 2994): uid=1000 system_server expire 10 lines
+09-08 16:19:35.724 I/chatty  ( 4648): uid=1000(system) com.konka.messagedispatcher:second expire 10 lines
+09-08 16:19:42.646 I/chatty  ( 2994): uid=1000(system) Binder:2994_1 expire 3 lines
+09-08 16:19:47.553 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #6
+09-08 16:19:47.553 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #7
+09-08 16:19:47.553 W/PackageParser( 3719): Ignoring duplicate uses-permissions/uses-permissions-sdk-m: android.permission.GET_TASKS in package: com.cibn.tv at: Binary XML file line #19
+09-08 16:19:47.554 W/PackageParser( 3719): Ignoring duplicate uses-permissions/uses-permissions-sdk-m: android.permission.boot_tvshop_service in package: com.cibn.tv at: Binary XML file line #56
+09-08 16:19:47.554 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #96
+09-08 16:19:47.556 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:47.557 I/chatty  ( 3719): uid=10022(com.cibn.tv) aplugin-1-t-2 identical 67 lines
+09-08 16:19:47.559 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:47.562 W/PackageParser( 3719): No actions in intent filter at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #665
+09-08 16:19:47.564 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:47.588 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:47.604 D/PackageParser( 3719): parseactivity,packageName:com.youku.ott.minp.plugin;parst inputsrc:null
+09-08 16:19:47.605 D/PackageParser( 3719): parseactivity,packageName:com.youku.ott.minp.plugin;parst inputsrc:null
+09-08 16:19:48.168 E/ActivityThread( 3719): Failed to find provider info for com.alipay.setting
+09-08 16:19:48.722 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #6
+09-08 16:19:48.722 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #7
+09-08 16:19:48.722 W/PackageParser( 3719): Ignoring duplicate uses-permissions/uses-permissions-sdk-m: android.permission.GET_TASKS in package: com.cibn.tv at: Binary XML file line #19
+09-08 16:19:48.723 W/PackageParser( 3719): Ignoring duplicate uses-permissions/uses-permissions-sdk-m: android.permission.boot_tvshop_service in package: com.cibn.tv at: Binary XML file line #56
+09-08 16:19:48.723 W/PackageParser( 3719): Unknown element under <manifest>: meta-data at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #96
+09-08 16:19:48.725 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:48.726 I/chatty  ( 3719): uid=10022(com.cibn.tv) aplugin-1-t-1 identical 67 lines
+09-08 16:19:48.728 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:48.730 W/PackageParser( 3719): No actions in intent filter at /data/user/0/com.cibn.tv/app_agile_plugin/execute/com.cibn.tv.plugin/2131300126/plugin.apk Binary XML file line #665
+09-08 16:19:48.732 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:48.754 D/PackageParser( 3719): parseactivity,packageName:com.cibn.tv;parst inputsrc:null
+09-08 16:19:48.770 E/ActivityThread( 3719): Failed to find provider info for com.alipay.setting
+09-08 16:19:49.139 E/ActivityThread( 3719): Failed to find provider info for com.alipay.setting
+09-08 16:19:49.417 E/ActivityThread( 3719): Failed to find provider info for com.alipay.setting
+09-08 16:19:52.536 I/chatty  ( 2994): uid=1000(system) Binder:2994_9 expire 10 lines
+09-08 16:19:52.579 I/chatty  ( 2994): uid=1000(system) Binder:2994_10 expire 31 lines
+09-08 16:19:54.330 E/storaged( 2721): getDiskStats failed with result NOT_SUPPORTED and size 0
+09-08 16:19:54.646 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 58 lines
+09-08 16:19:55.421 I/chatty  ( 2994): uid=1000(system) DeviceStorageMo expire 1 line
+09-08 16:19:55.503 I/chatty  ( 2994): uid=1000(system) AlarmManager expire 10 lines
+09-08 16:19:57.566 I/chatty  ( 2994): uid=1000(system) InputReader expire 92 lines
+09-08 16:19:57.568 I/chatty  ( 2994): uid=1000(system) InputDispatcher expire 51 lines
+09-08 16:19:57.840 I/chatty  ( 2994): uid=1000(system) android.ui expire 6 lines
+09-08 16:19:58.639 I/chatty  ( 2994): uid=1000 system_server expire 29 lines
+09-08 16:20:07.539 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 20 lines
+09-08 16:20:12.921 I/chatty  ( 2994): uid=1000(system) batterystats-wo expire 14 lines
+09-08 16:20:20.196 W/ContextImpl( 4890): Calling a method in the system process without a qualified user: android.app.ContextImpl.startService:1537 android.content.ContextWrapper.startService:664 com.konka.systemadvert.util.Util.startAdBootService:538 com.konka.systemadvert.boot.DaemonService$1.run:61 android.os.Handler.handleCallback:873 
+09-08 16:20:24.798 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 68 lines
+09-08 16:20:29.242 I/chatty  ( 2994): uid=1000(system) Binder:2994_3 expire 9 lines
+09-08 16:20:30.329 I/chatty  ( 2994): uid=1000 system_server expire 51 lines
+09-08 16:20:30.330 I/chatty  ( 2994): uid=1000(system) InputReader expire 144 lines
+09-08 16:20:30.333 I/chatty  ( 2994): uid=1000(system) InputDispatcher expire 95 lines
+09-08 16:20:33.238 E/ActivityThread( 3719): Failed to find provider info for com.alipay.setting
+09-08 16:20:34.432 I/chatty  ( 2994): uid=1000(system) android.display expire 3 lines
+09-08 16:20:35.760 I/chatty  ( 2994): uid=1000(system) Binder:2994_9 expire 11 lines
+09-08 16:20:38.606 W/ViewRootImpl[TrueLauncher]( 3381): Cancelling event due to no window focus: KeyEvent { action=ACTION_UP, keyCode=KEYCODE_DPAD_CENTER, scanCode=28, metaState=0, flags=0x28, repeatCount=0, eventTime=118187, downTime=118124, deviceId=2, source=0x701 }
+09-08 16:20:38.612 I/chatty  ( 3381): uid=1000(system) com.konka.livelauncher identical 7 lines
+09-08 16:20:38.612 W/ViewRootImpl[TrueLauncher]( 3381): Cancelling event due to no window focus: KeyEvent { action=ACTION_UP, keyCode=KEYCODE_DPAD_CENTER, scanCode=28, metaState=0, flags=0x28, repeatCount=0, eventTime=118187, downTime=118124, deviceId=2, source=0x701 }
+09-08 16:20:38.825 D/KKSourceManager( 4392): Activity onResume ***mActivityInfo.name=com.konka.applist.activitys.MainActivity***null
+09-08 16:20:39.335 W/ActivityThread( 6045): ClassLoader.getResourceAsStream: The class loader returned by Thread.getContextClassLoader() may fail for processes that host multiple applications. You should explicitly specify a context class loader. For example: Thread.setContextClassLoader(getClass().getClassLoader());
+09-08 16:20:39.692 I/chatty  ( 2994): uid=1000(system) Binder:2994_D expire 4 lines
+09-08 16:20:43.515 I/chatty  ( 2994): uid=1000(system) Binder:2994_18 expire 18 lines
+09-08 16:20:44.211 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 26 lines
+09-08 16:20:44.999 D/KKSourceManager( 6104): Activity onResume ***mActivityInfo.name=com.konka.onlinevideo.OnlineVideoActivity***null
+09-08 16:20:51.987 I/chatty  ( 2994): uid=1000 system_server expire 12 lines
+09-08 16:20:51.989 I/chatty  ( 2994): uid=1000(system) InputDispatcher expire 23 lines
+09-08 16:20:54.343 E/storaged( 2721): getDiskStats failed with result NOT_SUPPORTED and size 0
+09-08 16:20:54.561 I/chatty  ( 2994): uid=1000(system) Binder:2994_18 expire 16 lines
+09-08 16:20:54.989 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 82 lines
+09-08 16:20:55.159 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 66 lines
+09-08 16:20:56.523 I/chatty  ( 2994): uid=1000(system) InputReader expire 4 lines
+09-08 16:20:56.789 I/chatty  ( 2994): uid=1000(system) android.fg expire 1 line
+09-08 16:20:57.246 W/ContextImpl( 3381): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 android.content.ContextWrapper.sendBroadcast:444 android.app.SystemInfoHelperA.sendLifeCycleBroadcast:67 android.app.Activity.onStart:1305 
+09-08 16:20:57.271 D/KKSourceManager( 3381): Activity onResume ***mActivityInfo.name=com.konka.livelauncher.TrueLauncher***null
+09-08 16:21:00.000 I/chatty  ( 2994): uid=1000(system) AlarmManager expire 6 lines
+09-08 16:21:03.826 I/chatty  ( 2994): uid=1000(system) Binder:2994_9 expire 5 lines
+09-08 16:21:08.239 I/chatty  ( 2994): uid=1000(system) PackageManager expire 20 lines
+09-08 16:21:08.511 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 2 lines
+09-08 16:21:08.619 W/ContextImpl( 3964): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.konka.appcontroller.data.AppControllerBroadcastSender.deleteUserSetting:44 com.konka.appcontroller.receiver.AppUninstalledReceiver.onReceive:21 android.app.LoadedApk$ReceiverDispatcher$Args.lambda$getRunnable$0:1391 
+09-08 16:21:08.648 I/chatty  ( 2994): uid=1000(system) Binder:2994_18 expire 3 lines
+09-08 16:21:08.703 I/chatty  ( 2994): uid=1000(system) NetworkStats expire 2 lines
+09-08 16:21:08.792 I/chatty  ( 2994): uid=1000 system_server expire 7 lines
+09-08 16:21:09.024 W/ContextImpl( 3823): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 com.konka.appupgrade.common.Platform.startService:40 com.konka.appupgrade.common.AlarmReceiver.notifyGetInfo:19 com.konka.appupgrade.common.AlarmReceiver.onReceive:12 
+09-08 16:21:09.024 I/chatty  ( 2994): uid=1000(system) Binder:2994_2 expire 7 lines
+09-08 16:21:09.338 W/ContextImpl( 3823): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 com.konka.appupgrade.common.GetInfoResultListener.startService:51 com.konka.appupgrade.common.GetInfoResultListener.getDisableInfoEnd:36 com.konka.appupgrade.common.GetInfoJob$checkAppDisableInfo$1.invoke:147 
+09-08 16:21:09.339 W/ContextImpl( 3823): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 com.konka.appupgrade.common.GetInfoResultListener.startService:51 com.konka.appupgrade.common.GetInfoResultListener.getCommandInfoEnd:42 com.konka.appupgrade.common.GetInfoJob$checkCommandInfo$1.invoke:173 
+09-08 16:21:09.376 W/ContextImpl( 3823): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 com.konka.appupgrade.common.GetInfoResultListener.startService:51 com.konka.appupgrade.common.GetInfoResultListener.getUninstallInfoEnd:30 com.konka.appupgrade.common.GetInfoJob$checkAppUninstallInfo$1.invoke:120 
+09-08 16:21:11.336 W/ContextImpl( 3823): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 com.konka.appupgrade.common.GetInfoResultListener.startService:51 com.konka.appupgrade.common.GetInfoResultListener.silentUpgrade:74 com.konka.appupgrade.common.GetInfoResultListener.getUpgradeInfoEnd:24 
+09-08 16:21:11.381 I/ActivityThread( 3381): Removing dead content provider:android.content.ContentProviderProxy@b617a92
+09-08 16:21:14.591 I/chatty  ( 4254): uid=1000(system) com.konka.messagedispatcher expire 10 lines
+09-08 16:21:15.781 I/chatty  ( 4648): uid=1000(system) com.konka.messagedispatcher:second expire 10 lines
+09-08 16:21:24.604 I/chatty  ( 2994): uid=1000(system) Binder:2994_7 expire 13 lines
+09-08 16:21:25.668 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 66 lines
+09-08 16:21:29.248 I/chatty  ( 2994): uid=1000(system) AlarmManager expire 12 lines
+09-08 16:21:29.249 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 38 lines
+09-08 16:21:44.138 I/chatty  ( 2994): uid=1000(system) PackageManager expire 18 lines
+09-08 16:21:44.628 I/chatty  ( 2994): uid=1000(system) Binder:2994_1A expire 4 lines
+09-08 16:21:52.808 I/chatty  ( 2994): uid=1000(system) android.bg expire 9 lines
+09-08 16:21:52.816 I/chatty  ( 2994): uid=1000(system) android.ui expire 1 line
+09-08 16:21:54.343 E/storaged( 2721): getDiskStats failed with result NOT_SUPPORTED and size 0
+09-08 16:21:56.001 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 68 lines
+09-08 16:21:56.356 I/chatty  ( 2994): uid=1000(system) Binder:2994_7 expire 10 lines
+09-08 16:21:56.799 I/chatty  ( 2994): uid=1000(system) PowerManagerSer expire 4 lines
+09-08 16:21:56.808 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 11 lines
+09-08 16:21:56.830 W/ContextImpl( 4890): Calling a method in the system process without a qualified user: android.app.ContextImpl.startActivity:887 android.content.ContextWrapper.startActivity:379 android.content.ContextWrapper.startActivity:379 com.konka.systemadvert.screensaver.ScreenSaverActivity$TvStateReceiver.startScreenSaverActivity:1516 com.konka.systemadvert.screensaver.ScreenSaverActivity$TvStateReceiver.onReceive:1442 
+09-08 16:21:56.831 W/ContextImpl( 4890): Calling a method in the system process without a qualified user: android.app.ContextImpl.startActivity:899 android.app.ContextImpl.startActivity:888 android.content.ContextWrapper.startActivity:379 android.content.ContextWrapper.startActivity:379 com.konka.systemadvert.screensaver.ScreenSaverActivity$TvStateReceiver.startScreenSaverActivity:1516 
+09-08 16:21:57.052 E/ActivityThread( 4890): Failed to find provider info for com.konka.hotelmenu
+09-08 16:21:57.080 W/ContextImpl( 4890): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.konka.systemadvert.screensaver.ScreenSaverActivity.notifyScreenSaverEnter:619 com.konka.systemadvert.screensaver.ScreenSaverActivity.onCreate:225 android.app.Activity.performCreate:7168 
+09-08 16:21:57.115 W/ContextImpl( 4890): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 android.app.SystemInfoHelperA.sendLifeCycleBroadcast:67 android.app.Activity.onStart:1305 android.app.Instrumentation.callActivityOnStart:1391 
+09-08 16:21:57.119 D/KKSourceManager( 4890): Activity onResume ***mActivityInfo.name=com.konka.systemadvert.screensaver.ScreenSaverActivity***keep
+09-08 16:21:57.911 W/ContextImpl( 4890): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 mtopsdk.common.util.AsyncServiceBinder.asyncBind:125 mtopsdk.xstate.XState.init:94 mtopsdk.mtop.global.init.OpenMtopInitTask.executeCoreTask:45 
+09-08 16:21:57.912 I/chatty  ( 2994): uid=1000(system) Binder:2994_A expire 3 lines
+09-08 16:22:00.006 I/chatty  ( 2994): uid=1000 system_server expire 4 lines
+09-08 16:22:04.654 I/chatty  ( 2994): uid=1000(system) Binder:2994_D expire 18 lines
+09-08 16:22:07.564 W/ContextImpl( 4890): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.alibaba.analytics.AnalyticsMgr.b:237 com.alibaba.analytics.AnalyticsMgr.c:34 com.alibaba.analytics.AnalyticsMgr$c.run:603 
+09-08 16:22:07.582 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 1 line
+09-08 16:22:08.038 I/chatty  ( 2994): uid=1000(system) batterystats-wo expire 7 lines
+09-08 16:22:08.106 W/ContextImpl( 6666): Calling a method in the system process without a qualified user: android.app.ContextImpl.bindService:1617 android.content.ContextWrapper.bindService:698 com.alibaba.analytics.core.d.b.b:55 com.alibaba.analytics.core.d$2.run:222 java.lang.Thread.run:764 
+09-08 16:22:08.142 W/ActivityThread( 6666): ClassLoader.getResourceAsStream: The class loader returned by Thread.getContextClassLoader() may fail for processes that host multiple applications. You should explicitly specify a context class loader. For example: Thread.setContextClassLoader(getClass().getClassLoader());
+09-08 16:22:08.222 W/ContextImpl( 6666): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.alibaba.analytics.core.a.h.f:50 com.alibaba.analytics.core.a.d.d:167 com.alibaba.analytics.core.a.d.c:149 
+09-08 16:22:08.239 W/ContextImpl( 6666): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.alibaba.analytics.core.a.h.f:50 com.alibaba.analytics.core.a.d.d:167 com.alibaba.analytics.core.a.d.c:149 
+09-08 16:22:08.255 W/ContextImpl( 6666): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.alibaba.analytics.core.a.h.f:50 com.alibaba.analytics.core.a.d.d:167 com.alibaba.analytics.core.a.d.c:149 
+09-08 16:22:08.267 I/chatty  ( 2994): uid=1000(system) Binder:2994_7 expire 16 lines
+09-08 16:22:08.527 W/ContextImpl( 6666): Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcast:1005 android.content.ContextWrapper.sendBroadcast:444 com.alibaba.analytics.core.a.h.f:50 com.alibaba.analytics.core.a.f.a:20 com.alibaba.analytics.core.a.e.b:257 
+09-08 16:22:26.359 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 65 lines
+09-08 16:22:54.344 E/storaged( 2721): getDiskStats failed with result NOT_SUPPORTED and size 0
+09-08 16:22:54.712 I/chatty  ( 4254): uid=1000(system) com.konka.messagedispatcher expire 10 lines
+09-08 16:22:55.837 I/chatty  ( 4648): uid=1000(system) com.konka.messagedispatcher:second expire 10 lines
+09-08 16:22:56.686 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 65 lines
+09-08 16:23:00.003 I/chatty  ( 2994): uid=1000(system) Binder:2994_7 expire 11 lines
+09-08 16:23:20.793 E/ActivityThread( 4890): Failed to find provider info for com.konka.hotelmenu
+09-08 16:23:27.015 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 65 lines
+09-08 16:23:29.277 I/chatty  ( 2994): uid=1000(system) Binder:2994_7 expire 10 lines
+09-08 16:23:44.772 I/chatty  ( 2994): uid=1000(system) Binder:2994_6 expire 5 lines
+09-08 16:23:54.345 E/storaged( 2721): getDiskStats failed with result NOT_SUPPORTED and size 0
+09-08 16:23:57.317 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 65 lines
+09-08 16:24:00.000 I/chatty  ( 2994): uid=1000(system) AlarmManager expire 5 lines
+09-08 16:24:00.001 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 2 lines
+09-08 16:24:00.004 I/chatty  ( 2994): uid=1000 system_server expire 2 lines
+09-08 16:24:27.626 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 65 lines
+09-08 16:24:29.289 I/chatty  ( 2994): uid=1000(system) Binder:2994_7 expire 6 lines
+09-08 16:24:34.823 I/chatty  ( 4254): uid=1000(system) com.konka.messagedispatcher expire 4 lines
+09-08 16:24:35.883 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:24:45.888 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:24:51.022 E/ActivityThread( 4890): Failed to find provider info for com.konka.hotelmenu
+09-08 16:24:54.346 E/storaged( 2721): getDiskStats failed with result NOT_SUPPORTED and size 0
+--------- beginning of main
+09-08 16:24:54.495 D/kktc    ( 3694):  CT：m line run 
+09-08 16:24:54.495 D/kktc    ( 3694):  CT：m line check
+09-08 16:24:54.495 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:24:54.846 I/chatty  ( 2994): uid=1000(system) Binder:2994_6 expire 8 lines
+09-08 16:24:54.992 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:24:55.521 I/chatty  ( 2994): uid=1000(system) DeviceStorageMo expire 1 line
+09-08 16:24:55.892 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:24:56.009 I/DLNA-VPP( 3923): AutoAdvertise L4292
+09-08 16:24:56.580 I/DLNA-VPP( 3923): UpnpSendAdvertisement L2017
+09-08 16:24:57.483 I/chatty  ( 3381): uid=1000(system) MonitorThread expire 10 lines
+09-08 16:24:57.496 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:24:57.496 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:24:57.647 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:24:57.795 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:24:57.923 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 65 lines
+09-08 16:24:57.943 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:24:57.944 D/Analytics.g.M( 4969): [] queueCache put:i,queueCache size:1
+09-08 16:24:57.945 D/Analytics.g.run( 4969): [] take queueCache size:0
+09-08 16:24:57.946 D/Analytics.e.G( 4969): [-] 
+09-08 16:24:57.954 D/Analytics.a.find( 4969): [DBMgr] sql:SELECT * FROM log ORDER BY priority DESC , time DESC  LIMIT 350
+09-08 16:24:57.956 D/Analytics.e.G( 4969): [UploadLogFromDB] logs is null
+09-08 16:24:57.959 I/Analytics.a.b( 4969): [-] foreground:true
+09-08 16:24:57.960 D/Analytics.f$4.b( 4969): [UploadMgr] CurrentUploadInterval:30000
+09-08 16:24:58.093 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:24:58.138 I/system_server( 2994): Background concurrent copying GC freed 14299(1449KB) AllocSpace objects, 67(1340KB) LOS objects, 19% free, 13MB/17MB, paused 360us total 169.152ms
+09-08 16:24:58.239 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:24:58.349 I/system_server( 2994): Background concurrent copying GC freed 30170(3MB) AllocSpace objects, 280(5MB) LOS objects, 19% free, 8MB/10MB, paused 197us total 154.583ms
+09-08 16:24:58.387 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:24:58.539 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:24:58.687 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:24:58.835 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:24:59.108 D/kktc    ( 3964):  CT：m line run 
+09-08 16:24:59.108 D/kktc    ( 3964):  CT：m line check
+09-08 16:24:59.108 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:24:59.792 D/AirplayDiscovery( 3923): handleMessage: 第12次airplay注册！
+09-08 16:24:59.792 D/AirplayDiscovery( 3923): handleMessage: 不是第一次注册了，需要先停止，再注册！
+09-08 16:24:59.793 I/WifiService( 2994): releaseMulticastLock uid=1000
+09-08 16:24:59.794 I/DNSSDEmbedded( 3923): post exit
+09-08 16:24:59.794 D/AirplayDiscovery( 3923): registerAirplay: 
+09-08 16:24:59.796 I/WifiService( 2994): acquireMulticastLock uid=1000
+09-08 16:24:59.796 I/DNSSDEmbedded( 3923): already started
+09-08 16:24:59.797 D/AirplayDiscovery( 3923): registerRaop: 
+09-08 16:24:59.805 I/DNSSDEmbedded( 3923): already started
+09-08 16:25:00.000 I/chatty  ( 2994): uid=1000(system) AlarmManager expire 3 lines
+09-08 16:25:00.001 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 1 line
+09-08 16:25:00.003 I/chatty  ( 2994): uid=1000 system_server expire 2 lines
+09-08 16:25:00.005 E/memtrack( 2994): Couldn't load memtrack module
+09-08 16:25:00.005 W/android.os.Debug( 2994): failed to get memory consumption info: -1
+09-08 16:25:00.079 E/memtrack( 2994): Couldn't load memtrack module
+09-08 16:25:00.079 W/android.os.Debug( 2994): failed to get memory consumption info: -1
+09-08 16:25:02.692 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757319892648, cur:1757319902690
+09-08 16:25:02.692 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757319892648, cur:1757319902690
+09-08 16:25:03.517 E/speedtest( 3719): mtop_rt:0|0|0|0|0|0|0|0|0|0|0|121|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:6|1|1|3|20|659|2|4|48|2625|2|14|0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|,nc_type:0
+09-08 16:25:04.499 D/kktc    ( 3694):  CT：m line run 
+09-08 16:25:04.499 D/kktc    ( 3694):  CT：m line check
+09-08 16:25:04.499 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:25:04.669 I/XcdnEngine-N( 3719): 2025-09-08 16:25:04.669 [connection_manager.cpp:426] send error:Network is unreachable
+09-08 16:25:05.377 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:25:05.897 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:25:05.993 D/LocalServer( 3964): [UdpSendThread.java:HeartBeatPacketSender:263]UdpSendThread : HeartBeatPacketSender : send heartbeat packet ok
+09-08 16:25:06.033 D/LocalServer( 3964): [UdpReceiveThread.java:run:60]get a new message from udp, the length===16
+09-08 16:25:06.034 D/LocalServer( 3964): [UdpReceiveThread.java:run:168]UdpProcessThread : Receive HeartBeat Packet ok
+09-08 16:25:06.034 D/LocalServer( 3964): [UdpSendThread.java:ReceiveHeartBeatAckOk:74]UdpSendThread : ReceiveHeartBeatAckOk
+09-08 16:25:07.592 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:25:07.593 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:25:07.739 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:25:07.887 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:25:08.035 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:25:08.183 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:25:08.331 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:25:08.479 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:25:08.627 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:25:08.779 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:25:08.927 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:25:09.112 D/kktc    ( 3964):  CT：m line run 
+09-08 16:25:09.112 D/kktc    ( 3964):  CT：m line check
+09-08 16:25:09.112 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:25:09.493 I/chatty  ( 3381): uid=1000(system) MonitorThread expire 13 lines
+09-08 16:25:11.027 I/chatty  ( 4890): uid=1000(system) com.konka.systemadvert expire 20 lines
+09-08 16:25:11.043 I/chatty  ( 4890): uid=1000(system) pool-1-thread-2 expire 35 lines
+09-08 16:25:11.202 I/chatty  ( 4890): uid=1000(system) pool-1-thread-5 expire 28 lines
+09-08 16:25:11.271 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65501
+09-08 16:25:11.272 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65502
+09-08 16:25:11.273 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65503
+09-08 16:25:11.326 D/MTK_KL  ( 2731): 6,4807,390979878,-;[CPUQoS] write_mul 3054 to /dev/cpuctl/cg_limit/tasks;
+09-08 16:25:11.580 I/DLNA-VPP( 3923): AutoAdvertise L4292
+09-08 16:25:12.154 I/DLNA-VPP( 3923): UpnpSendAdvertisement L2017
+09-08 16:25:12.734 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757319902690, cur:1757319912732
+09-08 16:25:12.734 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757319902690, cur:1757319912732
+09-08 16:25:12.881 I/chatty  ( 5090): uid=1000(system) RxComputationTh expire 10 lines
+09-08 16:25:13.596 E/speedtest( 3719): mtop_rt:0|0|0|0|0|0|0|0|0|0|121|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:1|1|3|20|659|2|4|48|2625|2|14|0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|,nc_type:0
+09-08 16:25:14.150 I/chatty  ( 5212): uid=1000(system) RxComputationTh expire 10 lines
+09-08 16:25:14.214 W/HiMW@hi_mw_logic_media_player.cpp( 2626): [35m[printSignalStatus:155] [no signal] there is no video playing, count = 7500.[0m
+09-08 16:25:14.503 D/kktc    ( 3694):  CT：m line run 
+09-08 16:25:14.503 D/kktc    ( 3694):  CT：m line check
+09-08 16:25:14.503 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:25:14.868 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:25:15.758 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:25:15.902 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:25:17.690 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:25:17.690 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:25:17.843 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:25:17.991 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:25:18.139 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:25:18.291 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:25:18.439 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:25:18.587 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:25:18.735 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:25:18.883 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:25:19.031 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:25:19.116 D/kktc    ( 3964):  CT：m line run 
+09-08 16:25:19.116 D/kktc    ( 3964):  CT：m line check
+09-08 16:25:19.116 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:25:19.511 D/HiMW@hi_mw_watchdog.cpp( 2626): [run:27] Watchdog:try to get lock
+09-08 16:25:19.511 V/HiMW@HiDispatch.cpp( 2626): [dispatch:65] dispatch wait lock id: 0x7002
+09-08 16:25:19.511 V/HiMW@HiDispatch.cpp( 2626): [dispatch:67] dispatch get lock id: 0x7002
+09-08 16:25:19.511 D/HiMW@hi_mw_watchdog.cpp( 2626): [run:30] Watchdog:get lock ok
+09-08 16:25:20.518 I/chatty  ( 3381): uid=1000(system) MonitorThread expire 13 lines
+09-08 16:25:21.069 I/chatty  ( 4890): uid=1000(system) pool-1-thread-1 expire 35 lines
+09-08 16:25:21.227 I/chatty  ( 4890): uid=1000(system) pool-1-thread-4 expire 28 lines
+09-08 16:25:21.337 E/speedtest( 3719): netType:mobile_4,ipv4:192.168.3.102,ipv6:fe80::e8ef:c524:b550:8a3c%eth0,ssid:null,rssi:,freq:null,metered:0,gate_ip:null,RTTs:,devCnt:0,qualityCode:1104
+09-08 16:25:21.757 I/Analytics.a.b( 4969): [-] foreground:true
+09-08 16:25:22.776 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757319912732, cur:1757319922774
+09-08 16:25:22.776 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757319912732, cur:1757319922774
+09-08 16:25:23.290 I/XcdnEngine-N( 3719): 2025-09-08 16:25:23.290 [connection_manager.cpp:426] send error:Network is unreachable
+09-08 16:25:23.497 I/HTTP_KIT_LOG( 3719):  [Send:235] SCENE_PCDN_NG:[jobId_11] Send url http://pgw-tel-cld-sl.alicdn.com:80/groupkeep
+09-08 16:25:23.498 I/HTTP_KIT_LOG( 3719):  [UpdateConfig:108] SCENE_PCDN_NG:[jobId_11] dump config:content-type :application/octet-stream
+09-08 16:25:23.498 I/HTTP_KIT_LOG( 3719):  [UpdateUrl:66] use domain pgw-tel-cld-sl.alicdn.com:80
+09-08 16:25:23.498 I/HTTP_KIT_LOG( 3719):  [InstallTimer:128] SCENE_PCDN_NG:[jobId_11] start open timeout timer=20000
+09-08 16:25:23.498 E/HTTP_KIT_LOG( 3719):  [Lookup:95] SCENE_PCDN_NG:[jobId_11] SmartDns use ip_url for domain:pgw-tel-cld-sl.alicdn.com:80
+09-08 16:25:23.498 I/HTTP_KIT_LOG( 3719):  [AddRequestHeader:498] job:SCENE_PCDN_NG:[jobId_11] add header:[ range_from:0,cur_download:0,range:default:0- | content-type :application/octet-stream
+09-08 16:25:23.498 I/HTTP_KIT_LOG( 3719): User-Agent :Youku-ntk;Android;13.0.1.26;Scene4
+09-08 16:25:23.498 I/HTTP_KIT_LOG( 3719):  | Add Ip Resolve: pgw-tel-cld-sl.alicdn.com:80 ]
+09-08 16:25:23.627 I/HTTP_KIT_LOG( 3719):  [StopTimer:165] SCENE_PCDN_NG:[jobId_11] stop open timeout timer
+09-08 16:25:23.628 I/HTTP_KIT_LOG( 3719):  [operator():492] SCENE_PCDN_NG:[jobId_11] notify response
+09-08 16:25:23.628 E/HTTP_KIT_LOG( 3719):  [OnResponse:205] SCENE_PCDN_NG:[jobId_11] OnResponse content-length:0 of content-type:, file-size:0  
+09-08 16:25:23.628 E/HTTP_KIT_LOG( 3719):  headers:
+09-08 16:25:23.628 I/HTTP_KIT_LOG( 3719):  [operator():463] SCENE_PCDN_NG:[jobId_11] notify complete
+09-08 16:25:23.628 I/HTTP_KIT_LOG( 3719):  [Close:281] SCENE_PCDN_NG:[jobId_11] Close
+09-08 16:25:23.628 I/HTTP_KIT_LOG( 3719):  [PrintStr:417] SCENE_PCDN_NG:[jobId_11] ReportStat: {"appconnectTime":0.0,"connectTime":85948.0,"dnsTime":150.0,"downloadSize":0.0,"downloadTime":130139.0,"error_rtt":-1.0,"firstBTime":0.0,"firstKBTime":0.0,"firstMBTime":0.0,"last32KTime":0.0,"redirectTime":0.0,"speed":0.0,"starttransferTime":128724.0}
+09-08 16:25:23.677 E/speedtest( 3719): mtop_rt:0|0|0|0|0|0|0|0|0|121|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:1|3|20|659|2|4|48|2625|2|14|0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|,nc_type:0
+09-08 16:25:24.329 I/XcdnEngine-N( 3719): 2025-09-08 16:25:24.329 [connection_manager.cpp:426] send error:Network is unreachable
+09-08 16:25:24.508 D/kktc    ( 3694):  CT：m line run 
+09-08 16:25:24.508 D/kktc    ( 3694):  CT：m line check
+09-08 16:25:24.508 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:25:24.879 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:25:25.906 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:25:25.907 I/chatty  ( 2994): uid=1000(system) Binder:2994_6 expire 1 line
+09-08 16:25:26.134 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:25:27.154 I/DLNA-VPP( 3923): AutoAdvertise L4292
+09-08 16:25:27.725 I/DLNA-VPP( 3923): UpnpSendAdvertisement L2017
+09-08 16:25:27.783 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:25:27.784 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:25:27.931 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:25:27.996 D/Analytics.g.M( 4969): [] queueCache put:i,queueCache size:1
+09-08 16:25:27.997 D/Analytics.g.run( 4969): [] take queueCache size:0
+09-08 16:25:27.997 D/Analytics.e.G( 4969): [-] 
+09-08 16:25:28.004 D/Analytics.a.find( 4969): [DBMgr] sql:SELECT * FROM log ORDER BY priority DESC , time DESC  LIMIT 350
+09-08 16:25:28.005 D/Analytics.e.G( 4969): [UploadLogFromDB] logs is null
+09-08 16:25:28.009 I/Analytics.a.b( 4969): [-] foreground:true
+09-08 16:25:28.009 D/Analytics.f$4.b( 4969): [UploadMgr] CurrentUploadInterval:30000
+09-08 16:25:28.079 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:25:28.227 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:25:28.251 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 65 lines
+09-08 16:25:28.375 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:25:28.453 I/chatty  ( 2994): uid=1000(system) HeapTaskDaemon expire 2 lines
+09-08 16:25:28.527 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:25:28.679 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:25:28.827 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:25:28.975 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:25:29.120 D/kktc    ( 3964):  CT：m line run 
+09-08 16:25:29.120 D/kktc    ( 3964):  CT：m line check
+09-08 16:25:29.120 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:25:29.123 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:25:29.287 I/chatty  ( 2994): uid=1000(system) AlarmManager expire 1 line
+09-08 16:25:29.293 I/chatty  ( 2994): uid=1000(system) AlarmManager expire 2 lines
+09-08 16:25:29.294 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 1 line
+09-08 16:25:29.296 I/chatty  ( 5212): uid=1000(system) com.konka.iotserver expire 3 lines
+09-08 16:25:29.299 I/chatty  ( 2994): uid=1000(system) Binder:2994_6 expire 8 lines
+09-08 16:25:29.314 I/chatty  ( 5212): uid=1000(system) MQTT Call: PCR2 expire 1 line
+09-08 16:25:29.836 D/AirplayDiscovery( 3923): handleMessage: 第13次airplay注册！
+09-08 16:25:29.836 D/AirplayDiscovery( 3923): handleMessage: 不是第一次注册了，需要先停止，再注册！
+09-08 16:25:29.836 I/chatty  ( 2994): uid=1000(system) Binder:2994_6 expire 2 lines
+09-08 16:25:29.837 I/DNSSDEmbedded( 3923): post exit
+09-08 16:25:29.837 D/AirplayDiscovery( 3923): registerAirplay: 
+09-08 16:25:29.840 I/DNSSDEmbedded( 3923): already started
+09-08 16:25:29.840 D/AirplayDiscovery( 3923): registerRaop: 
+09-08 16:25:29.848 I/DNSSDEmbedded( 3923): already started
+09-08 16:25:31.005 D/LocalServer( 3964): [UdpSendThread.java:HeartBeatPacketSender:263]UdpSendThread : HeartBeatPacketSender : send heartbeat packet ok
+09-08 16:25:31.044 D/LocalServer( 3964): [UdpReceiveThread.java:run:60]get a new message from udp, the length===16
+09-08 16:25:31.045 D/LocalServer( 3964): [UdpReceiveThread.java:run:168]UdpProcessThread : Receive HeartBeat Packet ok
+09-08 16:25:31.045 D/LocalServer( 3964): [UdpSendThread.java:ReceiveHeartBeatAckOk:74]UdpSendThread : ReceiveHeartBeatAckOk
+09-08 16:25:31.079 I/chatty  ( 4890): uid=1000(system) com.konka.systemadvert expire 30 lines
+09-08 16:25:31.093 I/chatty  ( 4890): uid=1000(system) pool-1-thread-3 expire 35 lines
+09-08 16:25:31.200 I/WssChannelClient( 3951): [IC-ThreadPoolUtils_AsyncWorkThread, , 0]:[InteractComp]send Message:{"category":"cast","device":{"id":"617614F47F3811F091697C8C09268FCA","name":"康佳电视投屏-客厅的康佳电视(8FCA)","network":{"wire_mac":"18:AF:A1:B0:F1:B4","wireless_mac":"18:C8:E7:6C:0E:62"},"state":"online","tags":[{"type":"ssid","value":"\u003cunknown ssid\u003e+119.136.27.158"}],"type":"tv","user":{"id":"","type":""}},"retry_count":0,"type":"heartbeat"}
+09-08 16:25:31.207 I/WssChannelClient( 3951): [WebSocketConnectReadThread-187, , 0]:[InteractComp]onMessage:{"type":"heartbeat"}
+09-08 16:25:31.260 I/chatty  ( 4890): uid=1000(system) pool-1-thread-2 expire 28 lines
+09-08 16:25:32.555 I/chatty  ( 3381): uid=1000(system) MonitorThread expire 11 lines
+09-08 16:25:32.818 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757319922774, cur:1757319932816
+09-08 16:25:32.818 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757319922774, cur:1757319932816
+09-08 16:25:32.881 I/chatty  ( 5090): uid=1000(system) RxComputationTh expire 10 lines
+09-08 16:25:33.759 E/speedtest( 3719): mtop_rt:0|0|0|0|0|0|0|0|121|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:3|20|659|2|4|48|2625|2|14|0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|,nc_type:0
+09-08 16:25:34.150 I/chatty  ( 5212): uid=1000(system) RxComputationTh expire 10 lines
+09-08 16:25:34.512 D/kktc    ( 3694):  CT：m line run 
+09-08 16:25:34.512 D/kktc    ( 3694):  CT：m line check
+09-08 16:25:34.512 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:25:34.891 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:25:35.910 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:25:36.310 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65501
+09-08 16:25:36.311 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65502
+09-08 16:25:36.312 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65503
+09-08 16:25:36.515 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:25:37.884 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:25:37.884 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:25:38.035 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:25:38.183 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:25:38.331 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:25:38.479 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:25:38.627 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:25:38.775 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:25:38.923 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:25:39.071 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:25:39.124 D/kktc    ( 3964):  CT：m line run 
+09-08 16:25:39.124 D/kktc    ( 3964):  CT：m line check
+09-08 16:25:39.125 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:25:39.219 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:25:39.320 W/HiMW@hi_mw_logic_media_player.cpp( 2626): [35m[printSignalStatus:155] [no signal] there is no video playing, count = 8000.[0m
+09-08 16:25:40.122 D/MTK_KL  ( 2731): 6,4808,419772734,-;[CPUQoS] write_mul 3054 to /dev/cpuctl/cg_limit/tasks;
+09-08 16:25:41.118 I/chatty  ( 4890): uid=1000(system) pool-1-thread-5 expire 35 lines
+09-08 16:25:41.280 I/chatty  ( 4890): uid=1000(system) pool-1-thread-1 expire 28 lines
+09-08 16:25:42.725 I/DLNA-VPP( 3923): AutoAdvertise L4292
+09-08 16:25:42.860 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757319932816, cur:1757319942858
+09-08 16:25:42.860 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757319932816, cur:1757319942858
+09-08 16:25:43.296 I/DLNA-VPP( 3923): UpnpSendAdvertisement L2017
+09-08 16:25:43.575 I/chatty  ( 3381): uid=1000(system) MonitorThread expire 10 lines
+09-08 16:25:43.840 E/speedtest( 3719): mtop_rt:0|0|0|0|0|0|0|121|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:20|659|2|4|48|2625|2|14|0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|2|,nc_type:0
+09-08 16:25:44.053 I/XcdnEngine-N( 3719): 2025-09-08 16:25:44.053 [connection_manager.cpp:426] send error:Network is unreachable
+09-08 16:25:44.517 D/kktc    ( 3694):  CT：m line run 
+09-08 16:25:44.517 D/kktc    ( 3694):  CT：m line check
+09-08 16:25:44.517 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:25:44.904 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:25:45.916 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:25:46.897 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:25:47.988 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:25:47.988 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:25:48.139 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:25:48.287 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:25:48.435 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:25:48.587 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:25:48.735 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:25:48.883 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:25:49.031 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:25:49.128 D/kktc    ( 3964):  CT：m line run 
+09-08 16:25:49.128 D/kktc    ( 3964):  CT：m line check
+09-08 16:25:49.129 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:25:49.179 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:25:49.331 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:25:49.511 D/HiMW@hi_mw_watchdog.cpp( 2626): [run:50] Watchdog:check ok
+09-08 16:25:51.142 I/chatty  ( 4890): uid=1000(system) pool-1-thread-4 expire 35 lines
+09-08 16:25:51.304 I/chatty  ( 4890): uid=1000(system) pool-1-thread-3 expire 28 lines
+09-08 16:25:51.379 E/speedtest( 3719): netType:mobile_4,ipv4:192.168.3.102,ipv6:fe80::e8ef:c524:b550:8a3c%eth0,ssid:null,rssi:,freq:null,metered:0,gate_ip:null,RTTs:,devCnt:0,qualityCode:1104
+09-08 16:25:52.881 I/chatty  ( 5090): uid=1000(system) RxComputationTh expire 10 lines
+09-08 16:25:52.900 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757319942858, cur:1757319952898
+09-08 16:25:52.900 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757319942858, cur:1757319952898
+09-08 16:25:53.920 E/speedtest( 3719): mtop_rt:0|0|0|0|0|0|121|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:659|2|4|48|2625|2|14|0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|2|0|,nc_type:0
+09-08 16:25:54.149 I/chatty  ( 5212): uid=1000(system) RxComputationTh expire 10 lines
+09-08 16:25:54.346 E/storaged( 2721): getDiskStats failed with result NOT_SUPPORTED and size 0
+09-08 16:25:54.521 D/kktc    ( 3694):  CT：m line run 
+09-08 16:25:54.521 D/kktc    ( 3694):  CT：m line check
+09-08 16:25:54.521 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:25:54.596 I/chatty  ( 3381): uid=1000(system) MonitorThread expire 14 lines
+09-08 16:25:54.917 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:25:55.836 W/DnsTlsSocket( 2503): SSL_connect error 5, errno=111
+09-08 16:25:55.836 E/DnsTlsSocket( 2503): Failed to increment eventfd by -9223372036854775808
+09-08 16:25:55.920 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:25:56.015 D/LocalServer( 3964): [UdpSendThread.java:HeartBeatPacketSender:263]UdpSendThread : HeartBeatPacketSender : send heartbeat packet ok
+09-08 16:25:56.266 D/LocalServer( 3964): [UdpReceiveThread.java:run:60]get a new message from udp, the length===16
+09-08 16:25:56.267 D/LocalServer( 3964): [UdpReceiveThread.java:run:168]UdpProcessThread : Receive HeartBeat Packet ok
+09-08 16:25:56.267 D/LocalServer( 3964): [UdpSendThread.java:ReceiveHeartBeatAckOk:74]UdpSendThread : ReceiveHeartBeatAckOk
+09-08 16:25:57.283 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:25:58.045 D/Analytics.g.M( 4969): [] queueCache put:i,queueCache size:1
+09-08 16:25:58.046 D/Analytics.g.run( 4969): [] take queueCache size:0
+09-08 16:25:58.047 D/Analytics.e.G( 4969): [-] 
+09-08 16:25:58.054 D/Analytics.a.find( 4969): [DBMgr] sql:SELECT * FROM log ORDER BY priority DESC , time DESC  LIMIT 350
+09-08 16:25:58.056 D/Analytics.e.G( 4969): [UploadLogFromDB] logs is null
+09-08 16:25:58.059 I/Analytics.a.b( 4969): [-] foreground:true
+09-08 16:25:58.059 D/Analytics.f$4.b( 4969): [UploadMgr] CurrentUploadInterval:30000
+09-08 16:25:58.083 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:25:58.084 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:25:58.231 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:25:58.296 I/DLNA-VPP( 3923): AutoAdvertise L4292
+09-08 16:25:58.383 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:25:58.531 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:25:58.562 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 65 lines
+09-08 16:25:58.679 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:25:58.770 I/chatty  ( 2994): uid=1000(system) HeapTaskDaemon expire 2 lines
+09-08 16:25:58.827 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:25:58.867 I/DLNA-VPP( 3923): UpnpSendAdvertisement L2017
+09-08 16:25:58.975 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:25:59.123 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:25:59.132 D/kktc    ( 3964):  CT：m line run 
+09-08 16:25:59.132 D/kktc    ( 3964):  CT：m line check
+09-08 16:25:59.133 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:25:59.271 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:25:59.419 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:25:59.878 D/AirplayDiscovery( 3923): handleMessage: 第14次airplay注册！
+09-08 16:25:59.879 D/AirplayDiscovery( 3923): handleMessage: 不是第一次注册了，需要先停止，再注册！
+09-08 16:25:59.879 I/chatty  ( 2994): uid=1000(system) Binder:2994_6 expire 2 lines
+09-08 16:25:59.881 I/DNSSDEmbedded( 3923): post exit
+09-08 16:25:59.881 D/AirplayDiscovery( 3923): registerAirplay: 
+09-08 16:25:59.884 I/DNSSDEmbedded( 3923): already started
+09-08 16:25:59.884 D/AirplayDiscovery( 3923): registerRaop: 
+09-08 16:25:59.895 I/DNSSDEmbedded( 3923): already started
+09-08 16:26:00.000 I/chatty  ( 2994): uid=1000(system) AlarmManager expire 3 lines
+09-08 16:26:00.001 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 1 line
+09-08 16:26:00.003 I/chatty  ( 2994): uid=1000(system) Binder:2994_6 expire 1 line
+09-08 16:26:00.003 I/chatty  ( 2994): uid=1000 system_server expire 2 lines
+09-08 16:26:00.003 I/chatty  ( 2994): uid=1000(system) android.bg expire 6 lines
+09-08 16:26:01.152 I/chatty  ( 4890): uid=1000(system) com.konka.systemadvert expire 20 lines
+09-08 16:26:01.167 I/chatty  ( 4890): uid=1000(system) pool-1-thread-2 expire 35 lines
+09-08 16:26:01.341 I/chatty  ( 4890): uid=1000(system) pool-1-thread-5 expire 28 lines
+09-08 16:26:01.351 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65501
+09-08 16:26:01.352 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65503
+09-08 16:26:01.353 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65502
+09-08 16:26:02.824 I/DLNA-VPP( 3923): [VPPDLNA][ssdp_handle_device_request][205]:Its a Multicast m-search request
+09-08 16:26:02.941 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757319952898, cur:1757319962939
+09-08 16:26:02.941 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757319952898, cur:1757319962939
+09-08 16:26:03.021 I/chatty  ( 3381): uid=1000(system) LauncherLogThre expire 1 line
+09-08 16:26:03.835 I/DLNA-VPP( 3923): [VPPDLNA][ssdp_handle_device_request][205]:Its a Multicast m-search request
+09-08 16:26:04.001 E/speedtest( 3719): mtop_rt:0|0|0|0|0|121|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:2|4|48|2625|2|14|0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|2|0|1|,nc_type:0
+09-08 16:26:04.431 W/HiMW@hi_mw_logic_media_player.cpp( 2626): [35m[printSignalStatus:155] [no signal] there is no video playing, count = 8500.[0m
+09-08 16:26:04.525 D/kktc    ( 3694):  CT：m line run 
+09-08 16:26:04.525 D/kktc    ( 3694):  CT：m line check
+09-08 16:26:04.525 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:26:04.794 I/XcdnEngine-N( 3719): 2025-09-08 16:26:04.794 [connection_manager.cpp:426] send error:Network is unreachable
+09-08 16:26:04.842 I/DLNA-VPP( 3923): [VPPDLNA][ssdp_handle_device_request][205]:Its a Multicast m-search request
+09-08 16:26:04.927 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:26:04.928 I/chatty  ( 2994): uid=1000(system) Binder:2994_6 expire 6 lines
+09-08 16:26:05.842 I/DLNA-VPP( 3923): [VPPDLNA][ssdp_handle_device_request][205]:Its a Multicast m-search request
+09-08 16:26:05.925 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:26:07.659 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:26:08.185 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:26:08.185 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:26:08.331 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:26:08.479 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:26:08.627 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:26:08.775 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:26:08.922 D/MTK_KL  ( 2731): 6,4809,448572685,-;[CPUQoS] write_mul 3054 to /dev/cpuctl/cg_limit/tasks;
+09-08 16:26:08.923 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:26:09.071 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:26:09.136 D/kktc    ( 3964):  CT：m line run 
+09-08 16:26:09.136 D/kktc    ( 3964):  CT：m line check
+09-08 16:26:09.137 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:26:09.219 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:26:09.367 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:26:09.515 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:26:11.194 I/chatty  ( 4890): uid=1000(system) pool-1-thread-1 expire 300 lines
+09-08 16:26:11.354 I/chatty  ( 4890): uid=1000(system) pool-1-thread-4 expire 297 lines
+09-08 16:26:12.881 I/chatty  ( 5090): uid=1000(system) RxComputationTh expire 10 lines
+09-08 16:26:12.981 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757319962939, cur:1757319972979
+09-08 16:26:12.982 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757319962939, cur:1757319972979
+09-08 16:26:13.867 I/DLNA-VPP( 3923): AutoAdvertise L4292
+09-08 16:26:14.082 E/speedtest( 3719): mtop_rt:0|0|0|0|121|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:4|48|2625|2|14|0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|2|0|1|0|,nc_type:0
+09-08 16:26:14.150 I/chatty  ( 5212): uid=1000(system) RxComputationTh expire 10 lines
+09-08 16:26:14.323 I/WssChannelClient( 3951): [IC-ThreadPoolUtils_AsyncWorkThread, , 0]:[InteractComp]send Message:{"category":"cast","device":{"id":"617614F47F3811F091697C8C09268FCA","network":{"wire_mac":"18:AF:A1:B0:F1:B4","wireless_mac":"18:C8:E7:6C:0E:62"},"state":"online","type":"tv","user":{"id":"","type":""}},"recv_seq":[],"type":"ack"}
+09-08 16:26:14.438 I/DLNA-VPP( 3923): UpnpSendAdvertisement L2017
+09-08 16:26:14.529 D/kktc    ( 3694):  CT：m line run 
+09-08 16:26:14.529 D/kktc    ( 3694):  CT：m line check
+09-08 16:26:14.529 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:26:14.939 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:26:15.930 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:26:16.634 I/chatty  ( 3381): uid=1000(system) MonitorThread expire 15 lines
+09-08 16:26:18.038 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:26:18.286 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:26:18.287 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:26:18.435 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:26:18.583 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:26:18.731 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:26:18.883 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:26:19.035 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:26:19.140 D/kktc    ( 3964):  CT：m line run 
+09-08 16:26:19.141 D/kktc    ( 3964):  CT：m line check
+09-08 16:26:19.141 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:26:19.183 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:26:19.331 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:26:19.479 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:26:19.511 D/HiMW@hi_mw_watchdog.cpp( 2626): [run:27] Watchdog:try to get lock
+09-08 16:26:19.511 V/HiMW@HiDispatch.cpp( 2626): [dispatch:65] dispatch wait lock id: 0x7002
+09-08 16:26:19.511 V/HiMW@HiDispatch.cpp( 2626): [dispatch:67] dispatch get lock id: 0x7002
+09-08 16:26:19.511 D/HiMW@hi_mw_watchdog.cpp( 2626): [run:30] Watchdog:get lock ok
+09-08 16:26:19.627 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:26:21.025 D/LocalServer( 3964): [UdpSendThread.java:HeartBeatPacketSender:263]UdpSendThread : HeartBeatPacketSender : send heartbeat packet ok
+09-08 16:26:21.065 D/LocalServer( 3964): [UdpReceiveThread.java:run:60]get a new message from udp, the length===16
+09-08 16:26:21.067 D/LocalServer( 3964): [UdpReceiveThread.java:run:168]UdpProcessThread : Receive HeartBeat Packet ok
+09-08 16:26:21.067 D/LocalServer( 3964): [UdpSendThread.java:ReceiveHeartBeatAckOk:74]UdpSendThread : ReceiveHeartBeatAckOk
+09-08 16:26:21.203 I/chatty  ( 4890): uid=1000(system) com.konka.systemadvert expire 63 lines
+09-08 16:26:21.218 I/chatty  ( 4890): uid=1000(system) pool-1-thread-3 expire 274 lines
+09-08 16:26:21.244 E/ActivityThread( 4890): Failed to find provider info for com.konka.hotelmenu
+09-08 16:26:21.244 I/chatty  ( 4890): uid=1000(system) com.konka.systemadvert expire 34 lines
+09-08 16:26:21.249 I/chatty  ( 4890): uid=1000(system) pool-1-thread-2 expire 265 lines
+09-08 16:26:21.251 I/chatty  ( 4890): uid=1000(system) pool-1-thread-5 expire 212 lines
+09-08 16:26:21.422 E/speedtest( 3719): netType:mobile_4,ipv4:192.168.3.102,ipv6:fe80::e8ef:c524:b550:8a3c%eth0,ssid:null,rssi:,freq:null,metered:0,gate_ip:null,RTTs:,devCnt:0,qualityCode:1104
+09-08 16:26:21.773 I/Analytics.a.b( 4969): [-] foreground:true
+09-08 16:26:21.866 I/chatty  ( 4890): uid=1000(system) com.konka.systemadvert expire 12 lines
+09-08 16:26:21.869 V/HiMW@HiDispatch.cpp( 2626): [dispatch:65] dispatch wait lock id: 0xf202
+09-08 16:26:21.869 V/HiMW@HiDispatch.cpp( 2626): [dispatch:67] dispatch get lock id: 0xf202
+09-08 16:26:22.131 V/HiMW@HiDispatch.cpp( 2626): [dispatch:65] dispatch wait lock id: 0xf202
+09-08 16:26:22.131 V/HiMW@HiDispatch.cpp( 2626): [dispatch:67] dispatch get lock id: 0xf202
+09-08 16:26:22.909 V/HiMW@HiDispatch.cpp( 2626): [dispatch:65] dispatch wait lock id: 0xf202
+09-08 16:26:22.909 V/HiMW@HiDispatch.cpp( 2626): [dispatch:67] dispatch get lock id: 0xf202
+09-08 16:26:23.000 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757319972979, cur:1757319982998
+09-08 16:26:23.000 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757319972979, cur:1757319982998
+09-08 16:26:23.117 V/HiMW@HiDispatch.cpp( 2626): [dispatch:65] dispatch wait lock id: 0xf202
+09-08 16:26:23.117 V/HiMW@HiDispatch.cpp( 2626): [dispatch:67] dispatch get lock id: 0xf202
+09-08 16:26:23.227 V/HiMW@HiDispatch.cpp( 2626): [dispatch:65] dispatch wait lock id: 0xf202
+09-08 16:26:23.227 V/HiMW@HiDispatch.cpp( 2626): [dispatch:67] dispatch get lock id: 0xf202
+09-08 16:26:23.332 V/HiMW@HiDispatch.cpp( 2626): [dispatch:65] dispatch wait lock id: 0xf202
+09-08 16:26:23.332 V/HiMW@HiDispatch.cpp( 2626): [dispatch:67] dispatch get lock id: 0xf202
+09-08 16:26:23.448 V/HiMW@HiDispatch.cpp( 2626): [dispatch:65] dispatch wait lock id: 0xf202
+09-08 16:26:23.448 V/HiMW@HiDispatch.cpp( 2626): [dispatch:67] dispatch get lock id: 0xf202
+09-08 16:26:23.708 V/HiMW@HiDispatch.cpp( 2626): [dispatch:65] dispatch wait lock id: 0xf202
+09-08 16:26:23.708 V/HiMW@HiDispatch.cpp( 2626): [dispatch:67] dispatch get lock id: 0xf202
+09-08 16:26:23.819 V/HiMW@HiDispatch.cpp( 2626): [dispatch:65] dispatch wait lock id: 0xf202
+09-08 16:26:23.819 V/HiMW@HiDispatch.cpp( 2626): [dispatch:67] dispatch get lock id: 0xf202
+09-08 16:26:24.164 E/speedtest( 3719): mtop_rt:0|0|0|121|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:48|2625|2|14|0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|2|0|1|0|5|,nc_type:0
+09-08 16:26:24.516 I/XcdnEngine-N( 3719): 2025-09-08 16:26:24.516 [connection_manager.cpp:426] send error:Network is unreachable
+09-08 16:26:24.533 D/kktc    ( 3694):  CT：m line run 
+09-08 16:26:24.533 D/kktc    ( 3694):  CT：m line check
+09-08 16:26:24.533 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:26:24.952 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:26:25.934 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:26:26.393 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65501
+09-08 16:26:26.394 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65503
+09-08 16:26:26.395 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65502
+09-08 16:26:28.096 D/Analytics.g.M( 4969): [] queueCache put:i,queueCache size:1
+09-08 16:26:28.097 D/Analytics.g.run( 4969): [] take queueCache size:0
+09-08 16:26:28.097 D/Analytics.e.G( 4969): [-] 
+09-08 16:26:28.104 D/Analytics.a.find( 4969): [DBMgr] sql:SELECT * FROM log ORDER BY priority DESC , time DESC  LIMIT 350
+09-08 16:26:28.106 D/Analytics.e.G( 4969): [UploadLogFromDB] logs is null
+09-08 16:26:28.109 I/Analytics.a.b( 4969): [-] foreground:true
+09-08 16:26:28.110 D/Analytics.f$4.b( 4969): [UploadMgr] CurrentUploadInterval:30000
+09-08 16:26:28.405 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:26:28.430 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:26:28.431 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:26:28.579 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:26:28.727 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:26:28.875 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:26:28.884 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 65 lines
+09-08 16:26:29.023 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:26:29.082 I/chatty  ( 2994): uid=1000(system) HeapTaskDaemon expire 2 lines
+09-08 16:26:29.145 D/kktc    ( 3964):  CT：m line run 
+09-08 16:26:29.145 D/kktc    ( 3964):  CT：m line check
+09-08 16:26:29.145 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:26:29.172 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:26:29.299 I/chatty  ( 2994): uid=1000(system) AlarmManager expire 1 line
+09-08 16:26:29.305 I/chatty  ( 2994): uid=1000(system) AlarmManager expire 2 lines
+09-08 16:26:29.306 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 1 line
+09-08 16:26:29.307 I/chatty  ( 5212): uid=1000(system) com.konka.iotserver expire 3 lines
+09-08 16:26:29.310 I/chatty  ( 2994): uid=1000(system) Binder:2994_6 expire 10 lines
+09-08 16:26:29.319 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:26:29.326 I/chatty  ( 5212): uid=1000(system) MQTT Call: PCR2 expire 1 line
+09-08 16:26:29.439 I/DLNA-VPP( 3923): AutoAdvertise L4292
+09-08 16:26:29.467 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:26:29.543 W/HiMW@hi_mw_logic_media_player.cpp( 2626): [35m[printSignalStatus:155] [no signal] there is no video playing, count = 9000.[0m
+09-08 16:26:29.615 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:26:29.763 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:26:29.923 D/AirplayDiscovery( 3923): handleMessage: 第15次airplay注册！
+09-08 16:26:29.923 D/AirplayDiscovery( 3923): handleMessage: 不是第一次注册了，需要先停止，再注册！
+09-08 16:26:29.924 I/WifiService( 2994): releaseMulticastLock uid=1000
+09-08 16:26:29.925 I/DNSSDEmbedded( 3923): post exit
+09-08 16:26:29.925 D/AirplayDiscovery( 3923): registerAirplay: 
+09-08 16:26:29.927 I/WifiService( 2994): acquireMulticastLock uid=1000
+09-08 16:26:29.927 I/DNSSDEmbedded( 3923): already started
+09-08 16:26:29.928 D/AirplayDiscovery( 3923): registerRaop: 
+09-08 16:26:29.937 I/DNSSDEmbedded( 3923): already started
+09-08 16:26:30.009 I/DLNA-VPP( 3923): UpnpSendAdvertisement L2017
+09-08 16:26:31.236 I/WssChannelClient( 3951): [IC-ThreadPoolUtils_AsyncWorkThread, , 0]:[InteractComp]send Message:{"category":"cast","device":{"id":"617614F47F3811F091697C8C09268FCA","name":"康佳电视投屏-客厅的康佳电视(8FCA)","network":{"wire_mac":"18:AF:A1:B0:F1:B4","wireless_mac":"18:C8:E7:6C:0E:62"},"state":"online","tags":[{"type":"ssid","value":"\u003cunknown ssid\u003e+119.136.27.158"}],"type":"tv","user":{"id":"","type":""}},"retry_count":0,"type":"heartbeat"}
+09-08 16:26:31.245 I/WssChannelClient( 3951): [WebSocketConnectReadThread-187, , 0]:[InteractComp]onMessage:{"type":"heartbeat"}
+09-08 16:26:31.390 I/chatty  ( 4890): uid=1000(system) pool-1-thread-3 expire 28 lines
+09-08 16:26:32.881 I/chatty  ( 5090): uid=1000(system) RxComputationTh expire 4 lines
+09-08 16:26:32.889 I/UUC     ( 5090): [ BaseAccountManager, isUserLogin, 157] chenbd : isUserLogin ----false
+09-08 16:26:33.041 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757319982998, cur:1757319993039
+09-08 16:26:33.041 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757319982998, cur:1757319993039
+09-08 16:26:34.149 I/chatty  ( 5212): uid=1000(system) RxComputationTh expire 5 lines
+09-08 16:26:34.246 E/speedtest( 3719): mtop_rt:0|0|121|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:2625|2|14|0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|2|0|1|0|5|2|,nc_type:0
+09-08 16:26:34.537 D/kktc    ( 3694):  CT：m line run 
+09-08 16:26:34.537 D/kktc    ( 3694):  CT：m line check
+09-08 16:26:34.538 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:26:34.964 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:26:35.940 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:26:37.659 I/chatty  ( 3381): uid=1000(system) MonitorThread expire 8 lines
+09-08 16:26:37.722 D/MTK_KL  ( 2731): 6,4810,477372680,-;[CPUQoS] write_mul 3054 to /dev/cpuctl/cg_limit/tasks;
+09-08 16:26:38.530 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:26:38.530 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:26:38.673 D/NetworkUtils( 3381): [NetworkUtils.java:322]: in.close()
+09-08 16:26:38.675 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:26:38.788 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:26:38.823 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:26:38.971 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:26:39.119 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:26:39.150 D/kktc    ( 3964):  CT：m line run 
+09-08 16:26:39.150 D/kktc    ( 3964):  CT：m line check
+09-08 16:26:39.150 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:26:39.267 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:26:39.415 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:26:39.563 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:26:39.711 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:26:39.859 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:26:41.252 I/chatty  ( 4890): uid=1000(system) com.konka.systemadvert expire 20 lines
+09-08 16:26:41.270 I/chatty  ( 4890): uid=1000(system) pool-1-thread-2 expire 35 lines
+09-08 16:26:41.431 I/chatty  ( 4890): uid=1000(system) pool-1-thread-4 expire 28 lines
+09-08 16:26:42.881 I/chenbd  ( 5090): [ EncryptUtil, decrypt, 162] the text decrypt ---start--------------------------------
+09-08 16:26:42.881 I/chenbd  ( 5090): ---content is :IiO0pvFBqVSrl0jysoS6cA==
+09-08 16:26:42.881 I/chenbd  ( 5090): 
+09-08 16:26:42.881 I/chenbd  ( 5090): ---key is ---- :bcd861d5fac376d0
+09-08 16:26:42.881 I/chenbd  ( 5090): ---randomNum is --- :java.security.SecureRandom@c0ba2e8
+09-08 16:26:42.883 I/chenbd  ( 5090): [ EncryptUtil, decrypt, 168] the text decrypt ---end-----------------------------------
+09-08 16:26:42.883 I/chenbd  ( 5090): ---content is :{}
+09-08 16:26:42.885 I/UUC     ( 5090): [ KKChannelPersistence, getAccessToken, 160] chenbd : read file from path:/data/misc/konka/com.konka.logincenter/files/token.tmp---content is :{}
+09-08 16:26:42.889 I/UUC     ( 5090): [ KKChannelPersistence, getAccessToken, 162] chenbd : the token file's content tranform to Gson : content is-----com.konka.logincenter.launch.data.AccessToken@4073d01
+09-08 16:26:42.890 I/UUC     ( 5090): [ BaseAccountManager, isUserLogin, 157] chenbd : isUserLogin ----false
+09-08 16:26:43.081 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757319993039, cur:1757320003079
+09-08 16:26:43.082 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757319993039, cur:1757320003079
+09-08 16:26:44.149 I/chenbd  ( 5212): [ EncryptUtil, decrypt, 162] the text decrypt ---start--------------------------------
+09-08 16:26:44.149 I/chenbd  ( 5212): ---content is :IiO0pvFBqVSrl0jysoS6cA==
+09-08 16:26:44.149 I/chenbd  ( 5212): 
+09-08 16:26:44.149 I/chenbd  ( 5212): ---key is ---- :bcd861d5fac376d0
+09-08 16:26:44.149 I/chenbd  ( 5212): ---randomNum is --- :java.security.SecureRandom@ab71973
+09-08 16:26:44.158 I/chenbd  ( 5212): [ EncryptUtil, decrypt, 168] the text decrypt ---end-----------------------------------
+09-08 16:26:44.158 I/chenbd  ( 5212): ---content is :{}
+09-08 16:26:44.166 I/UUC     ( 5212): [ KKChannelPersistence, getAccessToken, 160] chenbd : read file from path:/data/misc/konka/com.konka.logincenter/files/token.tmp---content is :{}
+09-08 16:26:44.174 I/UUC     ( 5212): [ KKChannelPersistence, getAccessToken, 162] chenbd : the token file's content tranform to Gson : content is-----com.konka.logincenter.launch.data.AccessToken@ba91030
+09-08 16:26:44.182 I/UUC     ( 5212): [ BaseAccountManager, isUserLogin, 162] chenbd : isUserLogin ----false
+09-08 16:26:44.234 I/XcdnEngine-N( 3719): 2025-09-08 16:26:44.234 [connection_manager.cpp:426] send error:Network is unreachable
+09-08 16:26:44.328 E/speedtest( 3719): mtop_rt:0|121|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:2|14|0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|2|0|1|0|5|2|0|,nc_type:0
+09-08 16:26:44.541 D/kktc    ( 3694):  CT：m line run 
+09-08 16:26:44.541 D/kktc    ( 3694):  CT：m line check
+09-08 16:26:44.542 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:26:44.976 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:26:45.009 I/DLNA-VPP( 3923): AutoAdvertise L4292
+09-08 16:26:45.579 I/DLNA-VPP( 3923): UpnpSendAdvertisement L2017
+09-08 16:26:45.944 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:26:46.037 D/LocalServer( 3964): [UdpSendThread.java:HeartBeatPacketSender:263]UdpSendThread : HeartBeatPacketSender : send heartbeat packet ok
+09-08 16:26:46.076 D/LocalServer( 3964): [UdpReceiveThread.java:run:60]get a new message from udp, the length===16
+09-08 16:26:46.077 D/LocalServer( 3964): [UdpReceiveThread.java:run:168]UdpProcessThread : Receive HeartBeat Packet ok
+09-08 16:26:46.077 D/LocalServer( 3964): [UdpSendThread.java:ReceiveHeartBeatAckOk:74]UdpSendThread : ReceiveHeartBeatAckOk
+09-08 16:26:48.627 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:26:48.627 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:26:48.678 D/NetworkUtils( 3381): [NetworkUtils.java:305]: in = new BufferedReader
+09-08 16:26:48.703 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: PING 223.6.6.6 (223.6.6.6) 56(84) bytes of data.
+09-08 16:26:48.703 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 64 bytes from 223.6.6.6: icmp_seq=1 ttl=114 time=11.0 ms
+09-08 16:26:48.775 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:26:48.923 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:26:49.071 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:26:49.153 D/kktc    ( 3964):  CT：m line run 
+09-08 16:26:49.154 D/kktc    ( 3964):  CT：m line check
+09-08 16:26:49.154 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:26:49.169 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:26:49.219 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:26:49.367 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:26:49.511 D/HiMW@hi_mw_watchdog.cpp( 2626): [run:50] Watchdog:check ok
+09-08 16:26:49.515 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:26:49.663 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:26:49.692 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 
+09-08 16:26:49.693 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: --- 223.6.6.6 ping statistics ---
+09-08 16:26:49.693 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 1 packets transmitted, 1 received, 0% packet loss, time 0ms
+09-08 16:26:49.693 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: rtt min/avg/max/mdev = 11.052/11.052/11.052/0.000 ms
+09-08 16:26:49.693 D/NetworkUtils( 3381): [NetworkUtils.java:318]: line: PING 223.6.6.6 (223.6.6.6) 56(84) bytes of data.64 bytes from 223.6.6.6: icmp_seq=1 ttl=114 time=11.0 ms--- 223.6.6.6 ping statistics ---1 packets transmitted, 1 received, 0% packet loss, time 0msrtt min/avg/max/mdev = 11.052/11.052/11.052/0.000 ms
+09-08 16:26:49.694 D/NetworkUtils( 3381): [NetworkUtils.java:322]: in.close()
+09-08 16:26:49.811 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:26:49.959 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:26:51.297 I/chatty  ( 4890): uid=1000(system) pool-1-thread-1 expire 35 lines
+09-08 16:26:51.433 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65501
+09-08 16:26:51.438 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65502
+09-08 16:26:51.439 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65503
+09-08 16:26:51.467 I/chatty  ( 4890): uid=1000(system) pool-1-thread-5 expire 28 lines
+09-08 16:26:51.471 E/speedtest( 3719): netType:mobile_4,ipv4:192.168.3.102,ipv6:fe80::e8ef:c524:b550:8a3c%eth0,ssid:null,rssi:,freq:null,metered:0,gate_ip:null,RTTs:,devCnt:0,qualityCode:1104
+09-08 16:26:52.881 I/chenbd  ( 5090): [ EncryptUtil, decrypt, 162] the text decrypt ---start--------------------------------
+09-08 16:26:52.881 I/chenbd  ( 5090): ---content is :IiO0pvFBqVSrl0jysoS6cA==
+09-08 16:26:52.881 I/chenbd  ( 5090): 
+09-08 16:26:52.881 I/chenbd  ( 5090): ---key is ---- :bcd861d5fac376d0
+09-08 16:26:52.881 I/chenbd  ( 5090): ---randomNum is --- :java.security.SecureRandom@b7177a6
+09-08 16:26:52.884 I/chenbd  ( 5090): [ EncryptUtil, decrypt, 168] the text decrypt ---end-----------------------------------
+09-08 16:26:52.884 I/chenbd  ( 5090): ---content is :{}
+09-08 16:26:52.885 I/UUC     ( 5090): [ KKChannelPersistence, getAccessToken, 160] chenbd : read file from path:/data/misc/konka/com.konka.logincenter/files/token.tmp---content is :{}
+09-08 16:26:52.888 I/UUC     ( 5090): [ KKChannelPersistence, getAccessToken, 162] chenbd : the token file's content tranform to Gson : content is-----com.konka.logincenter.launch.data.AccessToken@228b5e7
+09-08 16:26:52.889 I/UUC     ( 5090): [ BaseAccountManager, isUserLogin, 157] chenbd : isUserLogin ----false
+09-08 16:26:53.124 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757320003079, cur:1757320013122
+09-08 16:26:53.124 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757320003079, cur:1757320013122
+09-08 16:26:53.580 I/XcdnEngine-N( 3719): 2025-09-08 16:26:53.580 [connection_manager.cpp:426] send error:Network is unreachable
+09-08 16:26:54.151 I/chenbd  ( 5212): [ EncryptUtil, decrypt, 162] the text decrypt ---start--------------------------------
+09-08 16:26:54.151 I/chenbd  ( 5212): ---content is :IiO0pvFBqVSrl0jysoS6cA==
+09-08 16:26:54.151 I/chenbd  ( 5212): 
+09-08 16:26:54.151 I/chenbd  ( 5212): ---key is ---- :bcd861d5fac376d0
+09-08 16:26:54.151 I/chenbd  ( 5212): ---randomNum is --- :java.security.SecureRandom@f0ab4a9
+09-08 16:26:54.162 I/chenbd  ( 5212): [ EncryptUtil, decrypt, 168] the text decrypt ---end-----------------------------------
+09-08 16:26:54.162 I/chenbd  ( 5212): ---content is :{}
+09-08 16:26:54.173 I/UUC     ( 5212): [ KKChannelPersistence, getAccessToken, 160] chenbd : read file from path:/data/misc/konka/com.konka.logincenter/files/token.tmp---content is :{}
+09-08 16:26:54.184 I/UUC     ( 5212): [ KKChannelPersistence, getAccessToken, 162] chenbd : the token file's content tranform to Gson : content is-----com.konka.logincenter.launch.data.AccessToken@e509a2e
+09-08 16:26:54.194 I/UUC     ( 5212): [ BaseAccountManager, isUserLogin, 162] chenbd : isUserLogin ----false
+09-08 16:26:54.347 E/storaged( 2721): getDiskStats failed with result NOT_SUPPORTED and size 0
+09-08 16:26:54.408 E/speedtest( 3719): mtop_rt:121|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:14|0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|2|0|1|0|5|2|0|0|,nc_type:0
+09-08 16:26:54.545 D/kktc    ( 3694):  CT：m line run 
+09-08 16:26:54.546 D/kktc    ( 3694):  CT：m line check
+09-08 16:26:54.546 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:26:54.658 W/HiMW@hi_mw_logic_media_player.cpp( 2626): [35m[printSignalStatus:155] [no signal] there is no video playing, count = 9500.[0m
+09-08 16:26:54.988 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:26:54.989 I/chatty  ( 2994): uid=1000(system) Binder:2994_6 expire 2 lines
+09-08 16:26:55.949 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:26:58.146 D/Analytics.g.M( 4969): [] queueCache put:i,queueCache size:1
+09-08 16:26:58.147 D/Analytics.g.run( 4969): [] take queueCache size:0
+09-08 16:26:58.147 D/Analytics.e.G( 4969): [-] 
+09-08 16:26:58.155 D/Analytics.a.find( 4969): [DBMgr] sql:SELECT * FROM log ORDER BY priority DESC , time DESC  LIMIT 350
+09-08 16:26:58.156 D/Analytics.e.G( 4969): [UploadLogFromDB] logs is null
+09-08 16:26:58.160 I/Analytics.a.b( 4969): [-] foreground:true
+09-08 16:26:58.160 D/Analytics.f$4.b( 4969): [UploadMgr] CurrentUploadInterval:30000
+09-08 16:26:58.716 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:26:58.717 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:26:58.863 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:26:59.011 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:26:59.157 D/kktc    ( 3964):  CT：m line run 
+09-08 16:26:59.157 D/kktc    ( 3964):  CT：m line check
+09-08 16:26:59.158 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:26:59.159 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:26:59.204 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 65 lines
+09-08 16:26:59.309 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:26:59.417 I/system_server( 2994): Background concurrent copying GC freed 15315(1594KB) AllocSpace objects, 80(1600KB) LOS objects, 19% free, 13MB/17MB, paused 302us total 167.502ms
+09-08 16:26:59.459 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:26:59.546 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:26:59.613 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:26:59.630 I/system_server( 2994): Background concurrent copying GC freed 30383(3MB) AllocSpace objects, 284(5MB) LOS objects, 19% free, 7MB/9MB, paused 178us total 155.299ms
+09-08 16:26:59.697 D/NetworkUtils( 3381): [NetworkUtils.java:305]: in = new BufferedReader
+09-08 16:26:59.725 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
+09-08 16:26:59.725 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 64 bytes from 8.8.8.8: icmp_seq=1 ttl=111 time=16.5 ms
+09-08 16:26:59.759 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:26:59.907 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:26:59.967 D/AirplayDiscovery( 3923): handleMessage: 第16次airplay注册！
+09-08 16:26:59.967 D/AirplayDiscovery( 3923): handleMessage: 不是第一次注册了，需要先停止，再注册！
+09-08 16:26:59.968 I/WifiService( 2994): releaseMulticastLock uid=1000
+09-08 16:26:59.969 I/DNSSDEmbedded( 3923): post exit
+09-08 16:26:59.969 D/AirplayDiscovery( 3923): registerAirplay: 
+09-08 16:26:59.971 I/WifiService( 2994): acquireMulticastLock uid=1000
+09-08 16:26:59.972 I/DNSSDEmbedded( 3923): already started
+09-08 16:26:59.972 D/AirplayDiscovery( 3923): registerRaop: 
+09-08 16:26:59.981 I/DNSSDEmbedded( 3923): already started
+09-08 16:27:00.000 I/chatty  ( 2994): uid=1000(system) AlarmManager expire 5 lines
+09-08 16:27:00.001 I/chatty  ( 2994): uid=1000(system) ActivityManager expire 2 lines
+09-08 16:27:00.003 I/chatty  ( 2994): uid=1000(system) Binder:2994_6 expire 9 lines
+09-08 16:27:00.003 I/chatty  ( 2994): uid=1000 system_server expire 2 lines
+09-08 16:27:00.055 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:27:00.579 I/DLNA-VPP( 3923): AutoAdvertise L4292
+09-08 16:27:00.710 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 
+09-08 16:27:00.710 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: --- 8.8.8.8 ping statistics ---
+09-08 16:27:00.710 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 1 packets transmitted, 1 received, 0% packet loss, time 0ms
+09-08 16:27:00.711 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: rtt min/avg/max/mdev = 16.577/16.577/16.577/0.000 ms
+09-08 16:27:00.711 D/NetworkUtils( 3381): [NetworkUtils.java:318]: line: PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.64 bytes from 8.8.8.8: icmp_seq=1 ttl=111 time=16.5 ms--- 8.8.8.8 ping statistics ---1 packets transmitted, 1 received, 0% packet loss, time 0msrtt min/avg/max/mdev = 16.577/16.577/16.577/0.000 ms
+09-08 16:27:00.711 D/NetworkUtils( 3381): [NetworkUtils.java:322]: in.close()
+09-08 16:27:01.150 I/DLNA-VPP( 3923): UpnpSendAdvertisement L2017
+09-08 16:27:01.308 I/chatty  ( 4890): uid=1000(system) com.konka.systemadvert expire 20 lines
+09-08 16:27:01.322 I/chatty  ( 4890): uid=1000(system) pool-1-thread-3 expire 35 lines
+09-08 16:27:01.505 I/chatty  ( 4890): uid=1000(system) pool-1-thread-2 expire 28 lines
+09-08 16:27:02.881 I/chenbd  ( 5090): [ EncryptUtil, decrypt, 162] the text decrypt ---start--------------------------------
+09-08 16:27:02.881 I/chenbd  ( 5090): ---content is :IiO0pvFBqVSrl0jysoS6cA==
+09-08 16:27:02.881 I/chenbd  ( 5090): 
+09-08 16:27:02.881 I/chenbd  ( 5090): ---key is ---- :bcd861d5fac376d0
+09-08 16:27:02.881 I/chenbd  ( 5090): ---randomNum is --- :java.security.SecureRandom@a6c0594
+09-08 16:27:02.883 I/chenbd  ( 5090): [ EncryptUtil, decrypt, 168] the text decrypt ---end-----------------------------------
+09-08 16:27:02.883 I/chenbd  ( 5090): ---content is :{}
+09-08 16:27:02.885 I/UUC     ( 5090): [ KKChannelPersistence, getAccessToken, 160] chenbd : read file from path:/data/misc/konka/com.konka.logincenter/files/token.tmp---content is :{}
+09-08 16:27:02.889 I/UUC     ( 5090): [ KKChannelPersistence, getAccessToken, 162] chenbd : the token file's content tranform to Gson : content is-----com.konka.logincenter.launch.data.AccessToken@e29a83d
+09-08 16:27:02.891 I/UUC     ( 5090): [ BaseAccountManager, isUserLogin, 157] chenbd : isUserLogin ----false
+09-08 16:27:03.164 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757320013122, cur:1757320023162
+09-08 16:27:03.165 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757320013122, cur:1757320023162
+09-08 16:27:04.149 I/chenbd  ( 5212): [ EncryptUtil, decrypt, 162] the text decrypt ---start--------------------------------
+09-08 16:27:04.149 I/chenbd  ( 5212): ---content is :IiO0pvFBqVSrl0jysoS6cA==
+09-08 16:27:04.149 I/chenbd  ( 5212): 
+09-08 16:27:04.149 I/chenbd  ( 5212): ---key is ---- :bcd861d5fac376d0
+09-08 16:27:04.149 I/chenbd  ( 5212): ---randomNum is --- :java.security.SecureRandom@4dfd9cf
+09-08 16:27:04.157 I/chenbd  ( 5212): [ EncryptUtil, decrypt, 168] the text decrypt ---end-----------------------------------
+09-08 16:27:04.157 I/chenbd  ( 5212): ---content is :{}
+09-08 16:27:04.165 I/UUC     ( 5212): [ KKChannelPersistence, getAccessToken, 160] chenbd : read file from path:/data/misc/konka/com.konka.logincenter/files/token.tmp---content is :{}
+09-08 16:27:04.173 I/UUC     ( 5212): [ KKChannelPersistence, getAccessToken, 162] chenbd : the token file's content tranform to Gson : content is-----com.konka.logincenter.launch.data.AccessToken@cc6ff5c
+09-08 16:27:04.181 I/UUC     ( 5212): [ BaseAccountManager, isUserLogin, 162] chenbd : isUserLogin ----false
+09-08 16:27:04.488 E/speedtest( 3719): mtop_rt:0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:0|4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|2|0|1|0|5|2|0|0|2|,nc_type:0
+09-08 16:27:04.550 D/kktc    ( 3694):  CT：m line run 
+09-08 16:27:04.550 D/kktc    ( 3694):  CT：m line check
+09-08 16:27:04.550 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:27:04.999 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:27:05.003 I/XcdnEngine-N( 3719): 2025-09-08 16:27:05.003 [connection_manager.cpp:426] send error:Network is unreachable
+09-08 16:27:05.954 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:27:06.522 D/MTK_KL  ( 2731): 6,4811,506172687,-;[CPUQoS] write_mul 3054 to /dev/cpuctl/cg_limit/tasks;
+09-08 16:27:08.818 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:27:08.818 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:27:08.967 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:27:09.115 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:27:09.161 D/kktc    ( 3964):  CT：m line run 
+09-08 16:27:09.162 D/kktc    ( 3964):  CT：m line check
+09-08 16:27:09.162 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:27:09.267 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:27:09.415 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:27:09.563 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:27:09.711 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:27:09.859 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:27:09.928 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:27:10.007 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:27:10.155 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:27:10.715 D/NetworkUtils( 3381): [NetworkUtils.java:305]: in = new BufferedReader
+09-08 16:27:11.042 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: PING 208.67.222.222 (208.67.222.222) 56(84) bytes of data.
+09-08 16:27:11.042 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 64 bytes from 208.67.222.222: icmp_seq=1 ttl=48 time=313 ms
+09-08 16:27:11.047 D/LocalServer( 3964): [UdpSendThread.java:HeartBeatPacketSender:263]UdpSendThread : HeartBeatPacketSender : send heartbeat packet ok
+09-08 16:27:11.145 D/LocalServer( 3964): [UdpReceiveThread.java:run:60]get a new message from udp, the length===16
+09-08 16:27:11.146 D/LocalServer( 3964): [UdpReceiveThread.java:run:168]UdpProcessThread : Receive HeartBeat Packet ok
+09-08 16:27:11.146 D/LocalServer( 3964): [UdpSendThread.java:ReceiveHeartBeatAckOk:74]UdpSendThread : ReceiveHeartBeatAckOk
+09-08 16:27:11.345 I/chatty  ( 4890): uid=1000(system) pool-1-thread-4 expire 35 lines
+09-08 16:27:11.507 I/chatty  ( 4890): uid=1000(system) pool-1-thread-1 expire 28 lines
+09-08 16:27:11.729 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 
+09-08 16:27:11.729 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: --- 208.67.222.222 ping statistics ---
+09-08 16:27:11.730 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 1 packets transmitted, 1 received, 0% packet loss, time 0ms
+09-08 16:27:11.730 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: rtt min/avg/max/mdev = 313.407/313.407/313.407/0.000 ms
+09-08 16:27:11.730 D/NetworkUtils( 3381): [NetworkUtils.java:318]: line: PING 208.67.222.222 (208.67.222.222) 56(84) bytes of data.64 bytes from 208.67.222.222: icmp_seq=1 ttl=48 time=313 ms--- 208.67.222.222 ping statistics ---1 packets transmitted, 1 received, 0% packet loss, time 0msrtt min/avg/max/mdev = 313.407/313.407/313.407/0.000 ms
+09-08 16:27:11.731 D/NetworkUtils( 3381): [NetworkUtils.java:322]: in.close()
+09-08 16:27:12.881 I/chenbd  ( 5090): [ EncryptUtil, decrypt, 162] the text decrypt ---start--------------------------------
+09-08 16:27:12.881 I/chenbd  ( 5090): ---content is :IiO0pvFBqVSrl0jysoS6cA==
+09-08 16:27:12.881 I/chenbd  ( 5090): 
+09-08 16:27:12.881 I/chenbd  ( 5090): ---key is ---- :bcd861d5fac376d0
+09-08 16:27:12.881 I/chenbd  ( 5090): ---randomNum is --- :java.security.SecureRandom@52d6832
+09-08 16:27:12.883 I/chenbd  ( 5090): [ EncryptUtil, decrypt, 168] the text decrypt ---end-----------------------------------
+09-08 16:27:12.883 I/chenbd  ( 5090): ---content is :{}
+09-08 16:27:12.885 I/UUC     ( 5090): [ KKChannelPersistence, getAccessToken, 160] chenbd : read file from path:/data/misc/konka/com.konka.logincenter/files/token.tmp---content is :{}
+09-08 16:27:12.887 I/UUC     ( 5090): [ KKChannelPersistence, getAccessToken, 162] chenbd : the token file's content tranform to Gson : content is-----com.konka.logincenter.launch.data.AccessToken@2c0c983
+09-08 16:27:12.889 I/UUC     ( 5090): [ BaseAccountManager, isUserLogin, 157] chenbd : isUserLogin ----false
+09-08 16:27:13.207 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757320023162, cur:1757320033205
+09-08 16:27:13.207 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757320023162, cur:1757320033205
+09-08 16:27:14.150 I/chenbd  ( 5212): [ EncryptUtil, decrypt, 162] the text decrypt ---start--------------------------------
+09-08 16:27:14.150 I/chenbd  ( 5212): ---content is :IiO0pvFBqVSrl0jysoS6cA==
+09-08 16:27:14.150 I/chenbd  ( 5212): 
+09-08 16:27:14.150 I/chenbd  ( 5212): ---key is ---- :bcd861d5fac376d0
+09-08 16:27:14.150 I/chenbd  ( 5212): ---randomNum is --- :java.security.SecureRandom@fb0f265
+09-08 16:27:14.158 I/chenbd  ( 5212): [ EncryptUtil, decrypt, 168] the text decrypt ---end-----------------------------------
+09-08 16:27:14.158 I/chenbd  ( 5212): ---content is :{}
+09-08 16:27:14.165 I/UUC     ( 5212): [ KKChannelPersistence, getAccessToken, 160] chenbd : read file from path:/data/misc/konka/com.konka.logincenter/files/token.tmp---content is :{}
+09-08 16:27:14.174 I/UUC     ( 5212): [ KKChannelPersistence, getAccessToken, 162] chenbd : the token file's content tranform to Gson : content is-----com.konka.logincenter.launch.data.AccessToken@7502b3a
+09-08 16:27:14.182 I/UUC     ( 5212): [ BaseAccountManager, isUserLogin, 162] chenbd : isUserLogin ----false
+09-08 16:27:14.554 D/kktc    ( 3694):  CT：m line run 
+09-08 16:27:14.554 D/kktc    ( 3694):  CT：m line check
+09-08 16:27:14.554 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:27:14.568 E/speedtest( 3719): mtop_rt:0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:4|0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|2|0|1|0|5|2|0|0|2|0|,nc_type:0
+09-08 16:27:15.011 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:27:15.958 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:27:16.150 I/DLNA-VPP( 3923): AutoAdvertise L4292
+09-08 16:27:16.472 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65501
+09-08 16:27:16.473 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65502
+09-08 16:27:16.474 D/Analytics.d.run( 4969): [CommitTask] check&commit event:65503
+09-08 16:27:16.721 I/DLNA-VPP( 3923): UpnpSendAdvertisement L2017
+09-08 16:27:18.911 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:27:18.911 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:27:19.059 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:27:19.165 D/kktc    ( 3964):  CT：m line run 
+09-08 16:27:19.165 D/kktc    ( 3964):  CT：m line check
+09-08 16:27:19.166 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:27:19.207 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:27:19.355 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:27:19.507 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:27:19.511 D/HiMW@hi_mw_watchdog.cpp( 2626): [run:27] Watchdog:try to get lock
+09-08 16:27:19.511 V/HiMW@HiDispatch.cpp( 2626): [dispatch:65] dispatch wait lock id: 0x7002
+09-08 16:27:19.511 V/HiMW@HiDispatch.cpp( 2626): [dispatch:67] dispatch get lock id: 0x7002
+09-08 16:27:19.511 D/HiMW@hi_mw_watchdog.cpp( 2626): [run:30] Watchdog:get lock ok
+09-08 16:27:19.655 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:27:19.771 W/HiMW@hi_mw_logic_media_player.cpp( 2626): [35m[printSignalStatus:155] [no signal] there is no video playing, count = 10000.[0m
+09-08 16:27:19.803 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:27:19.951 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:27:20.099 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:27:20.247 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:27:20.308 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:27:21.356 I/chatty  ( 4890): uid=1000(system) com.konka.systemadvert expire 10 lines
+09-08 16:27:21.370 I/chatty  ( 4890): uid=1000(system) pool-1-thread-5 expire 35 lines
+09-08 16:27:21.512 E/speedtest( 3719): netType:mobile_4,ipv4:192.168.3.102,ipv6:fe80::e8ef:c524:b550:8a3c%eth0,ssid:null,rssi:,freq:null,metered:0,gate_ip:null,RTTs:,devCnt:0,qualityCode:1104
+09-08 16:27:21.537 I/chatty  ( 4890): uid=1000(system) pool-1-thread-3 expire 11 lines
+09-08 16:27:21.656 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:21.656 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:67)
+09-08 16:27:21.656 W/System.err( 4890): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.java:93)
+09-08 16:27:21.657 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:21.657 W/System.err( 4890): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.java:120)
+09-08 16:27:21.657 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:21.658 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:67)
+09-08 16:27:21.658 W/System.err( 4890): 	at com.konka.advert.data.RequestInterceptor.intercept(RequestInterceptor.java:50)
+09-08 16:27:21.659 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:21.659 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:67)
+09-08 16:27:21.660 W/System.err( 4890): 	at okhttp3.RealCall.getResponseWithInterceptorChain(RealCall.java:185)
+09-08 16:27:21.660 W/System.err( 4890): 	at okhttp3.RealCall.execute(RealCall.java:69)
+09-08 16:27:21.660 W/System.err( 4890): 	at com.konka.advert.KKAdManager$10.run(KKAdManager.java:1599)
+09-08 16:27:21.661 W/System.err( 4890): 	at com.konka.advert.util.TaskLoader$LoaderTask.run(TaskLoader.java:58)
+09-08 16:27:21.661 W/System.err( 4890): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+09-08 16:27:21.661 W/System.err( 4890): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+09-08 16:27:21.661 W/System.err( 4890): 	at java.lang.Thread.run(Thread.java:764)
+09-08 16:27:21.736 D/NetworkUtils( 3381): [NetworkUtils.java:305]: in = new BufferedReader
+09-08 16:27:21.754 I/Analytics.a.b( 4969): [-] foreground:true
+09-08 16:27:21.769 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
+09-08 16:27:21.769 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 64 bytes from 8.8.8.8: icmp_seq=1 ttl=111 time=15.9 ms
+09-08 16:27:22.755 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 
+09-08 16:27:22.755 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: --- 8.8.8.8 ping statistics ---
+09-08 16:27:22.755 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 1 packets transmitted, 1 received, 0% packet loss, time 0ms
+09-08 16:27:22.755 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: rtt min/avg/max/mdev = 15.930/15.930/15.930/0.000 ms
+09-08 16:27:22.756 D/NetworkUtils( 3381): [NetworkUtils.java:318]: line: PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.64 bytes from 8.8.8.8: icmp_seq=1 ttl=111 time=15.9 ms--- 8.8.8.8 ping statistics ---1 packets transmitted, 1 received, 0% packet loss, time 0msrtt min/avg/max/mdev = 15.930/15.930/15.930/0.000 ms
+09-08 16:27:22.756 D/NetworkUtils( 3381): [NetworkUtils.java:322]: in.close()
+09-08 16:27:22.881 I/chenbd  ( 5090): [ EncryptUtil, decrypt, 162] the text decrypt ---start--------------------------------
+09-08 16:27:22.881 I/chenbd  ( 5090): ---content is :IiO0pvFBqVSrl0jysoS6cA==
+09-08 16:27:22.881 I/chenbd  ( 5090): 
+09-08 16:27:22.881 I/chenbd  ( 5090): ---key is ---- :bcd861d5fac376d0
+09-08 16:27:22.881 I/chenbd  ( 5090): ---randomNum is --- :java.security.SecureRandom@7cde700
+09-08 16:27:22.883 I/chenbd  ( 5090): [ EncryptUtil, decrypt, 168] the text decrypt ---end-----------------------------------
+09-08 16:27:22.883 I/chenbd  ( 5090): ---content is :{}
+09-08 16:27:22.885 I/UUC     ( 5090): [ KKChannelPersistence, getAccessToken, 160] chenbd : read file from path:/data/misc/konka/com.konka.logincenter/files/token.tmp---content is :{}
+09-08 16:27:22.888 I/UUC     ( 5090): [ KKChannelPersistence, getAccessToken, 162] chenbd : the token file's content tranform to Gson : content is-----com.konka.logincenter.launch.data.AccessToken@90d8b39
+09-08 16:27:22.890 I/UUC     ( 5090): [ BaseAccountManager, isUserLogin, 157] chenbd : isUserLogin ----false
+09-08 16:27:23.249 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757320033205, cur:1757320043247
+09-08 16:27:23.249 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757320033205, cur:1757320043247
+09-08 16:27:24.150 I/chenbd  ( 5212): [ EncryptUtil, decrypt, 162] the text decrypt ---start--------------------------------
+09-08 16:27:24.150 I/chenbd  ( 5212): ---content is :IiO0pvFBqVSrl0jysoS6cA==
+09-08 16:27:24.150 I/chenbd  ( 5212): 
+09-08 16:27:24.150 I/chenbd  ( 5212): ---key is ---- :bcd861d5fac376d0
+09-08 16:27:24.150 I/chenbd  ( 5212): ---randomNum is --- :java.security.SecureRandom@32a43eb
+09-08 16:27:24.158 I/chenbd  ( 5212): [ EncryptUtil, decrypt, 168] the text decrypt ---end-----------------------------------
+09-08 16:27:24.158 I/chenbd  ( 5212): ---content is :{}
+09-08 16:27:24.166 I/UUC     ( 5212): [ KKChannelPersistence, getAccessToken, 160] chenbd : read file from path:/data/misc/konka/com.konka.logincenter/files/token.tmp---content is :{}
+09-08 16:27:24.174 I/UUC     ( 5212): [ KKChannelPersistence, getAccessToken, 162] chenbd : the token file's content tranform to Gson : content is-----com.konka.logincenter.launch.data.AccessToken@c72b548
+09-08 16:27:24.182 I/UUC     ( 5212): [ BaseAccountManager, isUserLogin, 162] chenbd : isUserLogin ----false
+09-08 16:27:24.558 D/kktc    ( 3694):  CT：m line run 
+09-08 16:27:24.558 D/kktc    ( 3694):  CT：m line check
+09-08 16:27:24.559 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:27:24.651 E/speedtest( 3719): mtop_rt:0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:0|0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|2|0|1|0|5|2|0|0|2|0|0|,nc_type:0
+09-08 16:27:25.024 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:27:25.764 I/XcdnEngine-N( 3719): 2025-09-08 16:27:25.764 [connection_manager.cpp:426] send error:Network is unreachable
+09-08 16:27:25.963 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:27:28.198 D/Analytics.g.M( 4969): [] queueCache put:i,queueCache size:1
+09-08 16:27:28.199 D/Analytics.g.run( 4969): [] take queueCache size:0
+09-08 16:27:28.199 D/Analytics.e.G( 4969): [-] 
+09-08 16:27:28.206 D/Analytics.a.find( 4969): [DBMgr] sql:SELECT * FROM log ORDER BY priority DESC , time DESC  LIMIT 350
+09-08 16:27:28.207 D/Analytics.e.G( 4969): [UploadLogFromDB] logs is null
+09-08 16:27:28.210 I/Analytics.a.b( 4969): [-] foreground:true
+09-08 16:27:28.211 D/Analytics.f$4.b( 4969): [UploadMgr] CurrentUploadInterval:30000
+09-08 16:27:29.001 I/HiMW@cec_manager( 2626): [36m[pingTimerProc:62] auto resume discovery thread every 10s!!![0m
+09-08 16:27:29.001 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x1]RecDev1 ......
+09-08 16:27:29.147 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x2]RecDev2 ......
+09-08 16:27:29.169 D/kktc    ( 3964):  CT：m line run 
+09-08 16:27:29.170 D/kktc    ( 3964):  CT：m line check
+09-08 16:27:29.170 D/kktc    ( 3964):  log:  concurrent conf sum: 2
+09-08 16:27:29.295 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x4]PlayBack1 ......
+09-08 16:27:29.309 E/ActivityManager( 2994): Sending non-protected broadcast MqttService.pingSender.PCR2147W9006420WCXX1#18:C8:E7:6C:0E:62 from system uid 1000 pkg com.konka.iotserver
+09-08 16:27:29.309 E/ActivityManager( 2994): java.lang.Throwable
+09-08 16:27:29.309 E/ActivityManager( 2994): 	at com.android.server.am.ActivityManagerService.checkBroadcastFromSystem(ActivityManagerService.java:21476)
+09-08 16:27:29.309 E/ActivityManager( 2994): 	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:22076)
+09-08 16:27:29.309 E/ActivityManager( 2994): 	at com.android.server.am.ActivityManagerService.broadcastIntentInPackage(ActivityManagerService.java:22249)
+09-08 16:27:29.309 E/ActivityManager( 2994): 	at com.android.server.am.PendingIntentRecord.sendInner(PendingIntentRecord.java:374)
+09-08 16:27:29.309 E/ActivityManager( 2994): 	at com.android.server.am.PendingIntentRecord.sendWithResult(PendingIntentRecord.java:245)
+09-08 16:27:29.309 E/ActivityManager( 2994): 	at com.android.server.am.ActivityManagerService.sendIntentSender(ActivityManagerService.java:8627)
+09-08 16:27:29.309 E/ActivityManager( 2994): 	at android.app.PendingIntent.sendAndReturnResult(PendingIntent.java:892)
+09-08 16:27:29.309 E/ActivityManager( 2994): 	at android.app.PendingIntent.send(PendingIntent.java:874)
+09-08 16:27:29.309 E/ActivityManager( 2994): 	at com.android.server.AlarmManagerService$DeliveryTracker.deliverLocked(AlarmManagerService.java:4223)
+09-08 16:27:29.309 E/ActivityManager( 2994): 	at com.android.server.AlarmManagerService.deliverAlarmsLocked(AlarmManagerService.java:3484)
+09-08 16:27:29.309 E/ActivityManager( 2994): 	at com.android.server.AlarmManagerService$AlarmThread.run(AlarmManagerService.java:3623)
+09-08 16:27:29.318 D/AlarmPingSender( 5212): Sending Ping at:1757320049318
+09-08 16:27:29.320 D/AlarmPingSender( 5212): Schedule next alarm at 1757320109320
+09-08 16:27:29.321 D/AlarmPingSender( 5212): Alarm scheule using setExactAndAllowWhileIdle, next: 60000
+09-08 16:27:29.329 E/memtrack( 2994): Couldn't load memtrack module
+09-08 16:27:29.329 W/android.os.Debug( 2994): failed to get memory consumption info: -1
+09-08 16:27:29.336 D/AlarmPingSender( 5212): Success. Release lock(MqttService.client.PCR2147W9006420WCXX1#18:C8:E7:6C:0E:62):1757320049336
+09-08 16:27:29.443 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x5]AudSys ......
+09-08 16:27:29.524 I/chatty  ( 2994): uid=1000(system) Thread-2 expire 44 lines
+09-08 16:27:29.591 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x8]PlayBack2 ......
+09-08 16:27:29.723 I/system_server( 2994): Background concurrent copying GC freed 13009(1191KB) AllocSpace objects, 53(1060KB) LOS objects, 19% free, 13MB/17MB, paused 198us total 160.373ms
+09-08 16:27:29.743 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0x9]RecDev3 ......
+09-08 16:27:29.803 D/ProcessResidentController( 2994): scanning process : pid=4969, name=com.konka.SmartControl:channel, pckList=[Ljava.lang.String;@c4efbb9, importance=200
+09-08 16:27:29.803 D/ProcessResidentController( 2994): scanning process : pid=4860, name=com.android.traceur, pckList=[Ljava.lang.String;@869bbfe, importance=400
+09-08 16:27:29.803 D/ProcessResidentController( 2994): scanning process : pid=3408, name=android.process.media, pckList=[Ljava.lang.String;@c09f5f, importance=400
+09-08 16:27:29.803 D/ProcessResidentController( 2994): scanning process : pid=4783, name=com.konka.SmartControl:filedownloader, pckList=[Ljava.lang.String;@50cfdac, importance=200
+09-08 16:27:29.803 D/ProcessResidentController( 2994): scanning process : pid=4254, name=com.konka.messagedispatcher, pckList=[Ljava.lang.String;@ada9a75, importance=125
+09-08 16:27:29.803 D/ProcessResidentController( 2994): scanning process : pid=4676, name=com.android.packageinstaller, pckList=[Ljava.lang.String;@5a19a0a, importance=400
+09-08 16:27:29.803 D/ProcessResidentController( 2994): scanning process : pid=4648, name=com.konka.messagedispatcher:second, pckList=[Ljava.lang.String;@79d27b, importance=125
+09-08 16:27:29.803 D/ProcessResidentController( 2994): scanning process : pid=4628, name=com.huawei.connection, pckList=[Ljava.lang.String;@8224898, importance=100
+09-08 16:27:29.803 D/ProcessResidentController( 2994): scanning process : pid=4562, name=com.konka.permissionmgr, pckList=[Ljava.lang.String;@64768f1, importance=400
+09-08 16:27:29.803 D/ProcessResidentController( 2994): scanning process : pid=3367, name=com.konka.multimedia, pckList=[Ljava.lang.String;@9c74cd6, importance=400
+09-08 16:27:29.803 D/ProcessResidentController( 2994): scanning process : pid=3977, name=com.konka.SmartControl, pckList=[Ljava.lang.String;@6c91b57, importance=100
+09-08 16:27:29.803 D/ProcessResidentController( 2994): scanning process : pid=3964, name=com.konka.localserver, pckList=[Ljava.lang.String;@63f5644, importance=100
+09-08 16:27:29.804 D/ProcessResidentController( 2994): scanning process : pid=3951, name=com.konka.kkmultiscreen, pckList=[Ljava.lang.String;@1d8a32d, importance=100
+09-08 16:27:29.804 D/ProcessResidentController( 2994): scanning process : pid=3931, name=com.konka.systeminfo, pckList=[Ljava.lang.String;@cc36062, importance=100
+09-08 16:27:29.804 D/ProcessResidentController( 2994): scanning process : pid=3923, name=com.konka.mirror, pckList=[Ljava.lang.String;@45a15f3, importance=100
+09-08 16:27:29.804 D/ProcessResidentController( 2994): scanning process : pid=3694, name=com.konka.athena, pckList=[Ljava.lang.String;@9fd92b0, importance=100
+09-08 16:27:29.804 D/ProcessResidentController( 2994): scanning process : pid=3580, name=com.sohu.inputmethod.sogou.tv, pckList=[Ljava.lang.String;@7c94529, importance=200
+09-08 16:27:29.804 D/ProcessResidentController( 2994): scanning process : pid=3434, name=com.konka.tvsettings, pckList=[Ljava.lang.String;@a7b20ae, importance=100
+09-08 16:27:29.804 D/ProcessResidentController( 2994): scanning process : pid=3105, name=com.android.systemui, pckList=[Ljava.lang.String;@ef61e4f, importance=100
+09-08 16:27:29.804 D/ProcessResidentController( 2994): scanning process : pid=2994, name=system, pckList=[Ljava.lang.String;@c2129dc, importance=100
+09-08 16:27:29.805 D/ProcessResidentController( 2994): wait next scan for 30s
+09-08 16:27:29.891 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xB]PlayBack3 ......
+09-08 16:27:29.936 I/system_server( 2994): Background concurrent copying GC freed 30629(3MB) AllocSpace objects, 284(5MB) LOS objects, 19% free, 8MB/10MB, paused 198us total 155.091ms
+09-08 16:27:30.011 D/AirplayDiscovery( 3923): handleMessage: 第17次airplay注册！
+09-08 16:27:30.011 D/AirplayDiscovery( 3923): handleMessage: 不是第一次注册了，需要先停止，再注册！
+09-08 16:27:30.011 I/WifiService( 2994): releaseMulticastLock uid=1000
+09-08 16:27:30.012 I/DNSSDEmbedded( 3923): post exit
+09-08 16:27:30.012 D/AirplayDiscovery( 3923): registerAirplay: 
+09-08 16:27:30.014 I/WifiService( 2994): acquireMulticastLock uid=1000
+09-08 16:27:30.015 I/DNSSDEmbedded( 3923): already started
+09-08 16:27:30.015 D/AirplayDiscovery( 3923): registerRaop: 
+09-08 16:27:30.023 I/DNSSDEmbedded( 3923): already started
+09-08 16:27:30.039 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xC]Resv3 ......
+09-08 16:27:30.187 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xD]Resv4 ......
+09-08 16:27:30.339 V/HiMW@cec_manager( 2626): [deviceDiscovery:902] CEC Ping [0xE]FreeUse ......
+09-08 16:27:30.692 I/PCDN_TAG( 3719): [ 5164]Peer::pulse,state:3,port:8909,fr:0,fmode=C1FF,ftype=C000
+09-08 16:27:31.316 I/WssChannelClient( 3951): [IC-ThreadPoolUtils_AsyncWorkThread, , 0]:[InteractComp]send Message:{"category":"cast","device":{"id":"617614F47F3811F091697C8C09268FCA","name":"康佳电视投屏-客厅的康佳电视(8FCA)","network":{"wire_mac":"18:AF:A1:B0:F1:B4","wireless_mac":"18:C8:E7:6C:0E:62"},"state":"online","tags":[{"type":"ssid","value":"\u003cunknown ssid\u003e+119.136.27.158"}],"type":"tv","user":{"id":"","type":""}},"retry_count":0,"type":"heartbeat"}
+09-08 16:27:31.325 I/WssChannelClient( 3951): [WebSocketConnectReadThread-187, , 0]:[InteractComp]onMessage:{"type":"heartbeat"}
+09-08 16:27:31.379 D/CustomViewFlipper( 4890): showNext getDisplayedChild = 5
+09-08 16:27:31.379 D/CustomViewFlipper( 4890): removeViewNeedToDelete count = 9, totalScreenSaverCount = 9
+09-08 16:27:31.379 D/CustomViewFlipper( 4890): showNext getDisplayedChild = 5, getChildCount = 9
+09-08 16:27:31.382 D/CustomViewFlipper( 4890): callShow getDisplayedChild = 6, getChildCount = 9
+09-08 16:27:31.382 D/ScreenShowView( 4890): screen view on Show, count = 9, isLastImg = false
+09-08 16:27:31.382 D/KKAdSDK ( 4890): call reportAd, adId: 241018174603, type: 0
+09-08 16:27:31.382 D/KKAdSDK ( 4890): call addShowCount
+09-08 16:27:31.386 D/KKAdSDK ( 4890): increase show count, date: 2025-09-08, count: 5
+09-08 16:27:31.393 D/ScreenShowView( 4890): text = 查看详情
+09-08 16:27:31.393 D/KKAdSDK ( 4890): report ad, adId: 241018174603, type: 0, url: http://adm.kkapp.com/kkAdvertMonitorSysServer/monitor/v1/admsg?cid=__CID__&pid=200227180812&aid=20230223103042001001001&appid=210415&mac=38f6492ac059b557627965462c2bd70e&maco=18:AF:A1:B0:F1:B4&wmac=7e3e56f379fce07604c4cfbcf216fab5&wmac_o=18:C8:E7:6C:0E:62&sn=78f3c9de6614f212efacc9313b060f8c&sno=PCR2147W9006420WCXX1&ip=119.136.27.158&te=0&ts=1757320051390
+09-08 16:27:31.396 D/AdvertTest( 4890): sendMessage增值-0905花儿与少年（芒果）
+09-08 16:27:31.400 D/KKAdSDK ( 4890): call request interceptor, tag: 3
+09-08 16:27:31.514 D/KKAdSDK ( 4890): request formal host fail, error=HTTP 204 had non-zero Content-Length: 15
+09-08 16:27:31.514 D/KKAdSDK ( 4890): request formal host fail, code=-1
+09-08 16:27:31.514 D/KKAdSDK ( 4890): report ad exception
+09-08 16:27:31.515 W/System.err( 4890): java.net.ProtocolException: HTTP 204 had non-zero Content-Length: 15
+09-08 16:27:31.515 W/System.err( 4890): 	at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.java:104)
+09-08 16:27:31.516 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:31.516 W/System.err( 4890): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.java:45)
+09-08 16:27:31.516 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:31.517 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:67)
+09-08 16:27:31.517 W/System.err( 4890): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.java:93)
+09-08 16:27:31.518 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:31.518 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:67)
+09-08 16:27:31.518 W/System.err( 4890): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.java:93)
+09-08 16:27:31.519 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:31.519 W/System.err( 4890): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.java:120)
+09-08 16:27:31.519 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:31.520 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:67)
+09-08 16:27:31.520 W/System.err( 4890): 	at com.konka.advert.data.RequestInterceptor.intercept(RequestInterceptor.java:50)
+09-08 16:27:31.520 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:31.520 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:67)
+09-08 16:27:31.521 W/System.err( 4890): 	at okhttp3.RealCall.getResponseWithInterceptorChain(RealCall.java:185)
+09-08 16:27:31.521 W/System.err( 4890): 	at okhttp3.RealCall.execute(RealCall.java:69)
+09-08 16:27:31.522 W/System.err( 4890): 	at com.konka.advert.KKAdManager$8.run(KKAdManager.java:1365)
+09-08 16:27:31.522 W/System.err( 4890): 	at com.konka.advert.util.TaskLoader$LoaderTask.run(TaskLoader.java:58)
+09-08 16:27:31.522 W/System.err( 4890): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+09-08 16:27:31.523 W/System.err( 4890): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+09-08 16:27:31.523 W/System.err( 4890): 	at java.lang.Thread.run(Thread.java:764)
+09-08 16:27:31.530 D/KKAdSDK ( 4890): call reportAdFail, adPosId: 1000125, adId: 241018174603, url: http://adm.kkapp.com/kkAdvertMonitorSysServer/monitor/v1/admsg?cid=__CID__&pid=200227180812&aid=20230223103042001001001&appid=210415&mac=38f6492ac059b557627965462c2bd70e&maco=18:AF:A1:B0:F1:B4&wmac=7e3e56f379fce07604c4cfbcf216fab5&wmac_o=18:C8:E7:6C:0E:62&sn=78f3c9de6614f212efacc9313b060f8c&sno=PCR2147W9006420WCXX1&ip=119.136.27.158&te=0&ts=1757320051390, resultCode: 400, time: 1757320051390
+09-08 16:27:31.535 D/KKAdSDK ( 4890): report error, type: 4, data: {"pid":1000125,"aid":"241018174603","url":"http:\/\/adm.kkapp.com\/kkAdvertMonitorSysServer\/monitor\/v1\/admsg?cid=__CID__&pid=200227180812&aid=20230223103042001001001&appid=210415&mac=38f6492ac059b557627965462c2bd70e&maco=18:AF:A1:B0:F1:B4&wmac=7e3e56f379fce07604c4cfbcf216fab5&wmac_o=18:C8:E7:6C:0E:62&sn=78f3c9de6614f212efacc9313b060f8c&sno=PCR2147W9006420WCXX1&ip=119.136.27.158&te=0&ts=1757320051390","code":400,"time":1757320051390,"desc":"HTTP 204 had non-zero Content-Length: 15"}
+09-08 16:27:31.538 D/KKAdSDK ( 4890): report ad, adId: 241018174603, type: 0, url: https://adsmart.kkapp.com/AdManagerSysApi/ad/pv?pvType=1&adId=241018174603&positionId=180327120616&mac=18AFA1B0F1B4&sn=PCR2147W9006420WCXX1&brand=KONKA&date=250908&frequency=0&periodFrequency=0&endTime=1798732799&ipFrequency=0
+09-08 16:27:31.544 D/KKAdSDK ( 4890): call request interceptor, tag: 3
+09-08 16:27:31.550 D/KKAdSDK ( 4890): call request interceptor, tag: 3
+09-08 16:27:31.606 D/KKAdSDK ( 4890): request formal host fail, code=204
+09-08 16:27:31.607 D/KKAdSDK ( 4890): report ad response code: 204
+09-08 16:27:31.662 D/KKAdSDK ( 4890): request formal host fail, error=HTTP 204 had non-zero Content-Length: 18
+09-08 16:27:31.662 D/KKAdSDK ( 4890): request formal host fail, code=-1
+09-08 16:27:31.662 D/KKAdSDK ( 4890): report error exception
+09-08 16:27:31.662 W/System.err( 4890): java.net.ProtocolException: HTTP 204 had non-zero Content-Length: 18
+09-08 16:27:31.663 W/System.err( 4890): 	at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.java:104)
+09-08 16:27:31.663 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:31.664 W/System.err( 4890): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.java:45)
+09-08 16:27:31.664 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:31.664 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:67)
+09-08 16:27:31.665 W/System.err( 4890): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.java:93)
+09-08 16:27:31.665 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:31.665 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:67)
+09-08 16:27:31.665 W/System.err( 4890): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.java:93)
+09-08 16:27:31.666 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:31.666 W/System.err( 4890): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.java:120)
+09-08 16:27:31.666 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:31.667 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:67)
+09-08 16:27:31.667 W/System.err( 4890): 	at com.konka.advert.data.RequestInterceptor.intercept(RequestInterceptor.java:50)
+09-08 16:27:31.667 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:92)
+09-08 16:27:31.667 W/System.err( 4890): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.java:67)
+09-08 16:27:31.668 W/System.err( 4890): 	at okhttp3.RealCall.getResponseWithInterceptorChain(RealCall.java:185)
+09-08 16:27:31.668 W/System.err( 4890): 	at okhttp3.RealCall.execute(RealCall.java:69)
+09-08 16:27:31.668 W/System.err( 4890): 	at com.konka.advert.KKAdManager$10.run(KKAdManager.java:1599)
+09-08 16:27:31.669 W/System.err( 4890): 	at com.konka.advert.util.TaskLoader$LoaderTask.run(TaskLoader.java:58)
+09-08 16:27:31.669 W/System.err( 4890): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+09-08 16:27:31.669 W/System.err( 4890): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+09-08 16:27:31.670 W/System.err( 4890): 	at java.lang.Thread.run(Thread.java:764)
+09-08 16:27:31.721 I/DLNA-VPP( 3923): AutoAdvertise L4292
+09-08 16:27:32.294 I/DLNA-VPP( 3923): UpnpSendAdvertisement L2017
+09-08 16:27:32.759 D/NetworkUtils( 3381): [NetworkUtils.java:305]: in = new BufferedReader
+09-08 16:27:32.781 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: PING 180.76.76.76 (180.76.76.76) 56(84) bytes of data.
+09-08 16:27:32.781 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 64 bytes from 180.76.76.76: icmp_seq=1 ttl=48 time=10.2 ms
+09-08 16:27:32.881 I/chenbd  ( 5090): [ EncryptUtil, decrypt, 162] the text decrypt ---start--------------------------------
+09-08 16:27:32.881 I/chenbd  ( 5090): ---content is :IiO0pvFBqVSrl0jysoS6cA==
+09-08 16:27:32.881 I/chenbd  ( 5090): 
+09-08 16:27:32.881 I/chenbd  ( 5090): ---key is ---- :bcd861d5fac376d0
+09-08 16:27:32.881 I/chenbd  ( 5090): ---randomNum is --- :java.security.SecureRandom@245d57e
+09-08 16:27:32.883 I/chenbd  ( 5090): [ EncryptUtil, decrypt, 168] the text decrypt ---end-----------------------------------
+09-08 16:27:32.883 I/chenbd  ( 5090): ---content is :{}
+09-08 16:27:32.885 I/UUC     ( 5090): [ KKChannelPersistence, getAccessToken, 160] chenbd : read file from path:/data/misc/konka/com.konka.logincenter/files/token.tmp---content is :{}
+09-08 16:27:32.887 I/UUC     ( 5090): [ KKChannelPersistence, getAccessToken, 162] chenbd : the token file's content tranform to Gson : content is-----com.konka.logincenter.launch.data.AccessToken@c3c7adf
+09-08 16:27:32.888 I/UUC     ( 5090): [ BaseAccountManager, isUserLogin, 157] chenbd : isUserLogin ----false
+09-08 16:27:33.213 D/MTK_KL  ( 2731): 31,4812,532865878,-;logd: logdr: UID=2000 GID=2000 PID=7413 n tail=1 logMask=19 pid=0 start=0ns timeout=0ns
+09-08 16:27:33.288 I/[NIP]   ( 3719): [ng handler] update remote cfg last:1757320043247, cur:1757320053286
+09-08 16:27:33.289 E/OTTPlayer( 3719): [NIP] [NIP][ng handler] update remote cfg last:1757320043247, cur:1757320053286
+09-08 16:27:33.318 D/MTK_KL  ( 2731): 31,4813,532968315,-;logd: logdr: UID=2000 GID=2000 PID=7416 b tail=0 logMask=19 pid=0 start=0ns timeout=0ns
+09-08 16:27:33.772 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 
+09-08 16:27:33.773 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: --- 180.76.76.76 ping statistics ---
+09-08 16:27:33.773 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: 1 packets transmitted, 1 received, 0% packet loss, time 0ms
+09-08 16:27:33.773 D/NetworkUtils( 3381): [NetworkUtils.java:314]: line: rtt min/avg/max/mdev = 10.278/10.278/10.278/0.000 ms
+09-08 16:27:33.773 D/NetworkUtils( 3381): [NetworkUtils.java:318]: line: PING 180.76.76.76 (180.76.76.76) 56(84) bytes of data.64 bytes from 180.76.76.76: icmp_seq=1 ttl=48 time=10.2 ms--- 180.76.76.76 ping statistics ---1 packets transmitted, 1 received, 0% packet loss, time 0msrtt min/avg/max/mdev = 10.278/10.278/10.278/0.000 ms
+09-08 16:27:33.774 D/NetworkUtils( 3381): [NetworkUtils.java:322]: in.close()
+09-08 16:27:34.149 I/chenbd  ( 5212): [ EncryptUtil, decrypt, 162] the text decrypt ---start--------------------------------
+09-08 16:27:34.149 I/chenbd  ( 5212): ---content is :IiO0pvFBqVSrl0jysoS6cA==
+09-08 16:27:34.149 I/chenbd  ( 5212): 
+09-08 16:27:34.149 I/chenbd  ( 5212): ---key is ---- :bcd861d5fac376d0
+09-08 16:27:34.149 I/chenbd  ( 5212): ---randomNum is --- :java.security.SecureRandom@785c106
+09-08 16:27:34.158 I/chenbd  ( 5212): [ EncryptUtil, decrypt, 168] the text decrypt ---end-----------------------------------
+09-08 16:27:34.158 I/chenbd  ( 5212): ---content is :{}
+09-08 16:27:34.166 I/UUC     ( 5212): [ KKChannelPersistence, getAccessToken, 160] chenbd : read file from path:/data/misc/konka/com.konka.logincenter/files/token.tmp---content is :{}
+09-08 16:27:34.176 I/UUC     ( 5212): [ KKChannelPersistence, getAccessToken, 162] chenbd : the token file's content tranform to Gson : content is-----com.konka.logincenter.launch.data.AccessToken@56733c7
+09-08 16:27:34.184 I/UUC     ( 5212): [ BaseAccountManager, isUserLogin, 162] chenbd : isUserLogin ----false
+09-08 16:27:34.563 D/kktc    ( 3694):  CT：m line run 
+09-08 16:27:34.563 D/kktc    ( 3694):  CT：m line check
+09-08 16:27:34.563 D/kktc    ( 3694):  log:  concurrent conf sum: 15
+09-08 16:27:34.733 E/speedtest( 3719): mtop_rt:0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|0|,traffic_info:[2453, 2625],rx_byte:0|2|0|0|6|0|2|0|1|2|0|0|2|6|0|2|0|0|2|0|1|0|5|2|0|0|2|0|0|3|,nc_type:0
+09-08 16:27:35.037 W/ContextImpl( 4254): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:27:35.040 D/AMS     ( 2994): startService: Intent { cmp=com.konka.messagedispatcher/.process.SecondService }
+09-08 16:27:35.322 D/MTK_KL  ( 2731): 6,4814,534972697,-;[CPUQoS] write_mul 3054 to /dev/cpuctl/cg_limit/tasks;
+09-08 16:27:35.967 W/ContextImpl( 4648): Calling a method in the system process without a qualified user: android.app.ContextImpl.startForegroundService:1543 android.content.ContextWrapper.startForegroundService:669 androidx.core.content.ContextCompat.startForegroundService:693 com.konka.messagedispatcher.process.DaemonService$1.handleMessage:31 android.os.Handler.dispatchMessage:106 
+09-08 16:27:35.968 D/AMS     ( 2994): startService: Intent { cmp=com.konka.messagedispatcher/.push.PushService }
+09-08 16:27:36.058 D/LocalServer( 3964): [UdpSendThread.java:HeartBeatPacketSender:263]UdpSendThread : HeartBeatPacketSender : send heartbeat packet ok
+09-08 16:27:36.076 I/CPUMonitor( 3719): type=1400 audit(0.0:5782): avc: denied { open } for path="/proc/stat" dev="proc" ino=4026532989 scontext=u:r:untrusted_app_25:s0:c512,c768 tcontext=u:object_r:proc_stat:s0 tclass=file permissive=1
+09-08 16:27:36.081 D/MTK_KL  ( 2731): 38,4815,535732625,-;type=1400 audit(1757319827.600:5781): avc: denied { ioctl } for pid=2626 comm="atvservice" path="/dev/mik!extin" dev="tmpfs" ino=8983 ioctlcmd=0x1f06 scontext=u:r:hal_hwtvmwservice:s0 tcontext=u:object_r:mstar_mik_extin_device:s0 tclass=chr_file permissive=1
+09-08 16:27:36.081 D/MTK_KL  ( 2731): 38,4816,535732678,-;type=1400 audit(1757320056.076:5782): avc: denied { open } for pid=3719 comm="CPUMonitor" path="/proc/stat" dev="proc" ino=4026532989 scontext=u:r:untrusted_app_25:s0:c512,c768 tcontext=u:object_r:proc_stat:s0 tclass=file permissive=1
+09-08 16:27:36.082 D/MTK_KL  ( 2731): 38,4817,535735597,-;type=1400 audit(1757320056.076:5782): avc: denied { open } for pid=3719 comm="CPUMonitor" path="/proc/stat" dev="proc" ino=4026532989 scontext=u:r:untrusted_app_25:s0:c512,c768 tcontext=u:object_r:proc_stat:s0 tclass=file permissive=1
+09-08 16:27:36.082 D/MTK_KL  ( 2731): 38,4818,535735650,-;type=1400 audit(1757320056.076:5783): avc: denied { getattr } for pid=3719 comm="CPUMonitor" path="/proc/stat" dev="proc" ino=4026532989 scontext=u:r:untrusted_app_25:s0:c512,c768 tcontext=u:object_r:proc_stat:s0 tclass=file permissive=1
+09-08 16:27:36.086 D/MTK_KL  ( 2731): 38,4819,535736680,-;type=1400 audit(1757320056.076:5783): avc: denied { getattr } for pid=3719 comm="CPUMonitor" path="/proc/stat" dev="proc" ino=4026532989 scontext=u:r:untrusted_app_25:s0:c512,c768 tcontext=u:object_r:proc_stat:s0 tclass=file permissive=1
+09-08 16:27:36.086 D/MTK_KL  ( 2731): 38,4820,535736726,-;type=1400 audit(1757320056.076:5784): avc: denied { read } for pid=3719 comm="CPUMonitor" name="loadavg" dev="proc" ino=4026532986 scontext=u:r:untrusted_app_25:s0:c512,c768 tcontext=u:object_r:proc_loadavg:s0 tclass=file permissive=1
+09-08 16:27:36.086 D/MTK_KL  ( 2731): 38,4821,535736861,-;type=1400 audit(1757320056.076:5784): avc: denied { read } for pid=3719 comm="CPUMonitor" name="loadavg" dev="proc" ino=4026532986 scontext=u:r:untrusted_app_25:s0:c512,c768 tcontext=u:object_r:proc_loadavg:s0 tclass=file permissive=1
+09-08 16:27:36.086 D/MTK_KL  ( 2731): 38,4822,535736898,-;type=1400 audit(1757320056.076:5785): avc: denied { open } for pid=3719 comm="CPUMonitor" path="/proc/loadavg" dev="proc" ino=4026532986 scontext=u:r:untrusted_app_25:s0:c512,c768 tcontext=u:object_r:proc_loadavg:s0 tclass=file permissive=1
+09-08 16:27:36.087 D/MTK_KL  ( 2731): 38,4823,535737019,-;type=1400 audit(1757320056.076:5785): avc: denied { open } for pid=3719 comm="CPUMonitor" path="/proc/loadavg" dev="proc" ino=4026532986 scontext=u:r:untrusted_app_25:s0:c512,c768 tcontext=u:object_r:proc_loadavg:s0 tclass=file permissive=1
+09-08 16:27:36.087 D/MTK_KL  ( 2731): 38,4824,535737058,-;type=1400 audit(1757320056.076:5786): avc: denied { getattr } for pid=3719 comm="CPUMonitor" path="/proc/loadavg" dev="proc" ino=4026532986 scontext=u:r:untrusted_app_25:s0:c512,c768 tcontext=u:object_r:proc_loadavg:s0 tclass=file permissive=1
+09-08 16:27:36.098 D/LocalServer( 3964): [UdpReceiveThread.java:run:60]get a new message from udp, the length===16
+09-08 16:27:36.099 D/LocalServer( 3964): [UdpReceiveThread.java:run:168]UdpProcessThread : Receive HeartBeat Packet ok
+09-08 16:27:36.099 D/LocalServer( 3964): [UdpSendThread.java:ReceiveHeartBeatAckOk:74]UdpSendThread : ReceiveHeartBeatAckOk

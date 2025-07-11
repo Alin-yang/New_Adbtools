@@ -1,0 +1,7 @@
+com.konka.systemadvert
+com.konka.onlinevideo
+com.konka.livelauncher
+com.test.integration
+com.test.app1
+com.test.app2
+com.example.demo
