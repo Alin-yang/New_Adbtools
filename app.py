@@ -218,23 +218,46 @@ class ADBToolApp:
 
     # @require_device_connected
     def connect_adb(self):
-        """连接ADB设备"""
+        """连接ADB设备（优化版，增加连接质量检测）"""
         ip_address = self.get_ip_address()
         if not ip_address:
             self.update_status(f"请输入IP地址", False)
             return False
         
+        # 先断开可能存在的旧连接
+        self.update_status("正在清理旧连接...", True)
+        run_adb_command("adb disconnect")
+        time.sleep(1)  # 等待断开完成
+        
+        self.update_status(f"正在连接设备: {ip_address}", True)
         output, success = run_adb_command(f"adb connect {ip_address}")
+        
         if "connected" in output.lower():
-            # 保存新的IP到历史记录
-            if ip_address not in self.ip_history:
-                self.ip_history.insert(0, ip_address)
-                save_ip_history(self.ip_history)
-                if hasattr(self, 'ip_combobox'):
-                    self.ip_combobox['values'] = self.ip_history
-            self.update_status(output, True)
+            # 连接成功后进行连接质量测试
+            self.update_status("连接成功，正在验证连接质量...", True)
+            
+            # 测试连接质量
+            test_output, test_success = run_adb_command("adb shell echo 'connection_test'")
+            if test_success and "connection_test" in test_output:
+                # 保存新的IP到历史记录
+                if ip_address not in self.ip_history:
+                    self.ip_history.insert(0, ip_address)
+                    save_ip_history(self.ip_history)
+                    if hasattr(self, 'ip_combobox'):
+                        self.ip_combobox['values'] = self.ip_history
+                        
+                # 更新设备连接状态缓存
+                cache_manager.set_device_status(ip_address, True)
+                self.update_status(f"设备连接成功且连接质量良好: {ip_address}", True)
+                return True
+            else:
+                self.update_status("连接已建立但连接质量不稳定，建议重新连接", False)
+                cache_manager.set_device_status(ip_address, False)
+                return False
         else:
-            self.update_status(output, False)
+            cache_manager.set_device_status(ip_address, False)
+            self.update_status(f"连接失败: {output}", False)
+            return False
 
 
     @require_device_connected
@@ -271,13 +294,55 @@ class ADBToolApp:
         return False
 
     def ensure_device_connected(self) -> bool:
-        """设备连接验证"""
+        """设备连接验证和修复"""
         ip_address = self.get_ip_address()
         if not ip_address:
             self.update_status("请输入IP地址", False)
             return False
+            
+        # 检查连接状态
         if not self.check_device_connected(ip_address):
             self.update_status(f"设备未连接: {ip_address}", False)
+            
+            # 提供自动重连选项
+            from tkinter import messagebox
+            result = messagebox.askyesno(
+                "连接问题",
+                f"检测到设备 {ip_address} 未连接或连接不稳定。\n\n是否自动重新连接？",
+                icon="question"
+            )
+            
+            if result:
+                self.update_status("正在尝试重新连接...", True)
+                return self.connect_adb()
+            else:
+                return False
+        return True
+        
+    def check_and_fix_connection(self) -> bool:
+        """检查并修复连接问题"""
+        ip_address = self.get_ip_address()
+        if not ip_address:
+            return False
+            
+        # 检查连接质量
+        test_output, test_success = run_adb_command("adb shell echo 'test'")
+        if not test_success or "test" not in test_output:
+            self.update_status("检测到连接问题，正在尝试修复...", True)
+            
+            # 尝试重新连接
+            run_adb_command("adb disconnect")
+            time.sleep(2)
+            
+            output, success = run_adb_command(f"adb connect {ip_address}")
+            if "connected" in output.lower():
+                # 再次测试
+                test_output2, test_success2 = run_adb_command("adb shell echo 'test'")
+                if test_success2 and "test" in test_output2:
+                    self.update_status("连接问题已修复", True)
+                    return True
+                    
+            self.update_status("无法修复连接问题，请手动重新连接", False)
             return False
         return True
 
@@ -300,6 +365,16 @@ class ADBToolApp:
             self.update_status("请选择APK文件", False)
             return
 
+        # 检查APK文件是否存在
+        if not os.path.exists(apk_path):
+            self.update_status("APK文件不存在", False)
+            return
+            
+        # 再次检查设备连接状态
+        if not self.check_device_connected():
+            self.update_status("设备连接状态异常，请重新连接后再试", False)
+            return
+
         # 显示进度条
         self._show_progress()
         self.update_status("开始安装应用...", True)
@@ -315,12 +390,24 @@ class ADBToolApp:
     def _run_install_with_progress(self, apk_path):
         """实际执行安装并捕获输出"""
         try:
+            # 在安装前进行连接质量检查
+            if not self.check_and_fix_connection():
+                self._hide_progress()
+                return
+                        
+            # 再次检测设备连接状态
+            if not self.check_device_connected():
+                self._update_install_status("设备连接已断开，安装失败")
+                self._hide_progress()
+                return
+            
             # 获取APK大小用于计算进度
             apk_size = os.path.getsize(apk_path)
             current_size = 0
             
+            # 使用带引号的路径避免空格问题
             process = subprocess.Popen(
-                f"adb install -r -d {apk_path}",
+                f'adb install -r -d "{apk_path}"',
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -371,8 +458,20 @@ class ADBToolApp:
             self.progress["mode"] = "indeterminate"
             self._hide_progress()
             
-            # 只在这里提示最终结果，避免重复提示
-            final_output = "安装成功" if success else f"安装失败 (code {return_code})"
+            # 根据错误码提供更详细的错误信息
+            if success:
+                final_output = "安装成功"
+            else:
+                error_code = return_code & 0xFFFFFFFF  # 转换为无符号整数
+                if error_code == 4294967295:  # 0xFFFFFFFF
+                    final_output = f"安装失败：ADB连接异常 (错误码: {return_code})\n建议：断开连接后重新连接设备再试"
+                elif return_code == 1:
+                    final_output = "安装失败：应用签名冲突或权限不足"
+                elif return_code == 2:
+                    final_output = "安装失败：存储空间不足"
+                else:
+                    final_output = f"安装失败 (错误码: {return_code})"
+            
             self._update_install_status(final_output)
             
         except Exception as e:
@@ -1532,6 +1631,12 @@ class ADBToolApp:
             "5.串号查询功能,由于串号格式差异的原因,某些设备可能无法获取到正确的串号,请自行判断\n"
             "6.可自行调整输出框高度，鼠标可滚动查看历史信息。\n"
             "7.屏幕录制功能需要Android 4.4+，且设备支持screenrecord命令。\n"
+            "\n故障排除:\n"
+            "• 如果安装时出现错误码4294967295，这通常表示ADB连接不稳定:\n"
+            "  - 断开连接后重新连接设备\n"
+            "  - 检查网络连接质量\n"
+            "  - 避免在连接不稳定时进行安装操作\n"
+            "  - 工具已自动增加连接质量检测，会在操作前验证连接状态\n"
         )
         # messagebox.showinfo("操作说明和注意事项", help_text)
         self.update_status(help_text, True)
