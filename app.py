@@ -139,9 +139,6 @@ class ADBToolApp:
         
         # 设置拖拽功能
         self._setup_drag_drop()
-        
-        # 设置拖拽功能
-        self._setup_drag_drop()
 
     # 状态更新方法
     def update_status(self, message: str, success: bool) -> None:
@@ -360,7 +357,7 @@ class ADBToolApp:
                         
                         if "Success" in stripped_output:
                             self.progress["value"] = 100
-                            self._update_install_status("安装成功")
+                            # 不在这里提示成功，等到最终确认后统一提示
                         elif "Failure" in stripped_output:
                             self._update_install_status(f"安装失败: {stripped_output}")
                         elif not any(keyword in stripped_output for keyword in filter_keywords):
@@ -374,6 +371,7 @@ class ADBToolApp:
             self.progress["mode"] = "indeterminate"
             self._hide_progress()
             
+            # 只在这里提示最终结果，避免重复提示
             final_output = "安装成功" if success else f"安装失败 (code {return_code})"
             self._update_install_status(final_output)
             
@@ -783,35 +781,69 @@ class ADBToolApp:
             self.update_status("没有正在进行的录制", False)
             return
 
-        self.update_status("正在停止屏幕录制...", True)
+        # 立即显示友好的停止提示，提升交互性
+        self.update_status("🔴 正在停止屏幕录制...", True)
+        self.update_status("⏳ 请稍等，正在安全关闭录制进程并下载文件...", True)
+        
+        # 强制更新界面，让用户立即看到提示
+        self.root.update()
+        
+        # 设置停止状态
         self.recording_active = False
 
-        # 终止screenrecord进程
-        if self.recording_subprocess and self.recording_subprocess.poll() is None:
-            try:
-                self.recording_subprocess.terminate()
-                self.recording_subprocess.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                # 如果温和终止失败，强制杀死
+        # 在后台线程中执行停止操作，避免阻塞界面
+        stop_thread = threading.Thread(
+            target=self._handle_stop_recording,
+            name="StopRecordingThread",
+            daemon=True
+        )
+        stop_thread.start()
+    
+    def _handle_stop_recording(self):
+        """处理停止屏幕录制的后台操作"""
+        try:
+            # 显示进程终止提示
+            self.update_status("🔍 正在终止录制进程...", True)
+            self.root.update()
+
+            # 终止screenrecord进程
+            if self.recording_subprocess and self.recording_subprocess.poll() is None:
                 try:
-                    self.recording_subprocess.kill()
-                    self.recording_subprocess.wait(timeout=2)
-                except:
+                    self.recording_subprocess.terminate()
+                    self.recording_subprocess.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    # 如果温和终止失败，强制杀死
+                    try:
+                        self.recording_subprocess.kill()
+                        self.recording_subprocess.wait(timeout=2)
+                        self.update_status("⚠️ 强制终止录制进程", True)
+                        self.root.update()
+                    except:
+                        pass
+                except Exception:
                     pass
-            except Exception:
-                pass
 
-        # 等待录制线程结束（参考日志抓取的逻辑）
-        if self.recording_thread and self.recording_thread.is_alive():
-            self.recording_thread.join(timeout=10)  # 增加等待时间到10秒，给足够时间完成重命名
-            if self.recording_thread.is_alive():
-                self.update_status("警告：录制线程仍在运行，可能正在处理文件操作...", False)
-        
-        # 重置状态
-        self.recording_active = False
-        self.recording_subprocess = None
-        
-        self.update_status("录制停止操作完成", True)
+            # 显示等待线程结束提示
+            self.update_status("🕰️ 正在等待录制线程安全结束...", True)
+            self.root.update()
+
+            # 等待录制线程结束（参考日志抓取的逻辑）
+            if self.recording_thread and self.recording_thread.is_alive():
+                self.recording_thread.join(timeout=10)  # 增加等待时间到10秒，给足够时间完成重命名
+                if self.recording_thread.is_alive():
+                    self.update_status("⚠️ 录制线程仍在运行，可能正在处理文件操作...", True)
+                    self.root.update()
+            
+            # 重置状态
+            self.recording_active = False
+            self.recording_subprocess = None
+            
+            self.update_status("✅ 录制停止操作完成", True)
+            
+        except Exception as e:
+            self.update_status(f"停止录制过程中发生错误: {str(e)}", False)
+            self.recording_active = False
+            self.recording_subprocess = None
 
     def _run_recording(self):
         """实际执行屏幕录制（参考日志抓取的逻辑）"""
@@ -1050,107 +1082,148 @@ class ADBToolApp:
             self.update_status("没有正在运行的日志捕获", False)
             return
 
+        # 立即显示友好的停止提示，提升交互性
+        self.update_status("🔴 正在停止日志捕获...", True)
+        self.update_status("⏳ 请稍等，正在安全关闭进程并保存文件...", True)
+        
+        # 强制更新界面，让用户立即看到提示
+        self.root.update()
+        
         # 设置停止信号
         self.stop_event.set()
-        self.update_status("正在停止日志捕获...", True)
         
-        # 确保进程终止
-        self._terminate_logcat()
+        # 在后台线程中执行停止操作，避免阻塞界面
+        stop_thread = threading.Thread(
+            target=self._handle_stop_logcat,
+            name="StopLogcatThread",
+            daemon=True
+        )
+        stop_thread.start()
+    
+    def _handle_stop_logcat(self):
+        """处理停止日志捕获的后台操作"""
+        try:
+            # 显示进度提示
+            self.update_status("🔍 正在终止日志进程...", True)
+            self.root.update()
         
-        # 等待线程结束，给足够的时间让文件句柄释放
-        if hasattr(self, 'logcat_thread') and self.logcat_thread.is_alive():
-            # 等待线程正常结束
-            self.logcat_thread.join(timeout=5)  # 增加等待时间到5秒
+            # 确保进程终止
+            # 确保进程终止
+            self._terminate_logcat()
+        
+            # 显示等待线程结束提示
+            self.update_status("🕰️ 正在等待线程安全结束...", True)
+            self.root.update()
+        
+            # 等待线程结束，给足够的时间让文件句柄释放
+            if hasattr(self, 'logcat_thread') and self.logcat_thread.is_alive():
+                # 等待线程正常结束
+                self.logcat_thread.join(timeout=5)  # 增加等待时间到5秒
             
-            # 如果线程仍未结束，通常说明有异常情况
-            # 但大多数情况下线程都会正常结束，所以不显示警告
-            if self.logcat_thread.is_alive():
-                # 只在调试模式下显示，不干扰用户
-                pass  # self.update_status("调试：线程仍在运行，将继续等待", True)
+                # 如果线程仍未结束，通常说明有异常情况
+                if self.logcat_thread.is_alive():
+                    self.update_status("⚠️ 线程仍在处理，请稍候...", True)
+                    self.root.update()
         
-        # 额外等待确保文件句柄完全释放
-        time.sleep(2)
+            # 显示文件处理提示
+            self.update_status("💾 正在处理日志文件...", True)
+            self.root.update()
+        
+            # 额外等待确保文件句柄完全释放
+            time.sleep(2)
 
-        # 检查文件是否存在和大小
-        if not os.path.exists(self.log_file_path):
-            self.update_status("日志文件不存在，可能捕获过程中出现错误", False)
+            # 检查文件是否存在和大小
+            if not os.path.exists(self.log_file_path):
+                self.update_status("日志文件不存在，可能捕获过程中出现错误", False)
+                self.logging_active = False
+                return
+            
+            # 检查文件大小
+            file_size = os.path.getsize(self.log_file_path)
+            if file_size == 0:
+                self.update_status("⚠️ 检测到空日志文件，可能原因：\n1. 设备无日志输出\n2. ADB连接不稳定\n3. 权限不足\n4. 捕获时间过短", True)
+            else:
+                file_size_str = format_file_size(file_size)
+                self.update_status(f"✅ 日志捕获成功，文件大小: {file_size_str}", True)
+        
+            self.root.update()
+
+            # 显示文件保存提示
+            self.update_status("💾 正在保存日志文件...", True)
+            self.root.update()
+
+            # 生成新的文件名（使用停止时的时间戳）
+            original_path = os.path.dirname(self.log_file_path)
+            stop_timestamp = timestamp_time()  # 获取停止时的时间戳
+            if file_size == 0:
+                # 为空文件添加特殊标记
+                new_name = os.path.join(original_path, f"{stop_timestamp}_empty.log")
+            else:
+                new_name = os.path.join(original_path, f"{stop_timestamp}.log")
+
+            # 重试机制（最多5次，增加重试次数）
+            max_retries = 5
+            success_save = False
+            last_error = ""
+        
+            for attempt in range(max_retries):
+                try:
+                    # 在重命名前再次检查文件是否被其他进程占用
+                    # 尝试以独占模式打开文件测试是否被占用
+                    try:
+                        with open(self.log_file_path, 'r+b') as test_file:
+                            pass  # 如果能打开说明没有被占用
+                    except IOError:
+                        # 文件被占用，等待更长时间
+                        self.update_status(f"🕰️ 文件仍被占用，等待释放... (尝试 {attempt + 1}/{max_retries})", True)
+                        self.root.update()
+                        time.sleep(2)
+                        continue
+                
+                    # 尝试重命名文件
+                    os.rename(self.log_file_path, new_name)
+                    success_save = True
+                
+                    # 构建提示信息
+                    save_path = os.path.abspath(new_name)
+                    if file_size == 0:
+                        self.update_status(f"✅ 日志捕获已停止\n空日志文件已保存到: {save_path}\n建议检查设备连接和权限设置", False)
+                    else:
+                        self.update_status(f"✅ 日志捕获已停止\n日志文件已保存到: {save_path}", True)
+                
+                    # 尝试打开日志所在文件夹
+                    try:
+                        os.startfile(os.path.dirname(new_name))
+                    except:
+                        pass  # 忽略打开文件夹的错误
+                    break
+                
+                except PermissionError as e:
+                    last_error = f"权限错误: {str(e)}"
+                    if attempt < max_retries - 1:
+                        self.update_status(f"🕰️ 文件被占用，等待释放... (尝试 {attempt + 1}/{max_retries})", True)
+                        self.root.update()
+                        time.sleep(2)  # 增加等待时间
+                        continue
+                except Exception as e:
+                    last_error = f"重命名失败: {str(e)}"
+                    self.update_status(f"保存日志文件失败: {str(e)}", False)
+                    break
+
+            # 重置状态
             self.logging_active = False
-            return
-            
-        # 检查文件大小
-        file_size = os.path.getsize(self.log_file_path)
-        if file_size == 0:
-            self.update_status("警告：日志文件为空，可能原因：\n1. 设备无日志输出\n2. ADB连接不稳定\n3. 权限不足\n4. 捕获时间过短", False)
-        else:
-            file_size_str = format_file_size(file_size)
-            self.update_status(f"日志捕获成功，文件大小: {file_size_str}", True)
-
-        # 生成新的文件名（使用停止时的时间戳）
-        original_path = os.path.dirname(self.log_file_path)
-        stop_timestamp = timestamp_time()  # 获取停止时的时间戳
-        if file_size == 0:
-            # 为空文件添加特殊标记
-            new_name = os.path.join(original_path, f"{stop_timestamp}_empty.log")
-        else:
-            new_name = os.path.join(original_path, f"{stop_timestamp}.log")
-
-        # 重试机制（最多5次，增加重试次数）
-        max_retries = 5
-        success_save = False
-        last_error = ""
         
-        for attempt in range(max_retries):
-            try:
-                # 在重命名前再次检查文件是否被其他进程占用
-                # 尝试以独占模式打开文件测试是否被占用
-                try:
-                    with open(self.log_file_path, 'r+b') as test_file:
-                        pass  # 如果能打开说明没有被占用
-                except IOError:
-                    # 文件被占用，等待更长时间
-                    self.update_status(f"文件仍被占用，等待释放... (尝试 {attempt + 1}/{max_retries})", True)
-                    time.sleep(2)
-                    continue
-                
-                # 尝试重命名文件
-                os.rename(self.log_file_path, new_name)
-                success_save = True
-                
-                # 构建提示信息
-                save_path = os.path.abspath(new_name)
-                if file_size == 0:
-                    self.update_status(f"日志捕获已停止\n空日志文件已保存到: {save_path}\n建议检查设备连接和权限设置", False)
-                else:
-                    self.update_status(f"日志捕获已停止\n日志文件已保存到: {save_path}", True)
-                
-                # 尝试打开日志所在文件夹
-                try:
-                    os.startfile(os.path.dirname(new_name))
-                except:
-                    pass  # 忽略打开文件夹的错误
-                break
-                
-            except PermissionError as e:
-                last_error = f"权限错误: {str(e)}"
-                if attempt < max_retries - 1:
-                    self.update_status(f"文件被占用，等待释放... (尝试 {attempt + 1}/{max_retries})", True)
-                    time.sleep(2)  # 增加等待时间
-                    continue
-            except Exception as e:
-                last_error = f"重命名失败: {str(e)}"
-                self.update_status(f"保存日志文件失败: {str(e)}", False)
-                break
-
-        # 重置状态
-        self.logging_active = False
+            if not success_save:
+                # 如果重命名失败，至少告诉用户原文件位置
+                file_size_str = format_file_size(file_size) if file_size > 0 else "空文件"
+                self.update_status(f"日志捕获已停止，但文件保存失败。\n原因: {last_error}\n原文件位置: {self.log_file_path}\n文件大小: {file_size_str}", False)
         
-        if not success_save:
-            # 如果重命名失败，至少告诉用户原文件位置
-            file_size_str = format_file_size(file_size) if file_size > 0 else "空文件"
-            self.update_status(f"日志捕获已停止，但文件保存失败。\n原因: {last_error}\n原文件位置: {self.log_file_path}\n文件大小: {file_size_str}", False)
+            # 清理进程引用
+            self.logcat_subprocess = None
         
-        # 清理进程引用
-        self.logcat_subprocess = None
+        except Exception as e:
+            self.update_status(f"停止日志捕获过程中发生错误: {str(e)}", False)
+            self.logging_active = False
 
     def _run_logcat(self):
         """实际执行日志捕获（修复版，解决文件句柄释放问题）"""
@@ -1496,34 +1569,41 @@ class ADBToolApp:
         self.status_text.see(tk.END)
 
     def _setup_drag_drop(self):
-        """设置拖拽APK文件功能"""
+        """设置拖拽APK文件和包名功能"""
         
-        # 先设置占位符文本
-        def setup_placeholder():
+        # 先设置APK输入框的占位符文本
+        def setup_apk_placeholder():
             if not self.apk_entry.get():
                 self.apk_entry.insert(0, "可直接拖拽APK文件到此处...")
-                # ttk.Entry 不支持 fg 参数，所以我们使用另一种方式
                 
-        def on_focus_in(event):
+        def on_apk_focus_in(event):
             if self.apk_entry.get() == "可直接拖拽APK文件到此处...":
                 self.apk_entry.delete(0, tk.END)
                 
-        def on_focus_out(event):
+        def on_apk_focus_out(event):
             if not self.apk_entry.get():
-                setup_placeholder()
+                setup_apk_placeholder()
         
-        # 绑定焦点事件
-        self.apk_entry.bind('<FocusIn>', on_focus_in)
-        self.apk_entry.bind('<FocusOut>', on_focus_out)
-        setup_placeholder()
+        # 绑定APK输入框焦点事件
+        self.apk_entry.bind('<FocusIn>', on_apk_focus_in)
+        self.apk_entry.bind('<FocusOut>', on_apk_focus_out)
+        setup_apk_placeholder()
         
-        # 尝试安装和使用 tkinterdnd2
+        # 检查根窗口是否支持拖拽
+        root_class = str(type(self.root))
+        if 'TkinterDnD' not in root_class:
+            self.update_status("💡 当前窗口不支持拖拽功能", True)
+            self.update_status("💡 请使用'选择安装包路径'按钮安装APK", True)
+            return
+        
+        # 尝试设置拖拽功能
         try:
+            # 尝试导入tkinterdnd2模块
             import tkinterdnd2 as tkdnd
-            from tkinterdnd2 import DND_FILES
+            from tkinterdnd2 import DND_FILES, DND_TEXT
             
-            def on_drop(event):
-                """处理文件拖拽"""
+            def on_apk_drop(event):
+                """处理APK文件拖拽"""
                 self.apk_entry.config(background="white")
                 
                 # 获取拖拽的文件路径
@@ -1550,32 +1630,76 @@ class ADBToolApp:
                     else:
                         self.update_status("⚠️ 请拖拽有效的.apk文件", False)
             
-            def on_drag_enter(event):
-                """鼠标进入拖拽区域时的视觉反馈"""
+            def on_pkg_drop(event):
+                """处理包名文本拖拽"""
+                self.pkg_combobox.config(background="white")
+                
+                # 获取拖拽的文本内容
+                text_data = event.data.strip()
+                
+                # 检查是否为有效的包名格式
+                if text_data and "." in text_data and not text_data.startswith(".") and not text_data.endswith("."):
+                    # 去除可能的空格和特殊字符
+                    clean_pkg = text_data.replace(" ", "").replace("\n", "").replace("\r", "")
+                    
+                    # 再次验证包名格式
+                    if len(clean_pkg.split(".")) >= 2 and all(part.replace("_", "").isalnum() for part in clean_pkg.split(".")):
+                        self.pkg_combobox.delete(0, tk.END)
+                        self.pkg_combobox.insert(0, clean_pkg)
+                        self.update_status(f"📦 已输入包名: {clean_pkg}", True)
+                        
+                        # 保存包名到历史记录
+                        self._save_pkg_to_history(clean_pkg)
+                    else:
+                        self.update_status("⚠️ 请拖拽有效的包名格式(如: com.example.app)", False)
+                else:
+                    self.update_status("⚠️ 请拖拽有效的包名文本", False)
+            
+            def on_apk_drag_enter(event):
+                """鼠标进入APK拖拽区域时的视觉反馈"""
                 self.apk_entry.config(background="lightblue")
                 return tkdnd.COPY
                 
-            def on_drag_leave(event):
-                """鼠标离开拖拽区域时恢复正常颜色"""
+            def on_apk_drag_leave(event):
+                """鼠标离开APK拖拽区域时恢复正常颜色"""
                 self.apk_entry.config(background="white")
             
-            # 绑定拖拽事件
+            def on_pkg_drag_enter(event):
+                """鼠标进入包名拖拽区域时的视觉反馈"""
+                self.pkg_combobox.config(background="lightgreen")
+                return tkdnd.COPY
+                
+            def on_pkg_drag_leave(event):
+                """鼠标离开包名拖拽区域时恢复正常颜色"""
+                self.pkg_combobox.config(background="white")
+            
+            # 尝试注册APK文件拖拽事件
             self.apk_entry.drop_target_register(DND_FILES)
-            self.apk_entry.dnd_bind('<<DropEnter>>', on_drag_enter)
-            self.apk_entry.dnd_bind('<<DropLeave>>', on_drag_leave) 
-            self.apk_entry.dnd_bind('<<Drop>>', on_drop)
+            self.apk_entry.dnd_bind('<<DropEnter>>', on_apk_drag_enter)
+            self.apk_entry.dnd_bind('<<DropLeave>>', on_apk_drag_leave) 
+            self.apk_entry.dnd_bind('<<Drop>>', on_apk_drop)
             
-            self.update_status("🚀 拖拽功能已启用！可直接拖拽APK文件到输入框", True)
+            # 尝试注册包名文本拖拽事件
+            self.pkg_combobox.drop_target_register(DND_TEXT)
+            self.pkg_combobox.dnd_bind('<<DropEnter>>', on_pkg_drag_enter)
+            self.pkg_combobox.dnd_bind('<<DropLeave>>', on_pkg_drag_leave) 
+            self.pkg_combobox.dnd_bind('<<Drop>>', on_pkg_drop)
             
-        except ImportError:
-            # tkinterdnd2 未安装
-            self.update_status("⚠️ 拖拽功能不可用，请使用'选择安装包路径'按钮", False)
-            self.update_status("💡 提示：可运行 install_drag_support.bat 安装拖拽支持", True)
+            # 拖拽功能设置成功
+            self.update_status("🚀 拖拽功能已启用！", True)
+            self.update_status("📦 APK文件可拖拽到APK输入框", True)
+            self.update_status("📝 包名文本可拖拽到包名输入框", True)
+            return
             
+        except ImportError as e:
+            # tkinterdnd2 模块导入失败
+            self.update_status("💡 请使用'选择安装包路径'按钮安装APK", True)
         except Exception as e:
-            # 其他错误
-            self.update_status(f"⚠️ 拖拽功能初始化失败: {str(e)}", False)
-            self.update_status("💡 提示：可运行 install_drag_support.bat 安装拖拽支持", True)
+            # 其他拖拽设置错误
+            self.update_status("💡 请使用'选择安装包路径'按钮安装APK", True)
+        
+        # 如果到这里，说明拖拽功能不可用
+        self.update_status("💡 请手动输入包名到包名输入框", True)
             
     def show_cache_stats(self):
         """显示缓存统计信息"""
@@ -1601,9 +1725,3 @@ class ADBToolApp:
             self.update_status("已清空所有缓存", True)
         else:
             self.update_status("已取消清空缓存操作", True)
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = ADBToolApp(root)
-    root.mainloop()
