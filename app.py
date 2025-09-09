@@ -1,4 +1,5 @@
 import sys
+import sys
 import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -347,13 +348,16 @@ class ADBToolApp:
         return True
 
     def _show_progress(self):
-        """显示进度条动画"""
+        """显示进度条（简单模式）"""
         self.progress.grid()
-        self.progress.start()
+        # 设置为确定性进度条，不显示文字
+        self.progress["mode"] = "determinate"
+        self.progress["maximum"] = 100
+        self.progress["value"] = 0
 
     def _hide_progress(self):
         """隐藏进度条"""
-        self.progress.stop()
+        # 不需要stop()，因为我们使用确定性模式
         self.progress.grid_remove()
 
 
@@ -388,7 +392,7 @@ class ADBToolApp:
         install_thread.start()
 
     def _run_install_with_progress(self, apk_path):
-        """实际执行安装并捕获输出"""
+        """实际执行安装并捕获输出（真实进度版本）"""
         try:
             # 在安装前进行连接质量检查
             if not self.check_and_fix_connection():
@@ -401,82 +405,297 @@ class ADBToolApp:
                 self._hide_progress()
                 return
             
-            # 获取APK大小用于计算进度
+            # 获取APK大小用于进度计算
             apk_size = os.path.getsize(apk_path)
-            current_size = 0
+            self._update_install_status(f"APK文件大小: {self._format_file_size(apk_size)}")
             
-            # 使用带引号的路径避免空格问题
-            process = subprocess.Popen(
-                f'adb install -r -d "{apk_path}"',
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True
-            )
-
-            # 定义需要过滤的关键词
-            filter_keywords = ["Performing Streamed Install"]
-            installing_started = False
-
-            # 实时捕获输出
-            while True:
-                output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
-                    break
-                if output:
-                    stripped_output = output.strip()
-                    
-                    # 检测安装开始
-                    if "Performing Streamed Install" in stripped_output:
-                        installing_started = True
-                        self.progress["mode"] = "determinate"
-                        self.progress["maximum"] = 100
-                        self.progress["value"] = 0
-                        current_size = 0
-                        continue
-
-                    # 更新进度
-                    if installing_started:
-                        # 估算进度
-                        current_size += len(output)  # 增加已处理的数据大小
-                        progress = min(95, int((current_size / apk_size) * 100))
-                        self.progress["value"] = progress
-                        
-                        if "Success" in stripped_output:
-                            self.progress["value"] = 100
-                            # 不在这里提示成功，等到最终确认后统一提示
-                        elif "Failure" in stripped_output:
-                            self._update_install_status(f"安装失败: {stripped_output}")
-                        elif not any(keyword in stripped_output for keyword in filter_keywords):
-                            self._update_install_status(stripped_output)
-
-            # 获取最终结果
-            return_code = process.poll()
-            success = return_code == 0
+            # 进度条已在_show_progress()中设置为确定性模式
             
-            # 重置进度条模式
-            self.progress["mode"] = "indeterminate"
-            self._hide_progress()
+            # 分阶段安装：推送文件(70%) + 安装处理(30%)
+            success = self._install_with_real_progress(apk_path, apk_size)
             
-            # 根据错误码提供更详细的错误信息
-            if success:
-                final_output = "安装成功"
-            else:
-                error_code = return_code & 0xFFFFFFFF  # 转换为无符号整数
-                if error_code == 4294967295:  # 0xFFFFFFFF
-                    final_output = f"安装失败：ADB连接异常 (错误码: {return_code})\n建议：断开连接后重新连接设备再试"
-                elif return_code == 1:
-                    final_output = "安装失败：应用签名冲突或权限不足"
-                elif return_code == 2:
-                    final_output = "安装失败：存储空间不足"
-                else:
-                    final_output = f"安装失败 (错误码: {return_code})"
-            
-            self._update_install_status(final_output)
+            if not success:
+                self._hide_progress()
+                return
+
             
         except Exception as e:
             self._update_install_status(f"安装过程出错: {str(e)}")
             self._hide_progress()
+            
+    def _install_with_real_progress(self, apk_path, apk_size):
+        """分阶段安装，显示真实进度（静默模式）"""
+        try:
+            # 阶段1: 准备安装 (5%)
+            self._update_progress(5, "正在准备安装...")
+            
+            # 阶段2: 传输APK文件到设备 (5% -> 75%)
+            if not self._transfer_apk_with_progress(apk_path, apk_size, 5, 70):
+                return False
+            
+            # 阶段3: 执行安装命令 (75% -> 100%)
+            return self._execute_install_with_progress(apk_path, 75, 25)
+            
+        except Exception as e:
+            self._update_install_status(f"安装过程出错: {str(e)}")
+            return False
+    
+    def _transfer_apk_with_progress(self, apk_path, apk_size, start_progress, progress_range):
+        """传输APK文件到设备并显示进度（优化版）"""
+        try:
+            device_temp_path = "/data/local/tmp/temp_install.apk"
+            
+            # 先清理可能存在的旧文件
+            run_adb_command(f"adb shell rm -f {device_temp_path}")
+            
+            # 使用 adb push 传输文件，并监控进度
+            start_time = time.time()
+            
+            # 使用新的进程方式，可以更好地控制输出
+            push_cmd = f'adb push "{apk_path}" {device_temp_path}'
+            
+            # 创建进程并启动监控
+            push_process = subprocess.Popen(
+                push_cmd,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1
+            )
+            
+            # 计算传输速度和估算时间
+            # 基于文件大小估算传输时间（考虑网络状况）
+            if apk_size < 10 * 1024 * 1024:  # 10MB以下
+                estimated_speed = 2 * 1024 * 1024  # 2MB/s
+            elif apk_size < 50 * 1024 * 1024:  # 50MB以下
+                estimated_speed = 5 * 1024 * 1024  # 5MB/s
+            else:
+                estimated_speed = 8 * 1024 * 1024  # 8MB/s
+            
+            estimated_time = max(1.5, apk_size / estimated_speed)
+            
+            # 监控传输进度
+            last_progress = 0
+            last_update_time = start_time
+            while push_process.poll() is None:
+                elapsed = time.time() - start_time
+                current_time = time.time()
+                
+                # 使用非线性进度曲线，初期快速增长，后期缓慢
+                if elapsed <= estimated_time:
+                    # 使用平方根函数让初期进度较快
+                    time_ratio = elapsed / estimated_time
+                    progress_percent = int(min(98, time_ratio ** 0.7 * 100))
+                else:
+                    # 超时后缓慢增长到98%
+                    progress_percent = min(98, 80 + int((elapsed - estimated_time) * 2))
+                
+                current_progress = start_progress + int((progress_percent / 100) * progress_range)
+                
+                # 只有当进度发生变化或时间间隔超过0.5秒时才更新界面
+                if current_progress > last_progress or (current_time - last_update_time > 0.5):
+                    last_progress = current_progress
+                    last_update_time = current_time
+                    
+                    # 计算当前传输速度
+                    if elapsed > 0:
+                        # 估算已传输的字节数
+                        transferred_bytes = (progress_percent / 100) * apk_size
+                        current_speed = transferred_bytes / elapsed
+                        speed_str = self._format_speed(current_speed)
+                        
+                        # 在输出框中显示传输进度和速度
+                        self._update_progress(
+                            current_progress, 
+                            f"传输APK文件到设备... {progress_percent}% ({speed_str})"
+                        )
+                    else:
+                        # 刚开始时显示基本信息
+                        self._update_progress(
+                            current_progress, 
+                            f"传输APK文件到设备... {progress_percent}%"
+                        )
+                
+                time.sleep(0.1)  # 适当减少更新频率
+            
+            # 检查 push 结果
+            stdout, stderr = push_process.communicate()
+            return_code = push_process.returncode
+            
+            if return_code == 0:
+                # 验证文件是否成功传输
+                verify_output, verify_success = run_adb_command(f"adb shell ls -l {device_temp_path}")
+                if verify_success and "temp_install.apk" in verify_output:
+                    self._update_progress(start_progress + progress_range, "文件传输完成")
+                    return True
+                else:
+                    self._update_install_status("文件传输验证失败")
+                    return False
+            else:
+                error_msg = stderr.strip() if stderr else "未知错误"
+                self._update_install_status(f"文件传输失败: {error_msg}")
+                return False
+                
+        except Exception as e:
+            self._update_install_status(f"文件传输过程出错: {str(e)}")
+            return False
+    
+    def _format_speed(self, bytes_per_second):
+        """格式化传输速度显示"""
+        if bytes_per_second < 1024:
+            return f"{bytes_per_second:.0f}B/s"
+        elif bytes_per_second < 1024 * 1024:
+            return f"{bytes_per_second / 1024:.1f}KB/s"
+        else:
+            return f"{bytes_per_second / (1024 * 1024):.1f}MB/s"
+    
+    def _execute_install_with_progress(self, apk_path, start_progress, progress_range):
+        """执行安装命令并显示进度（优化版）"""
+        try:
+            device_temp_path = "/data/local/tmp/temp_install.apk"
+            
+            # 使用设备上的文件进行安装
+            install_process = subprocess.Popen(
+                f'adb shell pm install -r -d {device_temp_path}',
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            
+            # 定义安装阶段关键词和对应进度
+            install_stages = [
+                ("pkg:", 10, "解析APK包..."),
+                ("Performing Streamed Install", 25, "开始流式安装..."),
+                ("Streaming", 50, "正在流式传输..."),
+                ("Installing", 70, "正在安装应用..."),
+                ("Success", 100, "安装成功!")
+            ]
+            
+            current_stage = 0
+            output_lines = []
+            install_start_time = time.time()
+            last_update_time = time.time()
+            
+            # 初始进度
+            self._update_progress(start_progress + 5, "正在执行安装...")
+            
+            while True:
+                output = install_process.stdout.readline()
+                if output == '' and install_process.poll() is not None:
+                    break
+                    
+                if output:
+                    output_lines.append(output.strip())
+                    stripped_output = output.strip()
+                    current_time = time.time()
+                    
+                    # 检查是否达到下一个阶段
+                    if current_stage < len(install_stages):
+                        keyword, stage_progress, stage_msg = install_stages[current_stage]
+                        
+                        if keyword in stripped_output:
+                            current_stage += 1
+                            progress_value = start_progress + int((stage_progress / 100) * progress_range)
+                            # 在输出框中显示安装进度
+                            self._update_progress(progress_value, stage_msg)
+                            last_update_time = current_time
+                        elif current_time - last_update_time > 2:  # 2秒无更新则递增进度
+                            # 在当前阶段内缓慢递增
+                            if current_stage > 0:
+                                prev_progress = install_stages[current_stage-1][1] if current_stage > 0 else 0
+                                next_progress = install_stages[current_stage][1] if current_stage < len(install_stages) else 100
+                                
+                                elapsed_in_stage = current_time - last_update_time + 2
+                                stage_increment = min(5, elapsed_in_stage)  # 最多增加5%
+                                
+                                intermediate_progress = min(
+                                    next_progress - 1, 
+                                    prev_progress + stage_increment
+                                )
+                                progress_value = start_progress + int((intermediate_progress / 100) * progress_range)
+                                # 在输出框中显示中间进度
+                                self._update_progress(progress_value, f"安装中... {stripped_output[:25]}...")
+                    
+                    # 检查错误信息
+                    if "Failure" in stripped_output or "INSTALL_FAILED" in stripped_output:
+                        self._update_install_status(f"安装失败: {stripped_output}")
+                        break
+            
+            # 清理临时文件
+            run_adb_command(f"adb shell rm -f {device_temp_path}")
+            
+            # 检查安装结果
+            return_code = install_process.returncode
+            success = return_code == 0
+            
+            if success:
+                self._update_progress(100, "安装成功!")
+                
+                # 显示安装成功信息
+                install_time = time.time() - install_start_time
+                apk_name = os.path.basename(apk_path)
+                self._update_install_status(
+                    f"安装成功 - {apk_name} (耗时: {install_time:.1f}秒)"
+                )
+            else:
+                # 根据错误码提供详细信息
+                error_code = return_code & 0xFFFFFFFF
+                if error_code == 4294967295:
+                    error_msg = f"安装失败：ADB连接异常 (错误码: {return_code})\n建议：断开连接后重新连接设备再试"
+                elif return_code == 1:
+                    error_msg = "安装失败：应用签名冲突或权限不足"
+                elif return_code == 2:
+                    error_msg = "安装失败：存储空间不足"
+                else:
+                    # 查找输出中的错误信息
+                    error_detail = ""
+                    for line in output_lines[-5:]:  # 检查最后5行
+                        if "INSTALL_FAILED" in line or "Failure" in line:
+                            error_detail = line.replace("Failure [", "").replace("]", "")
+                            break
+                    
+                    error_msg = f"安装失败\n错误码: {return_code}"
+                    if error_detail:
+                        error_msg += f"\n详细信息: {error_detail}"
+                    
+                self._update_install_status(error_msg)
+            
+            # 等待一下让用户看到最终状态
+            time.sleep(1.5)
+            self._hide_progress()
+            return success
+            
+        except Exception as e:
+            self._update_install_status(f"安装过程出错: {str(e)}")
+            return False
+    
+    def _update_progress(self, value, message=None):
+        """更新进度条和输出状态信息
+        
+        Args:
+            value: 进度值 (0-100)
+            message: 状态信息，在输出框中显示
+        """
+        # 更新进度条数值
+        self.progress["value"] = value
+        
+        # 在输出框中显示进度信息
+        if message:
+            progress_msg = f"[{int(value)}%] {message}"
+            self._update_install_status(progress_msg)
+        
+        self.root.update()  # 强制更新界面
+    
+    def _format_file_size(self, size_bytes):
+        """格式化文件大小显示"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size_bytes < 1024.0:
+                return f"{size_bytes:.1f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.1f} TB"
 
     def _update_install_status(self, message):
         """更新安装状态"""
@@ -516,7 +735,7 @@ class ADBToolApp:
 
     @require_device_connected
     def package_list(self):
-        """获取已安装应用包名列表及其版本(优化版，使用动态线程池)"""
+        """获取已安装应用包名列表及其版本(优化版，使用动态线程池并导出表格)"""
         try:
             # 获取所有已安装包名
             output, success = run_adb_command("adb shell pm list packages")
@@ -536,6 +755,7 @@ class ADBToolApp:
             
             # 使用动态线程池并行获取版本信息
             max_workers = calculate_optimal_workers(len(packages))
+            app_list = []  # 存储包名和版本信息
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_package = {
@@ -549,12 +769,25 @@ class ADBToolApp:
                     try:
                         version = future.result()
                         version_str = version if version else "未知"
+                        
+                        # 添加到列表中用于导出
+                        app_list.append({
+                            'package_name': package,
+                            'version': version_str
+                        })
+                        
                         self.status_text.insert(
                             tk.END, 
                             f"\n{package} (版本: {version_str})", 
                             "info"
                         )
                     except Exception as e:
+                        # 失败的也记录
+                        app_list.append({
+                            'package_name': package,
+                            'version': f"获取失败 - {str(e)}"
+                        })
+                        
                         self.status_text.insert(
                             tk.END,
                             f"\n{package} (版本: 获取失败 - {str(e)})",
@@ -571,9 +804,11 @@ class ADBToolApp:
                         )
                     
                     self.status_text.see(tk.END)
-                    
-            self.update_status(f"\n获取应用列表完成，共 {len(packages)} 个应用", True)
             
+            # 完成获取后导出表格
+            self.update_status(f"\n获取应用列表完成，共 {len(packages)} 个应用", True)
+            self._export_app_list_to_table(app_list)
+                    
         except Exception as e:
             self.update_status(f"获取应用列表时出错: {str(e)}", False)
 
@@ -593,6 +828,52 @@ class ADBToolApp:
             cache_manager.set_package_info(package_name, package_info)
             return version
         return None
+    
+    def _export_app_list_to_table(self, app_list):
+        """导出APP列表到表格文件"""
+        try:
+            # 获取日志存储路径
+            log_path = self.log_path_entry.get().strip()
+            if not log_path:
+                log_path = self.default_log_path
+            
+            # 确保目录存在
+            ensure_directory(log_path)
+            
+            # 生成文件名：applist-appversion_MMDD-HHMMSS.csv
+            current_time = timestamp_time()
+            file_name = f"applist-appversion_{current_time}.csv"
+            file_path = os.path.join(log_path, file_name)
+            
+            # 写入CSV文件
+            import csv
+            with open(file_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # 写入表头
+                writer.writerow(['应用包名', '版本号'])
+                
+                # 写入数据
+                for app in app_list:
+                    writer.writerow([app['package_name'], app['version']])
+            
+            # 显示成功信息
+            file_size = format_file_size(os.path.getsize(file_path))
+            self.update_status(
+                f"应用列表已导出至: {file_path}\n"
+                f"文件大小: {file_size}\n"
+                f"总共 {len(app_list)} 个应用", 
+                True
+            )
+            
+            # 尝试打开文件所在目录
+            try:
+                os.startfile(os.path.dirname(file_path))
+            except Exception:
+                pass  # 忽略打开文件夹失败
+                
+        except Exception as e:
+            self.update_status(f"导出应用列表失败: {str(e)}", False)
 
     @require_device_connected
     def clear_cache(self):
@@ -711,8 +992,13 @@ class ADBToolApp:
             # 先清理可能存在的旧截图
             run_adb_command("adb shell rm -f /sdcard/screenshot.png")
             
+            # 获取用户设置的日志存储路径
+            log_path = self.log_path_entry.get().strip()
+            if not log_path:
+                log_path = self.default_log_path
+            
             # 创建保存目录
-            save_dir = ensure_directory(Config.DEFAULT_SCREENSHOT_PATH)
+            save_dir = ensure_directory(log_path)
             new_file = get_next_filename(os.path.join(save_dir, "截图"), ".png")
             
             # 最多尝试指定次数截图

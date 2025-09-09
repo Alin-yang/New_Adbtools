@@ -103,8 +103,13 @@ class SystemManager:
             # 先清理可能存在的旧截图
             run_adb_command("adb shell rm -f /sdcard/screenshot.png")
             
+            # 获取用户设置的日志存储路径
+            log_path = self.app.log_path_entry.get().strip()
+            if not log_path:
+                log_path = self.app.default_log_path
+            
             # 创建保存目录
-            save_dir = ensure_directory(Config.DEFAULT_SCREENSHOT_PATH)
+            save_dir = ensure_directory(log_path)
             new_file = get_next_filename(os.path.join(save_dir, "截图"), ".png")
             
             # 最多尝试指定次数截图
