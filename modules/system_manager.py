@@ -4,6 +4,7 @@
 """
 import os
 import time
+import tkinter as tk
 from typing import Optional
 from utils import run_adb_command, ensure_directory, get_next_filename, format_file_size
 from cache_manager import cache_manager
@@ -171,32 +172,6 @@ class SystemManager:
             self.app.update_status(f"截图过程出错: {str(e)}", False)
             return False
     
-    def pull_anr_file(self) -> bool:
-        """
-        拉取ANR文件
-        
-        Returns:
-            bool: 拉取是否成功
-        """
-        try:
-            anr_dir = ensure_directory(Config.DEFAULT_ANR_PATH)
-            output, success = run_adb_command(f"adb pull /data/anr \"{anr_dir}\"")
-            
-            if success:
-                self.app.update_status(f"ANR文件已保存至: {anr_dir}", True)
-                # 尝试打开ANR文件夹
-                try:
-                    os.startfile(anr_dir)
-                except:
-                    pass
-                return True
-            else:
-                self.app.update_status(f"ANR文件拉取失败: {output}", False)
-                return False
-        except Exception as e:
-            self.app.update_status(f"拉取ANR文件时出错: {str(e)}", False)
-            return False
-    
     def root_device(self) -> bool:
         """
         获取root权限
@@ -221,7 +196,7 @@ class SystemManager:
         output, success = run_adb_command("adb remount")
         self.app.update_status(output, success)
         return success
-    
+
     def get_package_name(self) -> Optional[str]:
         """
         获取当前打开应用包名

@@ -849,31 +849,13 @@ class ADBToolApp:
             import csv
             with open(file_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
                 writer = csv.writer(csvfile)
-                
-                # 写入表头
-                writer.writerow(['应用包名', '版本号'])
-                
-                # 写入数据
+                writer.writerow(['package_name', 'version'])
                 for app in app_list:
                     writer.writerow([app['package_name'], app['version']])
             
-            # 显示成功信息
-            file_size = format_file_size(os.path.getsize(file_path))
-            self.update_status(
-                f"应用列表已导出至: {file_path}\n"
-                f"文件大小: {file_size}\n"
-                f"总共 {len(app_list)} 个应用", 
-                True
-            )
-            
-            # 尝试打开文件所在目录
-            try:
-                os.startfile(os.path.dirname(file_path))
-            except Exception:
-                pass  # 忽略打开文件夹失败
-                
+            self.update_status(f"应用列表已保存至: {file_path}", True)
         except Exception as e:
-            self.update_status(f"导出应用列表失败: {str(e)}", False)
+            self.update_status(f"导出应用列表时出错: {str(e)}", False)
 
     @require_device_connected
     def clear_cache(self):
@@ -904,15 +886,116 @@ class ADBToolApp:
     @require_device_connected
     def root_device(self):
         """获取root权限"""
+        # 首先尝试标准的adb root命令
         output, success = run_adb_command("adb root")
+        if success and "restarting" in output.lower():
+            self.update_status("获取root权限成功，设备正在重启adb服务...", True)
+            # 等待设备重新连接
+            time.sleep(3)
+            # 重新检查连接状态
+            if self.check_device_connected():
+                self.update_status("设备已重新连接，root权限获取成功", True)
+            else:
+                self.update_status("设备重新连接失败，请手动重新连接设备", False)
+            return
+        
+        # 如果标准方法失败，尝试使用su命令
+        if not success or "cannot" in output.lower() or "unable" in output.lower():
+            self.update_status("adb root命令失败，正在尝试使用su命令...", True)
+            # 尝试使用su命令获取root权限
+            su_output, su_success = run_adb_command("adb shell su --version")
+            if su_success:
+                self.update_status("检测到设备支持su命令，已获取root权限", True)
+                return
+            else:
+                self.update_status("su命令不可用，无法获取root权限", False)
+                return
+        
         self.update_status(output, success)
 
     @require_device_connected
     def pull_anr_file(self):
         """拉取ANR文件"""
-        anr_dir = ensure_directory(Config.DEFAULT_ANR_PATH)
-        output, success = run_adb_command(f"adb pull /data/anr {anr_dir}")
-        self.update_status(f"ANR文件已保存至: {anr_dir}", success)
+        try:
+            # 获取用户设置的日志存储路径
+            log_path = self.log_path_entry.get().strip()
+            if not log_path:
+                log_path = self.default_log_path
+            
+            # 创建ANR文件夹
+            anr_dir = os.path.join(log_path, "ANR")
+            anr_dir = ensure_directory(anr_dir)
+            
+            # 先检查/data/anr目录内容
+            self.update_status("正在检查ANR目录内容...", True)
+            check_output, check_success = run_adb_command("adb shell ls -la /data/anr")
+            
+            if not check_success:
+                self.update_status(f"无法访问ANR目录: {check_output}", False)
+                return False
+            
+            # 显示目录内容（用于调试）
+            self.update_status(f"ANR目录内容:\n{check_output}", True)
+            
+            # 检查目录是否为空
+            if "total 0" in check_output or check_output.strip() == "" or "No such file" in check_output:
+                self.update_status("ANR文件目录为空，没有可导出的文件", False)
+                return False
+            
+            # 使用更稳健的方式拉取ANR文件
+            self.update_status("正在拉取ANR文件...", True)
+            
+            # 先尝试拉取整个目录
+            output, success = run_adb_command(f"adb pull /data/anr/ \"{anr_dir}\"")
+            
+            # 如果失败，尝试逐个文件拉取
+            if not success:
+                self.update_status("尝试逐个拉取ANR文件...", True)
+                # 先创建临时目录
+                temp_dir = os.path.join(anr_dir, "temp_anr")
+                os.makedirs(temp_dir, exist_ok=True)
+                
+                # 获取文件列表
+                list_output, list_success = run_adb_command("adb shell ls /data/anr")
+                if list_success:
+                    files = list_output.strip().split('\n')
+                    for file_name in files:
+                        if file_name.strip() and not file_name.startswith('total'):
+                            # 逐个拉取文件
+                            file_output, file_success = run_adb_command(f"adb pull \"/data/anr/{file_name}\" \"{temp_dir}\"")
+                            if not file_success:
+                                self.update_status(f"拉取文件 {file_name} 失败: {file_output}", False)
+                
+                # 检查是否有成功拉取的文件
+                if os.listdir(temp_dir):
+                    success = True
+                    output = "部分文件拉取成功"
+                else:
+                    # 清理空的临时目录
+                    os.rmdir(temp_dir)
+            
+            if success:
+                # 检查是否真的有文件被拉取
+                anr_files = os.listdir(anr_dir)
+                if anr_files or (os.path.exists(os.path.join(anr_dir, "temp_anr")) and os.listdir(os.path.join(anr_dir, "temp_anr"))):
+                    self.update_status(f"ANR文件已保存至: {anr_dir}", True)
+                    # 打开日志存储路径，而不是ANR文件夹
+                    try:
+                        os.startfile(log_path)
+                    except:
+                        pass
+                    return True
+                else:
+                    self.update_status("ANR文件拉取完成但目录为空", False)
+                    return False
+            else:
+                # 提供更详细的错误信息
+                error_msg = output if output else "未知错误"
+                self.update_status(f"ANR文件拉取失败: {error_msg}", False)
+                return False
+        except Exception as e:
+            self.update_status(f"拉取ANR文件时出错: {str(e)}", False)
+            return False
 
     @require_device_connected
     def remount(self):
