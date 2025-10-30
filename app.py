@@ -979,9 +979,9 @@ class ADBToolApp:
                 anr_files = os.listdir(anr_dir)
                 if anr_files or (os.path.exists(os.path.join(anr_dir, "temp_anr")) and os.listdir(os.path.join(anr_dir, "temp_anr"))):
                     self.update_status(f"ANR文件已保存至: {anr_dir}", True)
-                    # 打开日志存储路径，而不是ANR文件夹
+                    # 尝试打开ANR文件夹
                     try:
-                        os.startfile(log_path)
+                        os.startfile(anr_dir)
                     except:
                         pass
                     return True
