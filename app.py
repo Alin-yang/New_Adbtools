@@ -84,6 +84,8 @@ class ADBToolApp:
         self.ip_history = load_ip_history()
         if hasattr(self, 'ip_combobox'):
             self.ip_combobox['values'] = self.ip_history
+            # 总是设置默认值为192.168.
+            self.ip_combobox.set("192.168.")
 
     def _load_pkg_history(self):
         """加载包名历史记录到下拉框"""
@@ -1961,6 +1963,96 @@ class ADBToolApp:
         except Exception as e:
             self.update_status(f"获取安装路径失败: {str(e)}", False)
 
+    @require_device_connected
+    def launch_app(self):
+        """打开当前包名应用程序"""
+        pkg_name = self.get_package_name_from_input()
+        if not pkg_name:
+            self.update_status("请输入包名", False)
+            return
+        
+        try:
+            # 首先尝试使用 dumpsys window 命令获取当前应用的Activity信息
+            dump_cmd = "adb shell dumpsys window windows | findstr mCurrentFocus"
+            output, success = run_adb_command(dump_cmd)
+            
+            launch_activity = None
+            
+            if success and output and "mCurrentFocus" in output and pkg_name in output:
+                # 解析 mCurrentFocus 输出格式
+                # mCurrentFocus=Window{7f5607d u0 com.konka.applist/com.konka.applist.activitys.MainActivity}
+                try:
+                    # 提取包名和Activity
+                    start_idx = output.find(pkg_name)
+                    if start_idx != -1:
+                        # 从包名开始位置提取到行尾
+                        remaining = output[start_idx:].strip()
+                        # 查找第一个空格或换行符作为结束位置
+                        end_idx = remaining.find(' ')
+                        if end_idx == -1:
+                            end_idx = remaining.find('\n')
+                        if end_idx == -1:
+                            launch_activity = remaining
+                        else:
+                            launch_activity = remaining[:end_idx]
+                except Exception as e:
+                    pass
+            
+            # 如果从 mCurrentFocus 没有获取到，尝试使用 cmd package resolve-activity 命令
+            if not launch_activity:
+                resolve_cmd = f"adb shell cmd package resolve-activity --brief {pkg_name}"
+                resolve_output, resolve_success = run_adb_command(resolve_cmd)
+                
+                if resolve_success and resolve_output and "/" in resolve_output:
+                    # 从输出中提取完整的Activity路径
+                    lines = resolve_output.strip().split('\n')
+                    for line in lines:
+                        if pkg_name in line and "/" in line:
+                            launch_activity = line.strip()
+                            break
+                    
+                    if not launch_activity:
+                        # 如果没有找到完整的Activity路径，使用最后一行
+                        launch_activity = lines[-1].strip()
+            
+            # 如果成功获取到启动Activity，则使用它启动应用
+            if launch_activity:
+                start_cmd = f"adb shell am start -n {launch_activity}"
+                start_output, start_success = run_adb_command(start_cmd)
+                
+                if start_success:
+                    # 保存包名到历史记录
+                    self._save_pkg_to_history(pkg_name)
+                    self.update_status(f"成功启动应用: {pkg_name}", True)
+                else:
+                    self.update_status(f"启动应用失败: {start_output}", False)
+            else:
+                # 如果无法获取启动Activity，尝试使用monkey命令启动
+                monkey_cmd = f"adb shell monkey -p {pkg_name} -c android.intent.category.LAUNCHER 1"
+                monkey_output, monkey_success = run_adb_command(monkey_cmd)
+                
+                if monkey_success and "Events injected: 1" in monkey_output:
+                    # 保存包名到历史记录
+                    self._save_pkg_to_history(pkg_name)
+                    self.update_status(f"成功启动应用: {pkg_name}", True)
+                else:
+                    self.update_status(f"启动应用失败: 无法获取启动Activity", False)
+        except Exception as e:
+            self.update_status(f"启动应用时出错: {str(e)}", False)
+
+    @require_device_connected
+    def launch_factory(self):
+        """打开工厂菜单"""
+        try:
+            # 执行打开工厂菜单的ADB命令
+            output, success = run_adb_command("adb shell am start -n com.konka.kkfactory/.FactoryHome")
+            if success:
+                self.update_status("成功打开工厂菜单", True)
+            else:
+                self.update_status(f"打开工厂菜单失败: {output}", False)
+        except Exception as e:
+            self.update_status(f"打开工厂菜单时出错: {str(e)}", False)
+
     # 帮助文档
     def show_help(self):
         """显示帮助信息"""
@@ -2036,6 +2128,8 @@ class ADBToolApp:
             ("停止屏幕录制", "终止screenrecord进程并下载视频文件"),
             ("终止当前包名所有进程", "adb shell am force-stop <包名>"),
             ("获取当前包名应用安装路径", "adb shell pm path <包名>"),
+            ("打开当前包名应用程序", "adb shell cmd package resolve-activity --brief <包名> 获取启动Activity，然后 adb shell am start -n <包名>/<Activity> 启动应用"),
+            ("打开工厂菜单", "adb shell am start -n com.konka.kkfactory.FactoryHome"),
         ]
         self.status_text.insert(tk.END, "\n功能按钮与对应ADB命令如下：\n", "info")
         for name, cmd in cmd_map:

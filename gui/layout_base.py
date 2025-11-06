@@ -196,5 +196,7 @@ def get_button_configs() -> List[Tuple[str, int, int, str]]:
         ("停止屏幕录制", 10, 2, "stop_recording"),
         ("截取当前屏幕", 0, 2, "screencap"),
         ("获取设备串号", 1, 2, "get_serial_number"),
+        ("打开当前包名应用程序", 11, 0, "launch_app"),
+        ("打开工厂菜单", 11, 2, "launch_factory"),
         ("功能按键原始执行命令", 11, 1, "show_all_adb_commands"),
     ]

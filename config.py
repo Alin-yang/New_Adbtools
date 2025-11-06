@@ -110,6 +110,8 @@ UI_TEXTS = {
     "stop_logcat": "停止日志捕获",
     "kill_process": "终止当前包名所有进程",
     "get_package_path": "获取当前包名应用安装路径",
+    "launch_app": "打开当前包名应用程序",
+    "launch_factory": "打开工厂菜单",
     "show_commands": "功能按键原始执行命令",
 }
 
