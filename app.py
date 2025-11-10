@@ -711,7 +711,7 @@ class ADBToolApp:
 
     @require_device_connected
     def uninstall(self):
-        """卸载应用(带确认对话框)"""
+        """卸载应用(带确认对话框)，支持强制卸载系统应用"""
         pkg_name = self.get_package_name_from_input()
         if not pkg_name:
             self.update_status("请输入包名", False)
@@ -725,15 +725,114 @@ class ADBToolApp:
         )
         
         if result:
+            # 首先尝试普通卸载
             output, success = run_adb_command(f"adb uninstall {pkg_name}")
-            if success:
-                # 保存包名到历史记录
-                self._save_pkg_to_history(pkg_name)
-                # 清除包信息缓存
-                cache_manager.package_cache.delete(f"package_{pkg_name}")
-            self.update_status(output, success)
+            
+            # 检查是否真的卸载成功，不仅仅是命令执行成功
+            if success and "Success" in output:
+                self._complete_uninstall(pkg_name, output)
+                return
+            elif not success or "Failure" in output:
+                self.update_status("普通卸载失败，正在尝试强制卸载...", True)
+                # 尝试使用 -k 参数保留数据的方式卸载
+                output, success = run_adb_command(f"adb shell pm uninstall -k --user 0 {pkg_name}")
+                
+                # 检查用户级卸载是否成功
+                if success and "Success" in output:
+                    self._complete_uninstall(pkg_name, output)
+                    return
+                elif not success or "Failure" in output:
+                    self.update_status("用户级卸载失败，正在尝试系统级卸载...", True)
+                    # 尝试使用 root 权限卸载
+                    output, success = run_adb_command(f"adb shell su -c \"pm uninstall {pkg_name}\"")
+                    
+                    # 检查系统级卸载是否成功
+                    if success and "Success" in output:
+                        self._complete_uninstall(pkg_name, output)
+                        return
+                    elif not success or "Failure" in output:
+                        self.update_status("系统级卸载失败，正在尝试通过删除安装路径卸载...", True)
+                        # 尝试通过删除安装路径的方式卸载
+                        self._uninstall_by_deleting_path(pkg_name)
+                        return
+            
+            # 如果所有方法都失败
+            self.update_status(f"应用 {pkg_name} 卸载失败: {output}", False)
         else:
             self.update_status("已取消卸载操作", True)
+    
+    def _complete_uninstall(self, pkg_name, output):
+        """完成卸载操作"""
+        # 保存包名到历史记录
+        self._save_pkg_to_history(pkg_name)
+        # 清除包信息缓存
+        cache_manager.package_cache.delete(f"package_{pkg_name}")
+        self.update_status(f"应用 {pkg_name} 卸载成功", True)
+    
+    def _uninstall_by_deleting_path(self, pkg_name):
+        """通过删除安装路径的方式卸载应用"""
+        # 首先获取root权限
+        self.update_status("正在获取root权限...", True)
+        root_output, root_success = run_adb_command("adb root")
+        if root_success:
+            self.update_status("获取root权限成功", True)
+        else:
+            self.update_status("获取root权限失败，将继续尝试...", False)
+        
+        time.sleep(2)  # 等待root权限生效
+        
+        # 重新挂载系统分区为可写
+        self.update_status("正在重新挂载系统分区...", True)
+        remount_output, remount_success = run_adb_command("adb remount")
+        if remount_success:
+            self.update_status("重新挂载系统分区成功", True)
+        else:
+            self.update_status("重新挂载系统分区失败，将继续尝试...", False)
+        
+        # 获取应用安装路径
+        self.update_status("正在获取应用安装路径...", True)
+        path_output, path_success = run_adb_command(f"adb shell pm path {pkg_name}")
+        
+        if path_success and path_output and "package:" in path_output:
+            # 提取安装路径
+            install_path = path_output.replace("package:", "").strip()
+            if install_path:
+                self.update_status(f"获取到应用安装路径: {install_path}", True)
+                
+                # 获取应用数据目录
+                self.update_status("正在获取应用数据目录...", True)
+                data_output, data_success = run_adb_command(f"adb shell su -c \"ls /data/data | grep {pkg_name}\"")
+                
+                # 删除应用安装目录
+                self.update_status(f"正在删除应用安装目录: {install_path}", True)
+                delete_output, delete_success = run_adb_command(f"adb shell su -c \"rm -rf {install_path}\"")
+                
+                # 删除应用数据目录
+                if data_success and data_output:
+                    data_dirs = data_output.strip().split()
+                    for data_dir in data_dirs:
+                        if pkg_name in data_dir:
+                            data_path = f"/data/data/{data_dir}"
+                            self.update_status(f"正在删除应用数据目录: {data_path}", True)
+                            run_adb_command(f"adb shell su -c \"rm -rf {data_path}\"")
+                
+                if delete_success:
+                    # 验证卸载是否成功
+                    verify_output, verify_success = run_adb_command(f"adb shell pm path {pkg_name}")
+                    if not verify_success or "package:" not in verify_output:
+                        self._complete_uninstall(pkg_name, f"通过删除安装路径成功卸载应用: {install_path}")
+                        return
+                    else:
+                        self.update_status(f"删除安装路径后验证失败: 应用可能仍然存在", False)
+                else:
+                    self.update_status(f"删除安装路径失败: {delete_output}", False)
+            else:
+                self.update_status("无法获取有效的应用安装路径", False)
+        else:
+            self.update_status(f"无法获取应用安装路径: {path_output}", False)
+        
+        # 如果到这里说明所有方法都失败了
+        self.update_status(f"应用 {pkg_name} 卸载失败: 所有卸载方法均已尝试但未成功", False)
 
     @require_device_connected
     def package_list(self):
@@ -2062,7 +2161,7 @@ class ADBToolApp:
             "2. 点击'DisConnect ADB'断开所有连接设备。\n"
             "3. 点击'Browse'可选择需要安装的apk文件。\n"
             "4. 选择APK文件并点击'Force Install'安装应用。\n"
-            "5. 使用'Uninstall'卸载应用。\n"
+            "5. 使用'Uninstall'卸载应用（支持多级强制卸载，包括删除安装路径方式）。\n"
             "6. 点击'Package List'查看已安装应用。\n"
             "7. 使用'Clear Cache'清除应用缓存。\n"
             "8. 点击'Root'获取root权限。\n"
@@ -2087,7 +2186,7 @@ class ADBToolApp:
             "\n注意事项:\n"
             "1.确保设备已连接到同一网络。\n"
             "2.使用期间请保持ADB连接。\n"
-            "3.查询应用版本、清缓存、卸载应用、kill进程时需输入对应的包名。\n"
+            "3.查询应用版本、清缓存、卸载应用、kill进程时需输入对应的包名（卸载系统应用时可能需要root权限，工具会自动尝试多种卸载策略并验证卸载结果）。\n"
             "4.抓取ANR文件、日志、TV截屏、屏幕录制功能，会保存在指定目录，提示框会给出存储路径。\n"
             "5.串号查询功能,由于串号格式差异的原因,某些设备可能无法获取到正确的串号,请自行判断\n"
             "6.可自行调整输出框高度，鼠标可滚动查看历史信息。\n"
@@ -2109,7 +2208,7 @@ class ADBToolApp:
             ("连接 ADB", "adb connect <IP地址>"),
             ("断开所有ADB连接", "adb disconnect"),
             ("强制安装apk", "adb install -r -d <APK路径>"),
-            ("卸载当前包名应用", "adb uninstall <包名>"),
+            ("卸载当前包名应用", "adb uninstall <包名> (支持多级强制卸载，包括删除安装路径)"),
             ("获取已安装应用包名列表", "adb shell pm list packages"),
             ("清除应用缓存", "adb shell pm clear <包名>"),
             ("获取Root权限", "adb root"),
