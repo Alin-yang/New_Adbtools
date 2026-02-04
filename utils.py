@@ -6,13 +6,171 @@ import time
 from typing import Tuple, Optional, List
 from config import Config
 
-def run_adb_command(command: str, retries: int = None, timeout: int = None) -> Tuple[str, bool]:
-    """执行ADB命令并返回结果
+def get_connected_devices() -> List[str]:
+    """获取当前连接的所有设备列表
+    
+    Returns:
+        List[str]: 已连接设备的序列号/IP地址列表
+    """
+    try:
+        result = subprocess.run(
+            "adb devices", shell=True, check=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=5
+        )
+        output = result.stdout.decode('utf-8', errors='ignore')
+        devices = []
+        for line in output.splitlines()[1:]:  # 跳过第一行标题
+            # 检查行是否包含设备信息，排除模拟器和其他状态
+            if '\t' in line and 'device' in line and 'unauthorized' not in line and 'offline' not in line:
+                device_id = line.split('\t')[0].strip()
+                if device_id and device_id != 'List':  # 排除可能的错误输出
+                    # 额外验证设备是否真正可访问
+                    try:
+                        # 尝试对设备执行简单命令以验证其可达性
+                        validation_result = subprocess.run(
+                            f"adb -s {device_id} shell echo test", shell=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            timeout=3
+                        )
+                        if validation_result.returncode == 0:
+                            devices.append(device_id)
+                    except Exception:
+                        # 如果验证失败，跳过此设备
+                        continue
+        return devices
+    except Exception:
+        return []
+
+def get_unique_physical_devices() -> List[str]:
+    """获取唯一的物理设备列表（合并同一设备的不同连接方式）
+    
+    Returns:
+        List[str]: 唯一物理设备列表
+    """
+    try:
+        result = subprocess.run(
+            "adb devices -l", shell=True, check=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=5
+        )
+        output = result.stdout.decode('utf-8', errors='ignore')
+        
+        # 解析带有详细信息的设备列表
+        device_lines = output.splitlines()[1:]  # 跳过第一行标题
+        
+        unique_devices = {}  # 使用字典来去重，键是物理设备标识
+        
+        for line in device_lines:
+            # 检查行是否包含设备信息，排除模拟器和其他状态
+            if 'device' in line and 'unauthorized' not in line and 'offline' not in line:
+                # 使用更灵活的方式来分割设备ID和属性
+                # 第一个空白字符前的部分通常是设备ID
+                parts = line.split(None, 1)  # 按第一个空白字符分割
+                if parts:
+                    device_id = parts[0].strip()
+                    if not device_id:
+                        continue
+                    
+                    # 验证设备是否真正可访问
+                    try:
+                        validation_result = subprocess.run(
+                            f"adb -s {device_id} shell echo test", shell=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            timeout=3
+                        )
+                        if validation_result.returncode != 0:
+                            continue  # 跳过不可访问的设备
+                    except Exception:
+                        continue  # 跳过验证失败的设备
+                    
+                    # 提取设备属性信息
+                    attributes = parts[1] if len(parts) > 1 else ''
+                    
+                    # 尝试从属性中提取序列号等唯一标识符
+                    # 对于网络连接，提取IP地址部分
+                    if ':' in device_id:  # 网络连接
+                        ip_part = device_id.split(':')[0]
+                        # 尝试找到同一IP的USB连接设备作为唯一标识
+                        unique_key = ip_part
+                    else:  # USB连接
+                        unique_key = device_id
+                        
+                    # 如果还没有使用这个唯一键，或者当前设备ID更完整，则保存
+                    if unique_key not in unique_devices or len(device_id) > len(unique_devices[unique_key]):
+                        unique_devices[unique_key] = device_id
+        
+        return list(unique_devices.values())
+    except Exception:
+        # 如果失败，回退到原始方法
+        return get_connected_devices()
+
+
+def build_adb_command_with_device(command: str, target_ip: Optional[str] = None) -> str:
+    """构建带设备选择的ADB命令
+    
+    当连接多台设备时，自动添加 -s 参数指定目标设备
+    
+    Args:
+        command: 原始ADB命令
+        target_ip: 目标设备IP地址（可选，支持完整IP或简写）
+        
+    Returns:
+        str: 处理后的ADB命令
+    """
+    # 如果命令已经包含 -s 参数，直接返回
+    if ' -s ' in command:
+        return command
+    
+    # 获取当前连接的设备列表
+    devices = get_connected_devices()
+    
+    # 只有一台设备时，不需要指定设备
+    if len(devices) <= 1:
+        return command
+    
+    # 多台设备时，需要指定目标设备
+    if target_ip:
+        # 清理目标IP（去除空格和引号）
+        target_ip = target_ip.strip().strip('"').strip("'")
+        
+        # 标准化IP地址格式（确保包含端口号）
+        if ':' not in target_ip:
+            target_ip_with_port = f"{target_ip}:5555"
+        else:
+            target_ip_with_port = target_ip
+        
+        # 检查目标设备是否在已连接列表中
+        matched_device = None
+        for device in devices:
+            # 精确匹配
+            if device == target_ip_with_port or device == target_ip:
+                matched_device = device
+                break
+            # 如果输入的是简写IP（如 3.13），尝试匹配完整IP
+            elif target_ip in device:
+                matched_device = device
+                break
+        
+        if matched_device:
+            # 在 adb 命令后立即插入 -s 参数
+            if command.startswith('adb '):
+                return command.replace('adb ', f'adb -s {matched_device} ', 1)
+            elif command.startswith('adb'):
+                return f'adb -s {matched_device} {command[3:]}'
+    
+    # 如果没有指定目标IP或目标设备未连接，返回原命令（会操作第一台设备）
+    return command
+
+
+def run_adb_command(command: str, retries: int = None, timeout: int = None, target_device: Optional[str] = None) -> Tuple[str, bool]:
+    """执行ADB命令并返回结果（支持多设备）
     
     Args:
         command: ADB命令字符串
         retries: 重试次数，默认使用配置值
         timeout: 超时时间，默认使用配置值
+        target_device: 目标设备IP地址（多设备时使用）
         
     Returns:
         Tuple[str, bool]: (输出结果, 是否成功)
@@ -21,7 +179,10 @@ def run_adb_command(command: str, retries: int = None, timeout: int = None) -> T
         retries = Config.MAX_ADB_RETRIES
     if timeout is None:
         timeout = Config.ADB_COMMAND_TIMEOUT
-        
+    
+    # 构建带设备选择的命令
+    command = build_adb_command_with_device(command, target_device)
+    
     last_error = ""
     
     for attempt in range(retries):
@@ -398,6 +559,26 @@ def get_accurate_package_version(package_name: str) -> Optional[str]:
                     continue
     
     return None
+
+def get_user_defined_log_path(app_instance=None) -> str:
+    """获取用户自定义的数据存储路径
+    
+    Args:
+        app_instance: 应用实例，用于获取数据路径输入框的值
+        
+    Returns:
+        str: 用户自定义的路径或默认路径
+    """
+    if app_instance and hasattr(app_instance, 'log_path_entry'):
+        user_path = app_instance.log_path_entry.get().strip()
+        if user_path:
+            # 确保路径以分隔符结尾
+            if not user_path.endswith('\\') and not user_path.endswith('/'):
+                user_path += os.sep
+            return user_path
+    
+    # 如果无法获取用户路径，返回默认路径
+    return Config.get_actual_path(Config.DEFAULT_LOG_PATH)
 
 
 def is_valid_package_name(pkg_name: str) -> bool:

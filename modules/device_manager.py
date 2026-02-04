@@ -155,7 +155,7 @@ class DeviceManager:
         Returns:
             bool: 重启命令是否执行成功
         """
-        output, success = run_adb_command("adb reboot")
+        output, success = self.app.run_adb_with_target("adb reboot")
         if success:
             self.app.update_status("设备重启中...", True)
             # 清空设备缓存，因为重启后连接状态会发生变化

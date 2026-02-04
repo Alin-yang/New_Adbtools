@@ -14,7 +14,8 @@ from utils import (
     extract_version_info, ensure_directory,
     get_next_filename, load_ip_history, save_ip_history,
     load_pkg_history, save_pkg_history, is_valid_package_name,
-    get_accurate_package_version, calculate_optimal_workers, format_file_size
+    get_accurate_package_version, calculate_optimal_workers, format_file_size,
+    get_connected_devices
 )
 from config import Config
 from cache_manager import cache_manager
@@ -44,14 +45,46 @@ class ADBToolApp:
         if hasattr(Config, 'MIN_WINDOW_SIZE'):
             self.root.minsize(*Config.MIN_WINDOW_SIZE)
         self.layout_module = layout_module
+        
+        # 性能优化：添加防抖机制
+        self._status_update_timer = None
+        self._pending_status_message = None
+        self._last_status_time = 0
+        self._status_throttle_interval = 0.1  # 100ms节流间隔
+        
         self._init_variables()
         self._setup_gui()
-        # 加载IP历史记录
-        self._load_ip_history()
-        # 加载包名历史记录
-        self._load_pkg_history()
-        # 确保必要目录存在
-        Config.ensure_directories()
+        
+        # 延迟加载非关键组件以提高启动速度
+        self.root.after(100, self._delayed_initialization)
+
+    def _delayed_initialization(self):
+        """延迟初始化非关键组件"""
+        # 在后台线程中执行设备检测（使用原有的完整检测逻辑）
+        device_thread = threading.Thread(target=self._async_device_detection_full, daemon=True)
+        device_thread.start()
+        
+        # 延迟加载历史记录
+        self.root.after(200, self._load_ip_history)
+        self.root.after(300, self._load_pkg_history)
+        self.root.after(400, Config.ensure_directories)
+
+    def _async_device_detection_full(self):
+        """完整的异步设备检测（包含IP历史记录更新）"""
+        try:
+            # 在主线程中执行完整的设备检测逻辑
+            self.root.after(0, self._detect_connected_devices_on_startup)
+        except Exception as e:
+            self.root.after(0, lambda: self.update_status(f"启动时设备检测失败: {str(e)}", False))
+
+    def _async_device_detection(self):
+        """异步设备检测（简化版本）"""
+        try:
+            connected_devices = get_connected_devices()
+            # 在主线程中更新UI
+            self.root.after(0, lambda: self._handle_detected_devices(connected_devices))
+        except Exception as e:
+            self.root.after(0, lambda: self.update_status(f"启动时设备检测失败: {str(e)}", False))
 
     def _init_variables(self) -> None:
         """
@@ -77,6 +110,10 @@ class ADBToolApp:
         self.recording_subprocess = None
         self.recording_thread = None
         self.recording_file_path = None
+        
+        # 设备状态显示控制变量
+        self.last_device_status_time = 0
+        self.device_status_cooldown = 2  # 2秒冷却时间，避免频繁重复显示
 
     def _load_ip_history(self):
         """加载IP历史记录到下拉框"""
@@ -90,6 +127,64 @@ class ADBToolApp:
         if hasattr(self, 'pkg_combobox'):
             self.pkg_combobox['values'] = self.pkg_history
     
+    def _detect_connected_devices_on_startup(self):
+        """启动时检测已连接的设备并更新IP历史记录"""
+        try:
+            # 获取当前连接的设备
+            connected_devices = get_connected_devices()
+            
+            if connected_devices:
+                # 提取IP地址部分（去除端口号）
+                detected_ips = []
+                for device in connected_devices:
+                    # 如果是IP:端口格式，只取IP部分
+                    if ':' in device:
+                        ip_part = device.split(':')[0]
+                        if ip_part not in detected_ips:
+                            detected_ips.append(ip_part)
+                    else:
+                        # 如果是纯IP或设备序列号，直接添加
+                        if device not in detected_ips:
+                            detected_ips.append(device)
+                
+                # 将检测到的IP添加到历史记录中（保持原有顺序，新IP放在前面）
+                for ip in detected_ips:
+                    if ip not in self.ip_history:
+                        self.ip_history.insert(0, ip)
+                    
+                # 限制历史记录数量
+                self.ip_history = self.ip_history[:Config.MAX_IP_HISTORY]
+                
+                # 保存到文件
+                save_ip_history(self.ip_history)
+                
+                # 更新下拉框
+                if hasattr(self, 'ip_combobox'):
+                    self.ip_combobox['values'] = self.ip_history
+                    # 如果输入框为空或只有默认值，设置第一个检测到的IP
+                    current_value = self.ip_combobox.get().strip()
+                    if not current_value or current_value == "192.168." and self.ip_history:
+                        self.ip_combobox.delete(0, tk.END)
+                        self.ip_combobox.insert(0, self.ip_history[0])
+                        # 触发IP变更事件以更新连接状态
+                        self.on_ip_changed()
+                
+                # 显示检测结果
+                self.update_status(f"启动时检测到 {len(detected_ips)} 个已连接设备: {', '.join(detected_ips)}", True)
+            else:
+                # 没有检测到设备时的提示
+                self.update_status("启动时未检测到已连接的设备", True)
+                
+        except Exception as e:
+            self.update_status(f"启动时设备检测失败: {str(e)}", False)
+    
+    def _handle_detected_devices(self, devices):
+        """处理检测到的设备"""
+        if devices:
+            self.update_status(f"启动时检测到 {len(devices)} 台已连接设备", True)
+        else:
+            self.update_status("启动时未检测到已连接的设备", True)
+
     def _save_pkg_to_history(self, pkg_name: str) -> None:
         """保存包名到历史记录
         
@@ -116,6 +211,150 @@ class ADBToolApp:
             return self.pkg_entry.get().strip()
         return None
 
+    def run_adb_with_target(self, command: str, retries: int = None, timeout: int = None) -> Tuple[str, bool]:
+        """执行ADB命令（支持多设备）
+        
+        自动从IP输入框获取目标设备IP，并传递给底层命令执行函数
+        
+        Args:
+            command: ADB命令字符串
+            retries: 重试次数
+            timeout: 超时时间
+            
+        Returns:
+            Tuple[str, bool]: (输出结果, 是否成功)
+        """
+        target_ip = self.get_ip_address()
+        return run_adb_command(command, retries=retries, timeout=timeout, target_device=target_ip)
+    
+    def on_ip_changed(self, event=None):
+        """当IP地址改变时触发，显示当前设备状态"""
+        # 立即更新连接状态（不使用防抖）
+        self.update_connection_status()
+        
+        # 对于下拉框选择事件，立即显示设备状态
+        current_ip = self.get_ip_address()
+        if current_ip and current_ip != "192.168.":
+            # 区分不同类型的事件
+            if event and event.type == 'VirtualEvent' and event.name == 'ComboboxSelected':
+                # 下拉框选择事件，立即显示
+                self.show_current_device_status(force_display=True)
+            elif not event:
+                # 程序调用，立即显示
+                self.show_current_device_status(force_display=True)
+            else:
+                # 其他事件（如FocusOut），使用正常的冷却机制
+                self.show_current_device_status(force_display=False)
+
+    def update_connection_status(self, ip_address: Optional[str] = None):
+        """更新连接状态标签（优化版本，减少不必要的设备检查）"""
+        if not hasattr(self, 'connection_status_label'):
+            return
+        
+        if not ip_address:
+            ip_address = self.get_ip_address()
+        
+        if not ip_address or ip_address == "192.168.":
+            self.connection_status_label.config(text="未连接", foreground="gray")
+            return
+        
+        # 优化：只在必要时检查设备连接状态
+        # 检查是否已经有缓存的结果
+        cached_status = cache_manager.get_device_status(ip_address)
+        if cached_status is not None:
+            # 使用缓存结果
+            if cached_status:
+                self.connection_status_label.config(text="✓ 已连接", foreground="green")
+            else:
+                self.connection_status_label.config(text="✗ 未连接", foreground="red")
+            return
+        
+        # 只有缓存失效时才检查设备
+        devices = get_connected_devices()
+        
+        # 标准化IP地址
+        if ':' not in ip_address:
+            ip_with_port = f"{ip_address}:5555"
+        else:
+            ip_with_port = ip_address
+        
+        # 检查是否匹配任何已连接设备
+        is_connected = False
+        for device in devices:
+            if device == ip_with_port or device == ip_address or ip_address in device:
+                is_connected = True
+                break
+        
+        # 更新缓存
+        cache_manager.set_device_status(ip_address, is_connected)
+        
+        if is_connected:
+            self.connection_status_label.config(text="✓ 已连接", foreground="green")
+        else:
+            self.connection_status_label.config(text="✗ 未连接", foreground="red")
+
+    def show_device_info(self):
+        """显示当前连接的设备信息"""
+        devices = get_connected_devices()
+        current_ip = self.get_ip_address()
+        
+        if not devices:
+            self.update_status("当前没有连接的设备", False)
+            self.update_connection_status()
+            return
+        
+        device_info = f"已连接 {len(devices)} 台设备:\n"
+        for i, device in enumerate(devices, 1):
+            marker = " ← 当前选中" if current_ip and device.startswith(current_ip.split(':')[0]) else ""
+            device_info += f"  {i}. {device}{marker}\n"
+        
+        self.update_status(device_info, True)
+        self.update_connection_status()
+    
+    def show_current_device_status(self, force_display=False):
+        """显示当前连接设备状态，用于在执行功能前显示设备信息
+        
+        Args:
+            force_display: 是否强制显示，绕过冷却机制
+        """
+        # 检查冷却时间，避免频繁重复显示
+        import time
+        current_time = time.time()
+        if not force_display and (current_time - self.last_device_status_time) < self.device_status_cooldown:
+            return
+        
+        all_devices = get_connected_devices()
+        current_ip = self.get_ip_address()
+        
+        # 构造状态信息
+        status_info = f"📱 设备状态: 已连接 {len(all_devices)} 台设备"
+        
+        # 标识当前控制的设备
+        if current_ip:
+            # 查找与当前IP匹配的设备
+            current_device = None
+            for device in all_devices:
+                if current_ip in device or device.startswith(current_ip.split(':')[0]):
+                    current_device = device
+                    break
+            
+            if current_device:
+                status_info += f", 当前控制: {current_device}"
+            else:
+                # 只有在IP格式有效时才显示未连接信息
+                import re
+                ip_pattern = r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(?::\d+)?$'
+                if re.match(ip_pattern, current_ip) or current_ip.startswith('192.168.'):
+                    status_info += f", 当前选中IP: {current_ip} (未连接)"
+                else:
+                    status_info += ", 未选择目标设备或IP格式无效"
+        else:
+            status_info += ", 未选择目标设备"
+        
+        self.update_status(status_info, True)
+        # 更新上次显示时间
+        self.last_device_status_time = current_time
+
 
 
     def _setup_gui(self) -> None:
@@ -132,13 +371,19 @@ class ADBToolApp:
         self.status_text.tag_configure("success", foreground="green")
         self.status_text.tag_configure("error", foreground="red")
         self.status_text.tag_configure("info", foreground="blue")
-
-        # 设置日志路径输入框的默认值
-        self.log_path_entry.delete(0, tk.END)
-        self.log_path_entry.insert(0, self.default_log_path)
         
-        # 设置拖拽功能
-        self._setup_drag_drop()
+        # 使用after确保所有GUI组件都创建完成后再进行后续操作
+        self.root.after(100, self._setup_post_components)
+    
+    def _setup_post_components(self):
+        """设置GUI组件创建完成后的操作"""
+        # 设置默认值
+        try:
+            if hasattr(self, 'log_path_entry') and self.log_path_entry.winfo_exists():
+                self.log_path_entry.delete(0, tk.END)
+                self.log_path_entry.insert(0, self.default_log_path)
+        except Exception:
+            pass
         
         # 设置拖拽功能
         self._setup_drag_drop()
@@ -171,10 +416,10 @@ class ADBToolApp:
 
     def choose_log_path(self) -> None:
         """
-        选择日志存储路径
+        选择数据存储路径
         
-        打开目录选择对话框让用户选择日志存储目录，
-        并更新日志路径输入框。
+        打开目录选择对话框让用户选择数据存储目录，
+        并更新路径输入框。
         """
         selected_path = filedialog.askdirectory(
             initialdir=self.log_path_entry.get(),
@@ -197,7 +442,7 @@ class ADBToolApp:
             return
 
         try:
-            output, success = run_adb_command(f"adb shell am force-stop {pkg_name}")
+            output, success = self.run_adb_with_target(f"adb shell am force-stop {pkg_name}")
             if success:
                 # 保存包名到历史记录
                 self._save_pkg_to_history(pkg_name)
@@ -222,12 +467,16 @@ class ADBToolApp:
     # @require_device_connected
     def connect_adb(self):
         """连接ADB设备"""
+        # 显示当前设备状态
+        self.show_current_device_status()
+        
         ip_address = self.get_ip_address()
         if not ip_address:
             self.update_status(f"请输入IP地址", False)
+            self.update_connection_status()
             return False
         
-        output, success = run_adb_command(f"adb connect {ip_address}")
+        output, success = self.run_adb_with_target(f"adb connect {ip_address}")
         if "connected" in output.lower():
             # 保存新的IP到历史记录
             if ip_address not in self.ip_history:
@@ -236,18 +485,26 @@ class ADBToolApp:
                 if hasattr(self, 'ip_combobox'):
                     self.ip_combobox['values'] = self.ip_history
             self.update_status(output, True)
+            # 更新连接状态
+            self.update_connection_status(ip_address)
         else:
             self.update_status(output, False)
+            self.update_connection_status(ip_address)
 
 
     @require_device_connected
     def disconnect_adb(self):
         """断开ADB连接"""
-        output, success = run_adb_command("adb disconnect")
+        # 显示当前设备状态
+        self.show_current_device_status()
+        
+        output, success = self.run_adb_with_target("adb disconnect")
         if "disconnected" in output.lower():
             self.update_status(output, True)
         else:
             self.update_status(output, False)
+        # 更新连接状态
+        self.update_connection_status()
 
     def check_device_connected(self, ip_address: Optional[str] = None) -> bool:
         """检查设备连接状态(使用新的缓存系统)"""
@@ -262,6 +519,7 @@ class ADBToolApp:
         if cached_status is not None:
             return cached_status
             
+        # 使用全局命令检查设备列表，不指定目标设备
         output, success = run_adb_command("adb devices")
         if success:
             devices = [line.split("\t")[0] for line in output.splitlines()[1:] if "device" in line]
@@ -318,12 +576,28 @@ class ADBToolApp:
     def _run_install_with_progress(self, apk_path):
         """实际执行安装并捕获输出"""
         try:
+            # 获取目标设备IP
+            target_ip = self.get_ip_address()
+            
+            # 获取所有已连接设备并构建支持多设备的安装命令
+            from utils import build_adb_command_with_device
+            
             # 获取APK大小用于计算进度
             apk_size = os.path.getsize(apk_path)
             current_size = 0
             
+            # 构建支持多设备的安装命令
+            install_cmd = f"adb install -r -d \"{apk_path}\""
+            install_cmd = build_adb_command_with_device(install_cmd, target_ip)
+            
+            # 显示当前操作的设备信息
+            if target_ip:
+                self._update_install_status(f"正在向设备 {target_ip} 安装应用...")
+            else:
+                self._update_install_status("正在安装应用...")
+            
             process = subprocess.Popen(
-                f"adb install -r -d {apk_path}",
+                install_cmd,
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -335,11 +609,13 @@ class ADBToolApp:
             installing_started = False
 
             # 实时捕获输出
+            full_output = []  # 保存所有输出用于调试
             while True:
                 output = process.stdout.readline()
                 if output == '' and process.poll() is not None:
                     break
                 if output:
+                    full_output.append(output)  # 保存输出
                     stripped_output = output.strip()
                     
                     # 检测安装开始
@@ -349,6 +625,7 @@ class ADBToolApp:
                         self.progress["maximum"] = 100
                         self.progress["value"] = 0
                         current_size = 0
+                        self._update_install_status("安装开始，正在传输数据...")
                         continue
 
                     # 更新进度
@@ -358,13 +635,20 @@ class ADBToolApp:
                         progress = min(95, int((current_size / apk_size) * 100))
                         self.progress["value"] = progress
                         
+                        # 显示传输进度和流量信息
+                        transferred = format_file_size(current_size)
+                        total = format_file_size(apk_size)
+                        self._update_install_status(f"正在传输... {progress}% ({transferred} / {total})")
+                        
                         if "Success" in stripped_output:
                             self.progress["value"] = 100
                             self._update_install_status("安装成功")
                         elif "Failure" in stripped_output:
                             self._update_install_status(f"安装失败: {stripped_output}")
                         elif not any(keyword in stripped_output for keyword in filter_keywords):
-                            self._update_install_status(stripped_output)
+                            # 只有在不是过滤关键词时才显示详细输出
+                            if stripped_output:
+                                self._update_install_status(stripped_output)
 
             # 获取最终结果
             return_code = process.poll()
@@ -374,8 +658,20 @@ class ADBToolApp:
             self.progress["mode"] = "indeterminate"
             self._hide_progress()
             
-            final_output = "安装成功" if success else f"安装失败 (code {return_code})"
+            # 构建详细的错误信息
+            if not success:
+                error_detail = "\\n".join(full_output[-5:]) if full_output else "无输出"  # 显示最后5行
+                final_output = f"安装失败 (code {return_code})\\n详细信息:\\n{error_detail}"
+            else:
+                final_output = "安装成功"
+            
             self._update_install_status(final_output)
+            
+            # 如果安装成功，显示APK信息
+            if success:
+                file_size = format_file_size(os.path.getsize(apk_path))
+                apk_name = os.path.basename(apk_path)
+                self.update_status(f"安装完成\\n文件: {apk_name}\\n大小: {file_size}\\n目标设备: {target_ip if target_ip else '未知'}", True)
             
         except Exception as e:
             self._update_install_status(f"安装过程出错: {str(e)}")
@@ -407,7 +703,7 @@ class ADBToolApp:
         )
         
         if result:
-            output, success = run_adb_command(f"adb uninstall {pkg_name}")
+            output, success = self.run_adb_with_target(f"adb uninstall {pkg_name}")
             if success:
                 # 保存包名到历史记录
                 self._save_pkg_to_history(pkg_name)
@@ -422,7 +718,7 @@ class ADBToolApp:
         """获取已安装应用包名列表及其版本(优化版，使用动态线程池)"""
         try:
             # 获取所有已安装包名
-            output, success = run_adb_command("adb shell pm list packages")
+            output, success = self.run_adb_with_target("adb shell pm list packages")
             if not success:
                 self.update_status("获取应用列表失败", False)
                 return
@@ -513,7 +809,7 @@ class ADBToolApp:
         )
         
         if result:
-            output, success = run_adb_command(f"adb shell pm clear {pkg_name}")
+            output, success = self.run_adb_with_target(f"adb shell pm clear {pkg_name}")
             if success:
                 # 保存包名到历史记录
                 self._save_pkg_to_history(pkg_name)
@@ -526,20 +822,24 @@ class ADBToolApp:
     @require_device_connected
     def root_device(self):
         """获取root权限"""
-        output, success = run_adb_command("adb root")
+        output, success = self.run_adb_with_target("adb root")
         self.update_status(output, success)
 
     @require_device_connected
     def pull_anr_file(self):
         """拉取ANR文件"""
-        anr_dir = ensure_directory(Config.DEFAULT_ANR_PATH)
-        output, success = run_adb_command(f"adb pull /data/anr {anr_dir}")
+        # 获取用户自定义的日志存储路径
+        from utils import get_user_defined_log_path
+        user_log_path = get_user_defined_log_path(self)
+        # 在用户路径下创建anr_files子目录
+        anr_dir = ensure_directory(os.path.join(user_log_path, "anr_files"))
+        output, success = self.run_adb_with_target(f"adb pull /data/anr \"{anr_dir}\"")
         self.update_status(f"ANR文件已保存至: {anr_dir}", success)
 
     @require_device_connected
     def remount(self):
         """重新挂载分区"""
-        output, success = run_adb_command("adb remount")
+        output, success = self.run_adb_with_target("adb remount")
         self.update_status(output, success)
 
     @require_device_connected
@@ -550,7 +850,7 @@ class ADBToolApp:
             self.update_status("请输入包名", False)
             return
 
-        output, success = run_adb_command(f"adb shell pm dump {pkg_name}")
+        output, success = self.run_adb_with_target(f"adb shell pm dump {pkg_name}")
         if success:
             version = extract_version_info(output)
             if version:
@@ -573,7 +873,7 @@ class ADBToolApp:
         )
         
         if result:
-            output, success = run_adb_command("adb reboot")
+            output, success = self.run_adb_with_target("adb reboot")
             if success:
                 self.update_status("设备重启中...", True)
                 # 清空设备缓存，因为重启后连接状态会发生变化
@@ -592,7 +892,7 @@ class ADBToolApp:
             self.update_status(f"Android版本: {cached_version}", True)
             return
             
-        output, success = run_adb_command("adb shell getprop ro.build.version.release")
+        output, success = self.run_adb_with_target("adb shell getprop ro.build.version.release")
         if success:
             version = output.strip()
             cache_manager.set_system_info("android_version", version)
@@ -612,10 +912,13 @@ class ADBToolApp:
             time.sleep(0.5)
             
             # 先清理可能存在的旧截图
-            run_adb_command("adb shell rm -f /sdcard/screenshot.png")
+            self.run_adb_with_target("adb shell rm -f /sdcard/screenshot.png")
             
-            # 创建保存目录
-            save_dir = ensure_directory(Config.DEFAULT_SCREENSHOT_PATH)
+            # 获取用户自定义的日志存储路径
+            from utils import get_user_defined_log_path
+            user_log_path = get_user_defined_log_path(self)
+            # 在用户路径下创建screenshots子目录
+            save_dir = ensure_directory(os.path.join(user_log_path, "screenshots"))
             new_file = get_next_filename(os.path.join(save_dir, "截图"), ".png")
             
             # 最多尝试指定次数截图
@@ -625,21 +928,21 @@ class ADBToolApp:
             
             for attempt in range(max_retries):
                 # 截图到设备
-                output1, success1 = run_adb_command("adb shell screencap -p /sdcard/screenshot.png")
+                output1, success1 = self.run_adb_with_target("adb shell screencap -p /sdcard/screenshot.png")
                 if not success1:
                     error_msg = output1
                     time.sleep(1)  # 等待1秒后重试
                     continue
                 
                 # 验证文件是否生成
-                output2, success2 = run_adb_command("adb shell ls -l /sdcard/screenshot.png")
+                output2, success2 = self.run_adb_with_target("adb shell ls -l /sdcard/screenshot.png")
                 if not success2 or "No such file" in output2:
                     error_msg = "截图文件未生成"
                     time.sleep(1)  # 等待1秒后重试
                     continue
                 
                 # 拉取文件到电脑
-                output3, success3 = run_adb_command(f"adb pull /sdcard/screenshot.png {new_file}")
+                output3, success3 = self.run_adb_with_target(f"adb pull /sdcard/screenshot.png {new_file}")
                 if not success3:
                     error_msg = output3
                     time.sleep(1)  # 等待1秒后重试
@@ -658,7 +961,7 @@ class ADBToolApp:
                 time.sleep(1)  # 等待1秒后重试
             
             # 清理设备上的临时文件
-            run_adb_command("adb shell rm -f /sdcard/screenshot.png")
+            self.run_adb_with_target("adb shell rm -f /sdcard/screenshot.png")
             
             if success:
                 file_size = format_file_size(os.path.getsize(new_file))
@@ -719,7 +1022,7 @@ class ADBToolApp:
             return
             
         # 测试screenrecord命令是否可用
-        test_output, test_success = run_adb_command("adb shell screenrecord --help")
+        test_output, test_success = self.run_adb_with_target("adb shell screenrecord --help")
         if not test_success:
             self.update_status(f"ADB screenrecord命令不可用: {test_output}", False)
             return
@@ -826,7 +1129,7 @@ class ADBToolApp:
             device_temp_file = "/sdcard/temp_recording.mp4"
             
             # 先清理可能存在的旧文件
-            run_adb_command(f"adb shell rm -f {device_temp_file}")
+            self.run_adb_with_target(f"adb shell rm -f {device_temp_file}")
             
             self.update_status("开始录制屏幕，保存中...", True)
 
@@ -834,12 +1137,15 @@ class ADBToolApp:
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
 
             # 启动screenrecord进程（使用较低的分辨率和码率以保证兼容性）
-            self.recording_subprocess = subprocess.Popen([
-                "adb", "shell", "screenrecord", 
-                "--bit-rate", "4000000",  # 4Mbps
-                "--size", "1280x720",     # 720p
-                device_temp_file
-            ],
+            from utils import build_adb_command_with_device
+            target_ip = self.get_ip_address()
+            record_cmd = build_adb_command_with_device(f"adb shell screenrecord --bit-rate 4000000 --size 1280x720 {device_temp_file}", target_ip)
+            
+            # 分割命令为参数列表
+            cmd_parts = record_cmd.split()
+            
+            self.recording_subprocess = subprocess.Popen(
+                cmd_parts,
                 stderr=subprocess.PIPE,
                 creationflags=creation_flags,
                 text=True
@@ -877,17 +1183,17 @@ class ADBToolApp:
             self.update_status("录制进程已停止，正在从设备下载文件...", True)
             
             # 检查设备文件是否存在
-            check_output, check_success = run_adb_command(f"adb shell ls -la {device_temp_file}")
+            check_output, check_success = self.run_adb_with_target(f"adb shell ls -la {device_temp_file}")
             if not check_success or "No such file" in check_output:
                 self.update_status(f"设备上的录制文件不存在: {device_temp_file}", False)
                 return
             
             # 从设备上下载录制文件
-            pull_output, pull_success = run_adb_command(f'adb pull "{device_temp_file}" "{self.recording_file_path}"')
+            pull_output, pull_success = self.run_adb_with_target(f'adb pull "{device_temp_file}" "{self.recording_file_path}"')
             
             if pull_success:
                 # 清理设备上的临时文件
-                run_adb_command(f"adb shell rm -f {device_temp_file}")
+                self.run_adb_with_target(f"adb shell rm -f {device_temp_file}")
                 
                 # 验证文件确实下载成功
                 if os.path.exists(self.recording_file_path):
@@ -971,7 +1277,7 @@ class ADBToolApp:
             return
             
         # 测试ADB logcat命令是否可用
-        test_output, test_success = run_adb_command("adb logcat -d -t 1")
+        test_output, test_success = self.run_adb_with_target("adb logcat -d -t 1")
         if not test_success:
             self.update_status(f"ADB logcat命令不可用: {test_output}", False)
             return
@@ -1186,8 +1492,16 @@ class ADBToolApp:
 
             # 启动logcat进程
             try:
+                # 获取目标设备IP并构建支持多设备的命令
+                from utils import build_adb_command_with_device
+                target_ip = self.get_ip_address()
+                logcat_cmd = build_adb_command_with_device("adb logcat -v time *:V", target_ip)
+                
+                # 分割命令为参数列表
+                cmd_parts = logcat_cmd.split()
+                
                 self.logcat_subprocess = subprocess.Popen(
-                    ["adb", "logcat", "-v", "time", "*:V"],
+                    cmd_parts,
                     stdout=f,
                     stderr=subprocess.PIPE,
                     creationflags=creation_flags,
@@ -1318,7 +1632,7 @@ class ADBToolApp:
         )
         
         if result:
-            output, success = run_adb_command("adb logcat -c")
+            output, success = self.run_adb_with_target("adb logcat -c")
             if success:
                 self.update_status("日志清除成功", True)
             else:
@@ -1331,13 +1645,13 @@ class ADBToolApp:
         """获取当前打开应用包名"""
         try:
             # 尝试第一个命令
-            output, success = run_adb_command("adb shell dumpsys window windows | findstr mCurrentFocus")
+            output, success = self.run_adb_with_target("adb shell dumpsys window windows | findstr mCurrentFocus")
             if not success or not output:
                 # 如果第一个命令失败，尝试第二个命令
-                output, success = run_adb_command("adb shell dumpsys window | findstr mCurrentFocus")
+                output, success = self.run_adb_with_target("adb shell dumpsys window | findstr mCurrentFocus")
                 if not success or not output:
                     # 如果还是失败，尝试第三个命令
-                    output, success = run_adb_command("adb shell dumpsys activity activities | findstr mResumedActivity")
+                    output, success = self.run_adb_with_target("adb shell dumpsys activity activities | findstr mResumedActivity")
                     if not success or not output:
                         self.update_status("获取当前应用包名失败", False)
                         return
@@ -1407,7 +1721,7 @@ class ADBToolApp:
             return
         
         try:
-            output, success = run_adb_command(f"adb shell pm path {pkg_name}")
+            output, success = self.run_adb_with_target(f"adb shell pm path {pkg_name}")
             if success and output:
                 # 保存包名到历史记录
                 self._save_pkg_to_history(pkg_name)
@@ -1421,47 +1735,7 @@ class ADBToolApp:
             self.update_status(f"获取安装路径失败: {str(e)}", False)
 
     # 帮助文档
-    def show_help(self):
-        """显示帮助信息"""
-        help_text = (
-            "操作说明:\n"
-            "1. 输入设备的IP地址并点击'Connect ADB'连接设备。\n"
-            "2. 点击'DisConnect ADB'断开所有连接设备。\n"
-            "3. 点击'Browse'可选择需要安装的apk文件。\n"
-            "4. 选择APK文件并点击'Force Install'安装应用。\n"
-            "5. 使用'Uninstall'卸载应用。\n"
-            "6. 点击'Package List'查看已安装应用。\n"
-            "7. 使用'Clear Cache'清除应用缓存。\n"
-            "8. 点击'Root'获取root权限。\n"
-            "9. 点击'Pull_ANR'抓取ANR文件。\n"
-            "10 点击'Remount'重新挂载设备。\n"
-            "11. 点击'Get Version'查询应用版本。\n"
-            "12. 点击'Reboot'重启设备。\n"
-            "13. 点击'Android Version'查询TVAndroid版本。\n"
-            "14. 点击'Start Logcat'开始日志抓取。\n"
-            "15. 点击'Stop  Logcat'停止日志抓取。\n"
-            "16. 点击'Screencap'截取TV屏幕图。\n"
-            "17. 点击'Get_SN'获取串号信息。\n"
-            "18. 点击'Help'查看帮助信息。\n"
-            "19. 点击'Get Package Name'自动获取当前应用包名并填充包名。\n"
-            "20. 点击'LogClear'清除设备日志缓冲区（包括系统日志和应用日志）。\n"
-            "21. 点击'Browse_Log_Path'选择日志保存路径，若不选择，默认保存到D盘根目录。\n"
-            "22. 点击'Kill_All_Processes'强制kill当前应用进程。\n"
-            "23. 点击'Get_PackageName'获取当前打开应用包名,包名会自动填充到输入框中。\n"
-            "24. 点击'开始屏幕录制'开始录制设备屏幕。\n"
-            "25. 点击'停止屏幕录制'结束录制并保存视频文件。\n"
-            
-            "\n注意事项:\n"
-            "1.确保设备已连接到同一网络。\n"
-            "2.使用期间请保持ADB连接。\n"
-            "3.查询应用版本、清缓存、卸载应用、kill进程时需输入对应的包名。\n"
-            "4.抓取ANR文件、日志、TV截屏、屏幕录制功能，会保存在指定目录，提示框会给出存储路径。\n"
-            "5.串号查询功能,由于串号格式差异的原因,某些设备可能无法获取到正确的串号,请自行判断\n"
-            "6.可自行调整输出框高度，鼠标可滚动查看历史信息。\n"
-            "7.屏幕录制功能需要Android 4.4+，且设备支持screenrecord命令。\n"
-        )
-        # messagebox.showinfo("操作说明和注意事项", help_text)
-        self.update_status(help_text, True)
+
 
     def show_all_adb_commands(self):
         """输出所有功能按钮及其对应的adb命令"""
@@ -1497,12 +1771,10 @@ class ADBToolApp:
 
     def _setup_drag_drop(self):
         """设置拖拽APK文件功能"""
-        
         # 先设置占位符文本
         def setup_placeholder():
             if not self.apk_entry.get():
                 self.apk_entry.insert(0, "可直接拖拽APK文件到此处...")
-                # ttk.Entry 不支持 fg 参数，所以我们使用另一种方式
                 
         def on_focus_in(event):
             if self.apk_entry.get() == "可直接拖拽APK文件到此处...":
@@ -1553,30 +1825,39 @@ class ADBToolApp:
             def on_drag_enter(event):
                 """鼠标进入拖拽区域时的视觉反馈"""
                 self.apk_entry.config(background="lightblue")
-                return tkdnd.COPY
-                
+            
             def on_drag_leave(event):
-                """鼠标离开拖拽区域时恢复正常颜色"""
+                """鼠标离开拖拽区域时恢复原样"""
                 self.apk_entry.config(background="white")
             
-            # 绑定拖拽事件
+            # 注册拖拽事件
             self.apk_entry.drop_target_register(DND_FILES)
-            self.apk_entry.dnd_bind('<<DropEnter>>', on_drag_enter)
-            self.apk_entry.dnd_bind('<<DropLeave>>', on_drag_leave) 
             self.apk_entry.dnd_bind('<<Drop>>', on_drop)
-            
-            self.update_status("🚀 拖拽功能已启用！可直接拖拽APK文件到输入框", True)
+            self.apk_entry.dnd_bind('<<DragEnter>>', on_drag_enter)
+            self.apk_entry.dnd_bind('<<DragLeave>>', on_drag_leave)
             
         except ImportError:
-            # tkinterdnd2 未安装
-            self.update_status("⚠️ 拖拽功能不可用，请使用'选择安装包路径'按钮", False)
-            self.update_status("💡 提示：可运行 install_drag_support.bat 安装拖拽支持", True)
+            # 如果没有安装tkinterdnd2，提供基本的文件选择功能
+            def browse_apk_file():
+                file_path = filedialog.askopenfilename(
+                    title="选择APK文件",
+                    filetypes=[("APK文件", "*.apk"), ("所有文件", "*.*")]
+                )
+                if file_path:
+                    self.apk_entry.delete(0, tk.END)
+                    self.apk_entry.insert(0, file_path)
+                    self.update_status(f"已选择APK文件: {os.path.basename(file_path)}", True)
             
-        except Exception as e:
-            # 其他错误
-            self.update_status(f"⚠️ 拖拽功能初始化失败: {str(e)}", False)
-            self.update_status("💡 提示：可运行 install_drag_support.bat 安装拖拽支持", True)
+            # 为apk_entry添加右键菜单
+            def show_context_menu(event):
+                context_menu = tk.Menu(self.root, tearoff=0)
+                context_menu.add_command(label="浏览文件", command=browse_apk_file)
+                context_menu.add_separator()
+                context_menu.add_command(label="清空", command=lambda: self.apk_entry.delete(0, tk.END))
+                context_menu.post(event.x_root, event.y_root)
             
+            self.apk_entry.bind("<Button-3>", show_context_menu)
+
     def show_cache_stats(self):
         """显示缓存统计信息"""
         stats = cache_manager.get_all_stats()
@@ -1601,6 +1882,29 @@ class ADBToolApp:
             self.update_status("已清空所有缓存", True)
         else:
             self.update_status("已取消清空缓存操作", True)
+    
+    @require_device_connected
+    def open_factory_menu(self):
+        """打开工厂菜单"""
+        try:
+            # 尝试不同的启动方式
+            # 方式1: 使用完整的组件名称格式
+            output, success = self.run_adb_with_target("adb shell am start -n com.konka.kkfactory/.FactoryHome")
+            
+            if not success:
+                # 方式2: 如果上面失败，尝试其他可能的格式
+                output, success = self.run_adb_with_target("adb shell am start -n com.konka.kkfactory.FactoryHome/.FactoryHome")
+            
+            if not success:
+                # 方式3: 尝试直接启动包
+                output, success = self.run_adb_with_target("adb shell am start -n com.konka.kkfactory")
+            
+            if success:
+                self.update_status("工厂菜单已打开", True)
+            else:
+                self.update_status(f"打开工厂菜单失败: {output}", False)
+        except Exception as e:
+            self.update_status(f"打开工厂菜单时出错: {str(e)}", False)
 
 
 if __name__ == "__main__":

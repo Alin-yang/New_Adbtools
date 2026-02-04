@@ -4,6 +4,7 @@
 """
 import os
 import time
+import tkinter as tk
 from typing import Optional
 from utils import run_adb_command, ensure_directory, get_next_filename, format_file_size
 from cache_manager import cache_manager
@@ -35,7 +36,7 @@ class SystemManager:
             self.app.update_status(f"Android版本: {cached_version}", True)
             return cached_version
             
-        output, success = run_adb_command("adb shell getprop ro.build.version.release")
+        output, success = self.app.run_adb_with_target("adb shell getprop ro.build.version.release")
         if success:
             version = output.strip()
             cache_manager.set_system_info("android_version", version)
@@ -85,26 +86,55 @@ class SystemManager:
             self.app.update_status("无法获取设备序列号，请检查设备连接和权限。", False)
             return None
     
+    @require_device_connected
     def screencap(self) -> bool:
         """
-        屏幕截图(优化版)
+        屏幕截图(优化版 - 异步执行避免阻塞)
         
         Returns:
             bool: 截图是否成功
         """
         try:
-            # 先显示提示信息
-            self.app.update_status("正在截图，请稍候...", True)
-            # 强制更新界面
-            self.app.root.update()
-            # 短暂延迟，确保提示信息显示
-            time.sleep(0.5)
+            # 启动异步截图线程
+            screenshot_thread = threading.Thread(
+                target=self._async_screenshot_execution,
+                daemon=True
+            )
+            screenshot_thread.start()
             
+            # 立即返回，不阻塞主线程
+            return True
+            
+        except Exception as e:
+            self.app.update_status(f"截图启动失败: {str(e)}", False)
+            return False
+
+    def _async_screenshot_execution(self):
+        """异步执行截图逻辑"""
+        try:
+            # 在主线程中显示初始提示
+            self.app.root.after(0, lambda: self.app.update_status("正在截图，请稍候...", True))
+            
+            # 执行截图逻辑（移除了time.sleep调用）
+            success, message = self._perform_screenshot()
+            
+            # 在主线程中更新最终结果
+            self.app.root.after(0, lambda: self._handle_screenshot_result(success, message))
+            
+        except Exception as e:
+            self.app.root.after(0, lambda: self.app.update_status(f"截图过程出错: {str(e)}", False))
+
+    def _perform_screenshot(self):
+        """执行截图的核心逻辑"""
+        try:
             # 先清理可能存在的旧截图
-            run_adb_command("adb shell rm -f /sdcard/screenshot.png")
+            self.app.run_adb_with_target("adb shell rm -f /sdcard/screenshot.png")
             
-            # 创建保存目录
-            save_dir = ensure_directory(Config.DEFAULT_SCREENSHOT_PATH)
+            # 获取用户自定义的日志存储路径
+            from utils import get_user_defined_log_path
+            user_log_path = get_user_defined_log_path(self.app)
+            # 在用户路径下创建screenshots子目录
+            save_dir = ensure_directory(os.path.join(user_log_path, "screenshots"))
             new_file = get_next_filename(os.path.join(save_dir, "截图"), ".png")
             
             # 最多尝试指定次数截图
@@ -114,24 +144,28 @@ class SystemManager:
             
             for attempt in range(max_retries):
                 # 截图到设备
-                output1, success1 = run_adb_command("adb shell screencap -p /sdcard/screenshot.png")
+                output1, success1 = self.app.run_adb_with_target("adb shell screencap -p /sdcard/screenshot.png")
                 if not success1:
                     error_msg = output1
-                    time.sleep(1)  # 等待1秒后重试
+                    # 使用短暂延迟但不阻塞主线程
+                    if attempt < max_retries - 1:
+                        time.sleep(0.5)  # 这个sleep在后台线程中，不会阻塞UI
                     continue
                 
                 # 验证文件是否生成
-                output2, success2 = run_adb_command("adb shell ls -l /sdcard/screenshot.png")
+                output2, success2 = self.app.run_adb_with_target("adb shell ls -l /sdcard/screenshot.png")
                 if not success2 or "No such file" in output2:
                     error_msg = "截图文件未生成"
-                    time.sleep(1)  # 等待1秒后重试
+                    if attempt < max_retries - 1:
+                        time.sleep(0.5)
                     continue
                 
                 # 拉取文件到电脑
-                output3, success3 = run_adb_command(f"adb pull /sdcard/screenshot.png \"{new_file}\"")
+                output3, success3 = self.app.run_adb_with_target(f"adb pull /sdcard/screenshot.png \"{new_file}\"")
                 if not success3:
                     error_msg = output3
-                    time.sleep(1)  # 等待1秒后重试
+                    if attempt < max_retries - 1:
+                        time.sleep(0.5)
                     continue
                 
                 # 验证本地文件
@@ -144,27 +178,35 @@ class SystemManager:
                         error_msg = "生成的截图文件为空"
                 else:
                     error_msg = "本地文件保存失败"
-                time.sleep(1)  # 等待1秒后重试
+                if attempt < max_retries - 1:
+                    time.sleep(0.5)
             
             # 清理设备上的临时文件
-            run_adb_command("adb shell rm -f /sdcard/screenshot.png")
+            self.app.run_adb_with_target("adb shell rm -f /sdcard/screenshot.png")
             
             if success:
                 file_size = format_file_size(os.path.getsize(new_file))
-                self.app.update_status(f"截图已保存至路径: {new_file}\\n文件大小: {file_size}", True)
+                message = f"截图已保存至路径: {new_file}\n文件大小: {file_size}"
                 # 尝试打开截图所在文件夹
                 try:
                     os.startfile(os.path.dirname(new_file))
                 except:
                     pass
-                return True
+                return True, message
             else:
-                self.app.update_status(f"截图失败: {error_msg}", False)
-                return False
+                return False, f"截图失败: {error_msg}"
                 
         except Exception as e:
-            self.app.update_status(f"截图过程出错: {str(e)}", False)
-            return False
+            return False, f"截图过程出错: {str(e)}"
+
+    def _handle_screenshot_result(self, success: bool, message: str):
+        """处理截图结果"""
+        self.app.update_status(message, success)
+        
+        # 如果截图成功，可以考虑添加额外的反馈
+        if success:
+            # 可以在这里添加成功音效或其他反馈
+            pass
     
     def pull_anr_file(self) -> bool:
         """
@@ -174,8 +216,12 @@ class SystemManager:
             bool: 拉取是否成功
         """
         try:
-            anr_dir = ensure_directory(Config.DEFAULT_ANR_PATH)
-            output, success = run_adb_command(f"adb pull /data/anr \"{anr_dir}\"")
+            # 获取用户自定义的日志存储路径
+            from utils import get_user_defined_log_path
+            user_log_path = get_user_defined_log_path(self.app)
+            # 在用户路径下创建anr_files子目录
+            anr_dir = ensure_directory(os.path.join(user_log_path, "anr_files"))
+            output, success = self.app.run_adb_with_target(f"adb pull /data/anr \"{anr_dir}\"")
             
             if success:
                 self.app.update_status(f"ANR文件已保存至: {anr_dir}", True)
@@ -199,7 +245,7 @@ class SystemManager:
         Returns:
             bool: root是否成功
         """
-        output, success = run_adb_command("adb root")
+        output, success = self.app.run_adb_with_target("adb root")
         if success:
             # 清除设备缓存，因为root后连接状态可能变化
             cache_manager.device_cache.clear()
@@ -213,7 +259,7 @@ class SystemManager:
         Returns:
             bool: 重新挂载是否成功
         """
-        output, success = run_adb_command("adb remount")
+        output, success = self.app.run_adb_with_target("adb remount")
         self.app.update_status(output, success)
         return success
     
@@ -226,13 +272,13 @@ class SystemManager:
         """
         try:
             # 尝试第一个命令
-            output, success = run_adb_command("adb shell dumpsys window windows | findstr mCurrentFocus")
+            output, success = self.app.run_adb_with_target("adb shell dumpsys window windows | findstr mCurrentFocus")
             if not success or not output:
                 # 如果第一个命令失败，尝试第二个命令
-                output, success = run_adb_command("adb shell dumpsys window | findstr mCurrentFocus")
+                output, success = self.app.run_adb_with_target("adb shell dumpsys window | findstr mCurrentFocus")
                 if not success or not output:
                     # 如果还是失败，尝试第三个命令
-                    output, success = run_adb_command("adb shell dumpsys activity activities | findstr mResumedActivity")
+                    output, success = self.app.run_adb_with_target("adb shell dumpsys activity activities | findstr mResumedActivity")
                     if not success or not output:
                         self.app.update_status("获取当前应用包名失败", False)
                         return None
@@ -300,22 +346,22 @@ class SystemManager:
         info = {}
         
         # 获取设备型号
-        output, success = run_adb_command("adb shell getprop ro.product.model")
+        output, success = self.app.run_adb_with_target("adb shell getprop ro.product.model")
         if success:
             info["model"] = output.strip()
         
         # 获取设备品牌
-        output, success = run_adb_command("adb shell getprop ro.product.brand")
+        output, success = self.app.run_adb_with_target("adb shell getprop ro.product.brand")
         if success:
             info["brand"] = output.strip()
         
         # 获取Android API级别
-        output, success = run_adb_command("adb shell getprop ro.build.version.sdk")
+        output, success = self.app.run_adb_with_target("adb shell getprop ro.build.version.sdk")
         if success:
             info["api_level"] = output.strip()
         
         # 获取屏幕分辨率
-        output, success = run_adb_command("adb shell wm size")
+        output, success = self.app.run_adb_with_target("adb shell wm size")
         if success:
             info["screen_size"] = output.strip()
         

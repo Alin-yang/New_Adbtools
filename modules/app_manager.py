@@ -13,7 +13,8 @@ import tkinter as tk
 
 from utils import (
     run_adb_command, extract_version_info, get_next_filename,
-    calculate_optimal_workers, format_file_size, get_accurate_package_version
+    calculate_optimal_workers, format_file_size, get_accurate_package_version,
+    build_adb_command_with_device
 )
 from cache_manager import cache_manager
 from config import Config
@@ -57,12 +58,25 @@ class AppManager:
     def _run_install_with_progress(self, apk_path: str) -> None:
         """实际执行安装并捕获输出"""
         try:
+            # 获取目标设备IP
+            target_ip = self.app.get_ip_address()
+            
             # 获取APK大小用于计算进度
             apk_size = os.path.getsize(apk_path)
             current_size = 0
             
+            # 构建支持多设备的安装命令
+            install_cmd = f"adb install -r -d \"{apk_path}\""
+            install_cmd = build_adb_command_with_device(install_cmd, target_ip)
+            
+            # 显示当前操作的设备信息
+            if target_ip:
+                self._update_install_status(f"正在向设备 {target_ip} 安装应用...")
+            else:
+                self._update_install_status("正在安装应用...")
+            
             process = subprocess.Popen(
-                f"adb install -r -d \"{apk_path}\"",
+                install_cmd,
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -74,11 +88,13 @@ class AppManager:
             installing_started = False
 
             # 实时捕获输出
+            full_output = []  # 保存所有输出用于调试
             while True:
                 output = process.stdout.readline()
                 if output == '' and process.poll() is not None:
                     break
                 if output:
+                    full_output.append(output)  # 保存输出
                     stripped_output = output.strip()
                     
                     # 检测安装开始
@@ -88,6 +104,7 @@ class AppManager:
                         self.app.progress["maximum"] = 100
                         self.app.progress["value"] = 0
                         current_size = 0
+                        self._update_install_status("安装开始，正在传输数据...")
                         continue
 
                     # 更新进度
@@ -97,13 +114,20 @@ class AppManager:
                         progress = min(95, int((current_size / apk_size) * 100))
                         self.app.progress["value"] = progress
                         
+                        # 显示传输进度和流量信息
+                        transferred = format_file_size(current_size)
+                        total = format_file_size(apk_size)
+                        self._update_install_status(f"正在传输... {progress}% ({transferred} / {total})")
+                        
                         if "Success" in stripped_output:
                             self.app.progress["value"] = 100
                             self._update_install_status("安装成功")
                         elif "Failure" in stripped_output:
                             self._update_install_status(f"安装失败: {stripped_output}")
                         elif not any(keyword in stripped_output for keyword in filter_keywords):
-                            self._update_install_status(stripped_output)
+                            # 只有在不是过滤关键词时才显示详细输出
+                            if stripped_output:
+                                self._update_install_status(stripped_output)
 
             # 获取最终结果
             return_code = process.poll()
@@ -113,14 +137,20 @@ class AppManager:
             self.app.progress["mode"] = "indeterminate"
             self.app._hide_progress()
             
-            final_output = "安装成功" if success else f"安装失败 (code {return_code})"
+            # 构建详细的错误信息
+            if not success:
+                error_detail = "\\n".join(full_output[-5:]) if full_output else "无输出"  # 显示最后5行
+                final_output = f"安装失败 (code {return_code})\\n详细信息:\\n{error_detail}"
+            else:
+                final_output = "安装成功"
+            
             self._update_install_status(final_output)
             
             # 如果安装成功，显示APK信息
             if success:
                 file_size = format_file_size(os.path.getsize(apk_path))
                 apk_name = os.path.basename(apk_path)
-                self.app.update_status(f"安装完成\\n文件: {apk_name}\\n大小: {file_size}", True)
+                self.app.update_status(f"安装完成\\n文件: {apk_name}\\n大小: {file_size}\\n目标设备: {target_ip if target_ip else '未知'}", True)
             
         except Exception as e:
             self._update_install_status(f"安装过程出错: {str(e)}")
@@ -156,7 +186,7 @@ class AppManager:
         )
         
         if result:
-            output, success = run_adb_command(f"adb uninstall {pkg_name}")
+            output, success = self.app.run_adb_with_target(f"adb uninstall {pkg_name}")
             if success:
                 # 清除包信息缓存
                 cache_manager.package_cache.delete(f"package_{pkg_name}")
@@ -170,7 +200,7 @@ class AppManager:
         """获取已安装应用包名列表及其版本(优化版，使用动态线程池)"""
         try:
             # 获取所有已安装包名
-            output, success = run_adb_command("adb shell pm list packages")
+            output, success = self.app.run_adb_with_target("adb shell pm list packages")
             if not success:
                 self.app.update_status("获取应用列表失败", False)
                 return
@@ -273,7 +303,7 @@ class AppManager:
         )
         
         if result:
-            output, success = run_adb_command(f"adb shell pm clear {pkg_name}")
+            output, success = self.app.run_adb_with_target(f"adb shell pm clear {pkg_name}")
             if success:
                 # 清除包信息缓存
                 cache_manager.package_cache.delete(f"package_{pkg_name}")
@@ -327,7 +357,7 @@ class AppManager:
             return False
 
         try:
-            output, success = run_adb_command(f"adb shell am force-stop {pkg_name}")
+            output, success = self.app.run_adb_with_target(f"adb shell am force-stop {pkg_name}")
             if success:
                 self.app.update_status(f"成功终止{pkg_name}应用所处进程", True)
                 return True
@@ -351,7 +381,7 @@ class AppManager:
             return None
         
         try:
-            output, success = run_adb_command(f"adb shell pm path {pkg_name}")
+            output, success = self.app.run_adb_with_target(f"adb shell pm path {pkg_name}")
             if success and output:
                 # 移除"package:"前缀并清理输出
                 path = output.replace("package:", "").strip()
