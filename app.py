@@ -309,7 +309,20 @@ class ADBToolApp:
         
         device_info = f"已连接 {len(devices)} 台设备:\n"
         for i, device in enumerate(devices, 1):
-            marker = " ← 当前选中" if current_ip and device.startswith(current_ip.split(':')[0]) else ""
+            # 精确匹配当前选中的设备
+            marker = ""
+            if current_ip:
+                # 标准化当前IP（确保包含端口号）
+                normalized_current_ip = current_ip
+                if ':' not in current_ip:
+                    normalized_current_ip = f"{current_ip}:5555"
+                
+                # 精确匹配：完全匹配或IP前缀匹配（带冒号）
+                if device == normalized_current_ip or device == current_ip:
+                    marker = " ← 当前选中"
+                elif device.startswith(current_ip + ':'):
+                    marker = " ← 当前选中"
+            
             device_info += f"  {i}. {device}{marker}\n"
         
         self.update_status(device_info, True)
@@ -406,6 +419,7 @@ class ADBToolApp:
         self.status_text.tag_configure("success", foreground="green")
         self.status_text.tag_configure("error", foreground="red")
         self.status_text.tag_configure("info", foreground="blue")
+        self.status_text.tag_configure("warning", foreground="orange")  # 添加警告颜色
         
         # 使用after确保所有GUI组件都创建完成后再进行后续操作
         self.root.after(100, self._setup_post_components)
@@ -424,17 +438,51 @@ class ADBToolApp:
         self._setup_drag_drop()
 
     # 状态更新方法
-    def update_status(self, message: str, success: bool) -> None:
+    def update_status(self, message: str, success: bool, msg_type: str = "normal") -> None:
         """
-        更新状态文本框
+        更新状态文本框（优化版）
         
         Args:
             message: 要显示的消息
             success: 是否为成功状态，决定文本颜色
+            msg_type: 消息类型 (normal/success/error/warning/info/system)
         """
-        tag = "success" if success else "error"
-        self.status_text.insert(tk.END, f"\n{message}\n", tag)
+        # 生成带时间戳的格式化消息
+        timestamp = time.strftime("[%H:%M:%S] ", time.localtime())
+        
+        # 根据消息类型选择标签和格式
+        if msg_type == "system":
+            # 系统信息：灰色，带系统标识
+            formatted_message = f"{timestamp}[系统] {message}"
+            tag = "info"
+        elif msg_type == "warning":
+            # 警告信息：橙色
+            formatted_message = f"{timestamp}[警告] {message}"
+            tag = "warning"
+        elif msg_type == "info":
+            # 一般信息：蓝色
+            formatted_message = f"{timestamp}[信息] {message}"
+            tag = "info"
+        elif success and msg_type == "success":
+            # 成功信息：绿色，带成功标识
+            formatted_message = f"{timestamp}[✓] {message}"
+            tag = "success"
+        elif not success and msg_type == "error":
+            # 错误信息：红色，带错误标识
+            formatted_message = f"{timestamp}[✗] {message}"
+            tag = "error"
+        else:
+            # 默认处理：根据success参数
+            prefix = "[✓] " if success else "[✗] "
+            formatted_message = f"{timestamp}{prefix}{message}"
+            tag = "success" if success else "error"
+        
+        # 插入消息到状态文本框
+        self.status_text.insert(tk.END, f"\n{formatted_message}\n", tag)
         self.status_text.see(tk.END)
+        
+        # 强制更新界面（确保消息立即显示）
+        self.root.update_idletasks()
 
     # 文件选择方法
     def browse_apk(self) -> None:
@@ -713,14 +761,46 @@ class ADBToolApp:
             self._update_install_status(f"安装过程出错: {str(e)}")
             self._hide_progress()
 
+    def _update_operation_status(self, operation: str, status: str, details: str = "", msg_type: str = "info"):
+        """更新操作状态显示（统一格式）
+        
+        Args:
+            operation: 操作名称（如"日志捕获"、"屏幕录制"）
+            status: 状态（如"开始"、"进行中"、"完成"、"失败"）
+            details: 详细信息
+            msg_type: 消息类型
+        """
+        timestamp = time.strftime("[%H:%M:%S] ", time.localtime())
+        
+        # 构造统一格式的消息
+        if details:
+            message = f"{timestamp}[{operation}] {status} - {details}"
+        else:
+            message = f"{timestamp}[{operation}] {status}"
+        
+        # 根据状态选择颜色
+        if "失败" in status or "错误" in status:
+            tag = "error"
+        elif "警告" in status:
+            tag = "warning"
+        elif "完成" in status or "成功" in status:
+            tag = "success"
+        else:
+            tag = msg_type
+        
+        self.status_text.insert(tk.END, f"\n{message}\n", tag)
+        self.status_text.see(tk.END)
+        self.root.update_idletasks()
+    
     def _update_install_status(self, message):
-        """更新安装状态"""
+        """更新安装状态（优化版）"""
         if "成功" in message:
             self.status_text.insert(tk.END, f"\n{message}\n", "success")
         elif "失败" in message or "错误" in message:
             self.status_text.insert(tk.END, f"\n{message}\n", "error")
         else:
-            self.status_text.insert(tk.END, f"\n{message}\n")
+            # 一般进度信息使用info标签
+            self.status_text.insert(tk.END, f"\n{message}\n", "info")
         self.status_text.see(tk.END)
 
     @require_device_connected
@@ -1106,9 +1186,9 @@ class ADBToolApp:
             time.sleep(1)
             
             if self.recording_thread.is_alive() and self.recording_active:
-                self.update_status("屏幕录制已成功启动！\n点击'停止录制'结束录制", True)
+                self._update_operation_status("屏幕录制", "运行中", "点击'停止录制'结束录制", "success")
             else:
-                self.update_status("录制线程启动失败", False)
+                self._update_operation_status("屏幕录制", "启动失败", "", "error")
                 self.recording_active = False
                 
         except Exception as e:
@@ -1361,7 +1441,7 @@ class ADBToolApp:
         self.stop_event.clear()
         
         # 显示启动信息
-        self.update_status(f"正在启动日志捕获...\n目标文件: {self.log_file_path}", True)
+        self._update_operation_status("日志捕获", "开始", f"目标文件: {self.log_file_path}")
 
         # 启动日志捕获线程
         try:
@@ -1376,9 +1456,9 @@ class ADBToolApp:
             time.sleep(1)
             
             if self.logcat_thread.is_alive() and self.logging_active:
-                self.update_status("日志捕获已成功启动！\n点击'停止日志捕获'结束捕获", True)
+                self._update_operation_status("日志捕获", "运行中", "点击'停止日志捕获'结束捕获", "success")
             else:
-                self.update_status("日志捕获线程启动失败", False)
+                self._update_operation_status("日志捕获", "启动失败", "", "error")
                 self.logging_active = False
                 
         except Exception as e:
@@ -1394,7 +1474,7 @@ class ADBToolApp:
 
         # 设置停止信号
         self.stop_event.set()
-        self.update_status("正在停止日志捕获...", True)
+        self._update_operation_status("日志捕获", "正在停止", "")
         
         # 确保进程终止
         self._terminate_logcat()

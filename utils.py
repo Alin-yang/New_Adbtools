@@ -232,10 +232,10 @@ def timestamp_time() -> str:
     return datetime.datetime.now().strftime("%m%d-%H%M%S")
 
 def extract_version_info(output: str) -> Optional[str]:
-    """从 adb shell pm dump 输出中提取版本号（优化版，支持多版本情况）
+    """从 adb shell 命令输出中提取版本号（简化增强版）
     
     Args:
-        output: adb shell pm dump 命令的输出
+        output: ADB命令的输出
         
     Returns:
         Optional[str]: 版本号字符串，如果未找到则返回None
@@ -243,17 +243,45 @@ def extract_version_info(output: str) -> Optional[str]:
     if not output:
         return None
         
-    versions = []
     lines = output.split('\n')
     
-    # 查找所有的 versionName 行
+    # 方法1：直接查找versionName=的行（最快最直接）
+    for line in lines:
+        line = line.strip()
+        if 'versionName=' in line and not line.startswith('#'):
+            try:
+                version = line.split('versionName=')[1].strip()
+                if version and version != 'null' and len(version) > 0:
+                    # 验证版本号格式
+                    import re
+                    if re.match(r'^[\d\.]+[\w\.-]*$', version):
+                        return version
+            except (IndexError, ValueError):
+                continue
+    
+    # 方法2：查找包含versionName的行并使用等号分割
+    for line in lines:
+        line = line.strip()
+        if 'versionName' in line and '=' in line and not line.startswith('#'):
+            try:
+                version = line.split('=')[1].strip()
+                if version and version != 'null' and len(version) > 0:
+                    # 验证版本号格式
+                    import re
+                    if re.match(r'^[\d\.]+[\w\.-]*$', version):
+                        return version
+            except (IndexError, ValueError):
+                continue
+    
+    # 方法3：使用原来的复杂逻辑作为备选
+    versions = []
     for i, line in enumerate(lines):
         line = line.strip()
         if 'versionName' in line and '=' in line:
             try:
                 version = line.split('=')[1].strip()
                 if version and version != 'null':
-                    # 检查是否为用户安装的版本（通常在 User 段中）
+                    # 检查上下文信息
                     context_lines = lines[max(0, i-5):i+5]
                     context = '\n'.join(context_lines)
                     
@@ -265,26 +293,28 @@ def extract_version_info(output: str) -> Optional[str]:
                         priority = 2  # 有安装时间戳，较高优先级
                     elif 'System' in context:
                         priority = 1  # 系统应用，较低优先级
+                    else:
+                        priority = 0  # 其他情况，最低优先级但仍然有效
                     
                     versions.append((version, priority, context))
             except IndexError:
                 continue
     
-    if not versions:
-        return None
+    if versions:
+        # 按优先级排序，选择最高优先级的版本
+        versions.sort(key=lambda x: x[1], reverse=True)
+        
+        # 如果有多个相同优先级的版本，选择版本号最大的
+        top_priority = versions[0][1]
+        top_versions = [v for v in versions if v[1] == top_priority]
+        
+        if len(top_versions) > 1:
+            # 比较版本号，选择最新的
+            top_versions.sort(key=lambda x: parse_version_number(x[0]), reverse=True)
+        
+        return top_versions[0][0]
     
-    # 按优先级排序，选择最高优先级的版本
-    versions.sort(key=lambda x: x[1], reverse=True)
-    
-    # 如果有多个相同优先级的版本，选择版本号最大的
-    top_priority = versions[0][1]
-    top_versions = [v for v in versions if v[1] == top_priority]
-    
-    if len(top_versions) > 1:
-        # 比较版本号，选择最新的
-        top_versions.sort(key=lambda x: parse_version_number(x[0]), reverse=True)
-    
-    return top_versions[0][0]
+    return None
 
 
 def parse_version_number(version_str: str) -> tuple:
@@ -504,61 +534,53 @@ def get_accurate_package_version(package_name: str) -> Optional[str]:
     Returns:
         Optional[str]: 版本号，如果获取失败则返回None
     """
-    # 策略1：优先使用 pm list packages -3 获取用户安装的应用版本
-    cmd1 = f'adb shell pm list packages -3 {package_name}'
+    # 获取第一个连接的设备
+    devices_output, devices_success = run_adb_command("adb devices")
+    if not devices_success:
+        return None
+    
+    device_id = None
+    lines = devices_output.split('\n')[1:]  # 跳过标题行
+    for line in lines:
+        if '\t' in line and 'device' in line:
+            device_id = line.split('\t')[0].strip()
+            break
+    
+    if not device_id:
+        return None
+    
+    # 策略1：使用 dumpsys package 命令
+    cmd1 = f'adb -s {device_id} shell dumpsys package {package_name}'
     output1, success1 = run_adb_command(cmd1)
     
-    if success1 and package_name in output1:
-        # 如果是用户安装的应用，使用 dumpsys package 获取详细信息
-        cmd2 = f'adb shell dumpsys package {package_name}'
-        output2, success2 = run_adb_command(cmd2)
-        
-        if success2:
-            version = extract_version_info(output2)
-            if version:
-                return version
-    
-    # 策略2：使用 pm dump 命令获取全部信息
-    cmd3 = f'adb shell pm dump {package_name}'
-    output3, success3 = run_adb_command(cmd3)
-    
-    if success3:
-        version = extract_version_info(output3)
+    if success1:
+        version = extract_version_info(output1)
         if version:
             return version
     
-    # 策略3：使用 dumpsys package 并过滤 versionName
-    cmd4 = f'adb shell dumpsys package {package_name} | grep -i versionName'
-    output4, success4 = run_adb_command(cmd4)
+    # 策略2：使用 pm dump 命令
+    cmd2 = f'adb -s {device_id} shell pm dump {package_name}'
+    output2, success2 = run_adb_command(cmd2)
     
-    if success4 and 'versionName' in output4:
-        # 解析过滤后的版本信息
-        for line in output4.split('\n'):
-            if 'versionName' in line and '=' in line:
-                try:
-                    version = line.split('=')[1].strip()
-                    if version and version != 'null':
-                        return version
-                except IndexError:
-                    continue
+    if success2:
+        version = extract_version_info(output2)
+        if version:
+            return version
     
-    # 策略4：使用 Windows 的 findstr 命令
-    cmd5 = f'adb shell dumpsys package {package_name} | findstr "versionName"'
-    output5, success5 = run_adb_command(cmd5)
-    
-    if success5 and 'versionName' in output5:
-        # 从简单的输出中提取版本号
-        lines = output5.split('\n')
+    # 策略3：直接在完整输出中查找versionName
+    if success1:
+        lines = output1.split('\n')
         for line in lines:
-            if 'versionName' in line and '=' in line:
+            if 'versionName=' in line:
                 try:
-                    version = line.split('=')[1].strip()
+                    version = line.split('versionName=')[1].strip()
                     if version and version != 'null':
                         return version
                 except IndexError:
                     continue
     
     return None
+
 
 def get_user_defined_log_path(app_instance=None) -> str:
     """获取用户自定义的数据存储路径
