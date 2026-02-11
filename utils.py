@@ -143,12 +143,12 @@ def build_adb_command_with_device(command: str, target_ip: Optional[str] = None)
         # 检查目标设备是否在已连接列表中
         matched_device = None
         for device in devices:
-            # 精确匹配
+            # 精确匹配（包括端口号）
             if device == target_ip_with_port or device == target_ip:
                 matched_device = device
                 break
-            # 如果输入的是简写IP（如 3.13），尝试匹配完整IP
-            elif target_ip in device:
+            # IP前缀匹配（确保是完整IP段匹配，而非部分匹配）
+            elif device.startswith(target_ip + ':'):
                 matched_device = device
                 break
         

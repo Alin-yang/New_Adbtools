@@ -113,7 +113,8 @@ class ADBToolApp:
         
         # 设备状态显示控制变量
         self.last_device_status_time = 0
-        self.device_status_cooldown = 2  # 2秒冷却时间，避免频繁重复显示
+        self.device_status_cooldown = 0.5  # 缩短冷却时间到0.5秒，提高响应性
+        self._last_displayed_ip = ""  # 记录上次显示的IP地址
 
     def _load_ip_history(self):
         """加载IP历史记录到下拉框"""
@@ -232,9 +233,12 @@ class ADBToolApp:
         # 立即更新连接状态（不使用防抖）
         self.update_connection_status()
         
-        # 对于下拉框选择事件，立即显示设备状态
+        # 获取当前IP地址
         current_ip = self.get_ip_address()
         if current_ip and current_ip != "192.168.":
+            # 强制清除相关缓存，确保获取最新状态
+            cache_manager.device_cache.clear()
+            
             # 区分不同类型的事件
             if event and event.type == 'VirtualEvent' and event.name == 'ComboboxSelected':
                 # 下拉框选择事件，立即显示
@@ -243,8 +247,8 @@ class ADBToolApp:
                 # 程序调用，立即显示
                 self.show_current_device_status(force_display=True)
             else:
-                # 其他事件（如FocusOut），使用正常的冷却机制
-                self.show_current_device_status(force_display=False)
+                # 其他事件（如FocusOut），也强制显示以确保同步
+                self.show_current_device_status(force_display=True)
 
     def update_connection_status(self, ip_address: Optional[str] = None):
         """更新连接状态标签（优化版本，减少不必要的设备检查）"""
@@ -311,30 +315,59 @@ class ADBToolApp:
         self.update_status(device_info, True)
         self.update_connection_status()
     
-    def show_current_device_status(self, force_display=False):
+    def show_current_device_status(self, force_display=False, decorator_call=False):
         """显示当前连接设备状态，用于在执行功能前显示设备信息
         
         Args:
             force_display: 是否强制显示，绕过冷却机制
+            decorator_call: 是否来自装饰器调用，需要特殊处理
         """
         # 检查冷却时间，避免频繁重复显示
         import time
         current_time = time.time()
+        # 获取当前IP地址用于比较
+        current_ip = self.get_ip_address()
+        
+        # 对于强制显示的情况，检查IP是否发生变化，如果未变化且时间间隔很短则跳过
         if not force_display and (current_time - self.last_device_status_time) < self.device_status_cooldown:
             return
         
+        # 如果是强制显示，根据不同情况进行处理
+        if force_display:
+            # 装饰器调用总是显示，不管IP是否变化
+            if decorator_call:
+                pass  # 不跳过
+            # 检查是否为不完整的IP地址
+            elif current_ip and (current_ip == "192.168." or not ('.' in current_ip and current_ip.count('.') >= 3)):
+                # 不完整的IP地址总是显示
+                pass  # 不跳过
+            elif current_ip == self._last_displayed_ip and (current_time - self.last_device_status_time) < 0.05:
+                # 完整IP且完全相同且时间间隔极短才跳过
+                return
+        
+        # 强制刷新设备列表，确保获取最新状态
         all_devices = get_connected_devices()
-        current_ip = self.get_ip_address()
         
         # 构造状态信息
         status_info = f"📱 设备状态: 已连接 {len(all_devices)} 台设备"
         
         # 标识当前控制的设备
         if current_ip:
-            # 查找与当前IP匹配的设备
+            # 查找与当前IP精确匹配的设备
             current_device = None
+            # 标准化当前IP（确保包含端口号）
+            normalized_current_ip = current_ip
+            if ':' not in current_ip:
+                normalized_current_ip = f"{current_ip}:5555"
+            
+            # 精确匹配：优先完全匹配，其次前缀匹配
             for device in all_devices:
-                if current_ip in device or device.startswith(current_ip.split(':')[0]):
+                # 完全匹配（包括端口号）
+                if device == normalized_current_ip or device == current_ip:
+                    current_device = device
+                    break
+                # IP前缀匹配（但要确保不是部分匹配）
+                elif device.startswith(current_ip + ':'):
                     current_device = device
                     break
             
@@ -354,6 +387,8 @@ class ADBToolApp:
         self.update_status(status_info, True)
         # 更新上次显示时间
         self.last_device_status_time = current_time
+        # 保存当前显示的IP地址用于下次比较
+        self._last_displayed_ip = current_ip if current_ip else ""
 
 
 
@@ -495,8 +530,8 @@ class ADBToolApp:
     @require_device_connected
     def disconnect_adb(self):
         """断开ADB连接"""
-        # 显示当前设备状态
-        self.show_current_device_status()
+        # 强制显示当前设备状态
+        self.show_current_device_status(force_display=True)
         
         output, success = self.run_adb_with_target("adb disconnect")
         if "disconnected" in output.lower():
@@ -507,24 +542,25 @@ class ADBToolApp:
         self.update_connection_status()
 
     def check_device_connected(self, ip_address: Optional[str] = None) -> bool:
-        """检查设备连接状态(使用新的缓存系统)"""
+        """检查设备连接状态(强化版，确保获取最新状态)"""
         if not ip_address:
             ip_address = self.get_ip_address()
             
         if not ip_address:
             return False
             
-        # 检查缓存
-        cached_status = cache_manager.get_device_status(ip_address)
-        if cached_status is not None:
-            return cached_status
-            
-        # 使用全局命令检查设备列表，不指定目标设备
+        # 强制刷新设备列表，不使用缓存
         output, success = run_adb_command("adb devices")
         if success:
             devices = [line.split("\t")[0] for line in output.splitlines()[1:] if "device" in line]
             ip_with_port = f"{ip_address}:5555" if ip_address else None
-            is_connected = ip_address in devices or ip_with_port in devices
+            
+            # 精确匹配设备
+            is_connected = False
+            for device in devices:
+                if device == ip_address or device == ip_with_port or device.startswith(ip_address + ':'):
+                    is_connected = True
+                    break
             
             # 更新缓存
             cache_manager.set_device_status(ip_address, is_connected)
@@ -1906,8 +1942,3 @@ class ADBToolApp:
         except Exception as e:
             self.update_status(f"打开工厂菜单时出错: {str(e)}", False)
 
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = ADBToolApp(root)
-    root.mainloop()

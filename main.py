@@ -1,6 +1,6 @@
 from app import ADBToolApp
 import tkinter as tk
-from gui import layout_zh as layout
+from gui import layout_zh as layout  # 恢复原来布局
 
 # 尝试使用支持拖拽的Tk
 try:

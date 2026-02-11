@@ -85,11 +85,11 @@ class LayoutBase:
         )
         self.app.connection_status_label.pack(side=tk.LEFT, padx=(5, 0))
         
-        # 优化事件绑定：减少不必要的事件处理
-        # 只在用户明确选择时才触发完整处理
+        # 优化事件绑定：确保IP选择及时响应
+        # Combobox选择事件 - 立即处理
         self.app.ip_combobox.bind('<<ComboboxSelected>>', self._on_ip_selected)
-        # FocusOut事件保持原有行为
-        self.app.ip_combobox.bind('<FocusOut>', lambda e: self.app.on_ip_changed(e))
+        # 移除FocusOut事件绑定，避免冲突和重复处理
+        # FocusOut事件通常在用户完成编辑时触发，但对于下拉选择来说不需要
         
         # 创建其他输入区域
         self.create_package_section()
@@ -98,8 +98,15 @@ class LayoutBase:
 
     def _on_ip_selected(self, event):
         """优化的IP选择处理"""
-        # 在主线程中延迟执行，避免阻塞UI
-        self.app.root.after(10, lambda: self.app.on_ip_changed(event))
+        # 立即更新combobox的值以确保UI同步
+        if hasattr(self.app, 'ip_combobox'):
+            # 获取选中的值
+            selected_value = self.app.ip_combobox.get()
+            # 确保值正确设置到combobox中
+            self.app.ip_combobox.set(selected_value)
+        
+        # 立即执行IP变更处理，不再延迟
+        self.app.on_ip_changed(event)
 
     def create_package_section(self) -> None:
         """创建包名输入区域"""
@@ -139,7 +146,6 @@ class LayoutBase:
         )
         self.app.log_path_entry = ttk.Entry(self.left_panel)
         self.app.log_path_entry.grid(row=3, column=1, padx=5, pady=5, sticky=tk.EW)
-        self.app.log_path_entry['width'] = 30
         self.app.log_path_entry.insert(0, Config.DEFAULT_LOG_PATH)
         self.app.log_path_btn = ttk.Button(
             self.left_panel,
