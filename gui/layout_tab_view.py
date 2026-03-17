@@ -97,7 +97,15 @@ class LayoutTabView:
                        font=('Arial', 10, 'bold'),
                        padding=10,
                        anchor='w',
-                       background='#e8e8e8')  # 更深的灰色 #e8e8e8
+                       background='#e8e8e8')  # 未选中：浅灰色
+        
+        # 选中状态样式 - 添加蓝色边框和更深的背景
+        style.configure('SelectedTab.TButton',
+                       font=('Arial', 10, 'bold'),
+                       padding=10,
+                       anchor='w',
+                       background='#4a90e2',  # 选中：蓝色背景
+                       foreground='white')     # 白色文字
         
         # 鼠标悬停样式
         style.map('LeftTab.TButton',
@@ -112,6 +120,8 @@ class LayoutTabView:
             ("⚙️ 高级工具", "advanced"),
         ]
         
+        self.tab_buttons = {}  # 保存按钮引用
+        
         for i, (text, tab_name) in enumerate(tab_configs):
             btn = ttk.Button(
                 tab_frame,
@@ -123,11 +133,13 @@ class LayoutTabView:
             )
             btn.grid(row=i, column=0, sticky=tk.EW, padx=2, pady=3)
             tab_frame.grid_rowconfigure(i, weight=1)
+            self.tab_buttons[tab_name] = btn  # 保存按钮引用
         
         tab_frame.grid_columnconfigure(0, weight=1)
         
         # 默认显示第一个 Tab
         self.current_tab_index = 0
+        self.current_selected_tab = None  # 当前选中的 Tab
         # 初始化时显示第一个 Tab 的内容
         self.app.root.after(100, lambda: self.switch_tab("device"))
     
@@ -140,6 +152,27 @@ class LayoutTabView:
         # 显示选中的 Tab 内容
         if tab_name in self.tabs:
             self.tabs[tab_name].grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        
+        # 更新选中效果
+        self._update_tab_selection(tab_name)
+    
+    def _update_tab_selection(self, selected_tab: str) -> None:
+        """更新 Tab 选中效果"""
+        if not hasattr(self, 'tab_buttons'):
+            return
+        
+        # 恢复之前选中的 Tab 样式
+        if self.current_selected_tab and self.current_selected_tab in self.tab_buttons:
+            self.tab_buttons[self.current_selected_tab].configure(
+                style='LeftTab.TButton'
+            )
+        
+        # 设置新选中的 Tab 样式
+        if selected_tab in self.tab_buttons:
+            self.tab_buttons[selected_tab].configure(
+                style='SelectedTab.TButton'
+            )
+            self.current_selected_tab = selected_tab
     
     def create_device_tab(self) -> None:
         """创建设备管理 Tab"""
