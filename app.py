@@ -639,13 +639,13 @@ class ADBToolApp:
 
     def _show_progress(self):
         """显示进度条动画"""
-        self.progress.grid()
+        self.progress.pack(fill=tk.X, pady=5)
         self.progress.start()
 
     def _hide_progress(self):
         """隐藏进度条"""
         self.progress.stop()
-        self.progress.grid_remove()
+        self.progress.pack_forget()
 
 
     @require_device_connected
