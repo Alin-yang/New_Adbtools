@@ -630,12 +630,34 @@ class ADBToolApp:
         """设备连接验证"""
         ip_address = self.get_ip_address()
         if not ip_address:
-            self.update_status("请输入IP地址", False)
+            self.update_status("请输入 IP 地址", False)
             return False
         if not self.check_device_connected(ip_address):
-            self.update_status(f"设备未连接: {ip_address}", False)
+            self.update_status(f"设备未连接：{ip_address}", False)
             return False
         return True
+        
+    def _check_device_and_execute(self, func):
+        """后台检查设备连接并执行功能 (异步)"""
+        import time
+        time.sleep(0.1)  # 短暂延迟，让 UI 先响应
+            
+        # 强制刷新设备状态
+        from cache_manager import cache_manager
+        cache_manager.device_cache.clear()
+        cache_manager.system_cache.clear()
+            
+        # 显示设备状态
+        if hasattr(self, 'show_current_device_status'):
+            self.root.after(0, lambda: self.show_current_device_status(force_display=True, decorator_call=True))
+            
+        # 检查连接
+        if self.ensure_device_connected():
+            # 已连接，执行功能
+            self.root.after(0, func)
+        else:
+            # 未连接，显示错误
+            self.root.after(0, lambda: self.update_status("设备未连接，请先连接设备", False))
 
     def _show_progress(self):
         """显示进度条动画"""
