@@ -159,6 +159,7 @@ class LayoutTabView:
             ("📀 重新挂载分区", 5, 2, "remount"),
             (" 获取 Android 版本号", 6, 0, "get_android_version"),
             ("📱 获取设备串号", 6, 1, "get_serial_number"),
+            ("📊 查看设备信息", 6, 2, "show_device_info"),  # 补齐空格
         ]
         
         self._create_button_grid(tab, device_buttons)
@@ -261,6 +262,7 @@ class LayoutTabView:
             ("⏹️ 停止日志捕获", 3, 1, "stop_logcat"),
             ("🧹 清除日志缓存", 3, 2, "log_clear"),
             ("📥 导出 ANR 文件", 4, 0, "pull_anr_file"),
+            ("📋 查看日志文件", 4, 1, "log_clear"),  # 补齐空格 (临时使用清除日志功能)
             ("📜 功能按键原始命令", 4, 2, "show_all_adb_commands"),
         ]
         
