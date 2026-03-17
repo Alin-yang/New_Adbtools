@@ -87,22 +87,21 @@ class LayoutTabView:
     
     def create_left_tab_navigation(self) -> None:
         """创建左侧 Tab 导航栏（垂直排列）"""
-        # 使用框架垂直排列 Tab 按钮
-        tab_frame = ttk.Frame(self.left_panel)
-        tab_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        # 使用框架垂直排列 Tab 按钮，添加凹陷边框作为背景
+        tab_frame = ttk.Frame(self.left_panel, relief='sunken', borderwidth=2)
+        tab_frame.pack(fill=tk.BOTH, expand=True, padx=3, pady=3)
         
-        # 配置自定义样式
+        # 配置自定义样式 - 使用更深的背景色和更大字体
         style = ttk.Style()
         style.configure('LeftTab.TButton', 
-                       font=('Arial', 9, 'bold'),
-                       padding=8,
+                       font=('Arial', 10, 'bold'),
+                       padding=10,
                        anchor='w',
-                       background='#f0f0f0',
-                       relief='raised')  # 浮雕效果
+                       background='#e8e8e8')  # 更深的灰色 #e8e8e8
         
         # 鼠标悬停样式
         style.map('LeftTab.TButton',
-                 background=[('active', '#e0e0e0'), ('pressed', '#d0d0d0')])
+                 background=[('active', '#d0d0d0'), ('pressed', '#c0c0c0')])
         
         # 创建各个 Tab 按钮
         tab_configs = [
@@ -118,11 +117,11 @@ class LayoutTabView:
                 tab_frame,
                 text=text,
                 command=lambda t=tab_name: self.switch_tab(t),
-                width=15,
+                width=16,
                 takefocus=True,
                 style='LeftTab.TButton'
             )
-            btn.grid(row=i, column=0, sticky=tk.EW, padx=1, pady=1)  # 减小间距
+            btn.grid(row=i, column=0, sticky=tk.EW, padx=2, pady=3)
             tab_frame.grid_rowconfigure(i, weight=1)
         
         tab_frame.grid_columnconfigure(0, weight=1)
