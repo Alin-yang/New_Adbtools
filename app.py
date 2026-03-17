@@ -135,18 +135,15 @@ class ADBToolApp:
             connected_devices = get_connected_devices()
             
             if connected_devices:
-                # 提取IP地址部分（去除端口号）
+                # 提取 IP 地址部分（只保留网络设备，过滤 USB 设备）
                 detected_ips = []
                 for device in connected_devices:
-                    # 如果是IP:端口格式，只取IP部分
+                    # 只处理 IP:端口格式的网络设备
                     if ':' in device:
                         ip_part = device.split(':')[0]
                         if ip_part not in detected_ips:
                             detected_ips.append(ip_part)
-                    else:
-                        # 如果是纯IP或设备序列号，直接添加
-                        if device not in detected_ips:
-                            detected_ips.append(device)
+                    # 注意：USB 设备（纯序列号）不添加到 IP 历史记录
                 
                 # 将检测到的IP添加到历史记录中（保持原有顺序，新IP放在前面）
                 for ip in detected_ips:
@@ -170,8 +167,17 @@ class ADBToolApp:
                         # 触发IP变更事件以更新连接状态
                         self.on_ip_changed()
                 
-                # 显示检测结果
-                self.update_status(f"启动时检测到 {len(detected_ips)} 个已连接设备: {', '.join(detected_ips)}", True)
+                # 显示检测结果（显示所有设备，包括 USB）
+                device_display_list = []
+                for device in connected_devices:
+                    if ':' in device:
+                        # 网络设备显示 IP
+                        device_display_list.append(device)
+                    else:
+                        # USB 设备显示为 USB 设备
+                        device_display_list.append(f"{device} (USB)")
+                                
+                self.update_status(f"启动时检测到 {len(connected_devices)} 台设备：{', '.join(device_display_list)}", True)
             else:
                 # 没有检测到设备时的提示
                 self.update_status("启动时未检测到已连接的设备", True)
