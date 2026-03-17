@@ -104,9 +104,9 @@ class LayoutTabView:
                        font=('Arial', 10, 'bold'),
                        padding=10,
                        anchor='w',
-                       background='#5ba3d0',  # 选中：深蓝色背景
+                       background='#0078d7',  # 选中：深蓝色背景 (Windows 标准蓝)
                        relief='solid',        # 实线边框
-                       borderwidth=3)         # 边框宽度 3px
+                       borderwidth=5)         # 边框宽度 5px (更粗)
         
         # 鼠标悬停样式
         style.map('LeftTab.TButton',
