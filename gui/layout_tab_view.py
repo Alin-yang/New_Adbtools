@@ -1,6 +1,6 @@
 """
-Tab 视图布局 - 重构版本
-按功能分组到不同的 Tab 页，提升用户体验
+Tab 视图布局 - 重构版本 (三栏布局)
+左侧 Tab 导航 + 中间功能按钮 + 右侧输出窗口
 """
 import tkinter as tk
 from tkinter import ttk
@@ -9,7 +9,7 @@ from config import Config, get_text
 
 
 class LayoutTabView:
-    """Tab 视图布局类"""
+    """Tab 视图布局类 (三栏布局)"""
     
     def __init__(self, app):
         """
@@ -20,30 +20,30 @@ class LayoutTabView:
         """
         self.app = app
         self.main_frame = None
-        self.left_panel = None
-        self.right_panel = None
-        self.notebook = None  # Tab 容器
-        self.tabs = {}  # 存储各个 Tab 页
+        self.left_panel = None      # 左侧 Tab 导航
+        self.center_panel = None    # 中间功能按钮
+        self.right_panel = None     # 右侧输出窗口
+        self.current_tab_frame = None  # 当前选中的 Tab 内容框架
         
     def setup_gui(self):
-        """构建完整的 Tab 界面布局"""
+        """构建完整的三栏布局"""
         # 设置主容器
         self.setup_main_container()
         
-        # 创建左右分栏
-        self.create_panels(left_weight=55, right_weight=45)
+        # 创建三栏布局
+        self.create_three_column_layout()
         
-        # 创建 Tab 页
-        self.create_tab_notebook()
+        # 创建左侧 Tab 导航
+        self.create_left_tab_navigation()
         
-        # 创建各个 Tab 页内容
+        # 创建各个 Tab 页内容（功能按钮）
         self.create_device_tab()      # 设备管理
         self.create_app_tab()         # 应用管理
         self.create_log_tab()         # 日志调试
         self.create_screen_tab()      # 屏幕操作
         self.create_advanced_tab()    # 高级工具
         
-        # 创建输出区域
+        # 创建右侧输出区域
         self.create_output_section()
         
         # 设置快捷键
@@ -60,44 +60,68 @@ class LayoutTabView:
         if hasattr(Config, 'MIN_WINDOW_SIZE'):
             self.app.root.minsize(*Config.MIN_WINDOW_SIZE)
     
-    def create_panels(self, left_weight: int = 45, right_weight: int = 55) -> None:
-        """
-        创建左右分栏面板
-        
-        Args:
-            left_weight: 左侧面板权重 (Tab 页)
-            right_weight: 右侧面板权重 (输出区)
-        """
-        # 左侧 Tab 面板
-        self.left_panel = ttk.Frame(self.main_frame)
+    def create_three_column_layout(self) -> None:
+        """创建三栏布局：左侧 Tab + 中间功能 + 右侧输出"""
+        # 左侧 Tab 面板（固定宽度）
+        self.left_panel = ttk.Frame(self.main_frame, width=120)
         self.left_panel.grid(row=0, column=0, sticky=tk.NSEW, padx=(0, 5))
+        self.left_panel.grid_propagate(False)  # 固定宽度
         
-        # 右侧输出面板
-        self.right_panel = ttk.Frame(self.main_frame)
-        self.right_panel.grid(row=0, column=1, sticky=tk.NSEW, padx=(5, 0))
+        # 中间功能面板（弹性宽度）
+        self.center_panel = ttk.Frame(self.main_frame)
+        self.center_panel.grid(row=0, column=1, sticky=tk.NSEW, padx=5)
+        
+        # 右侧输出面板（固定宽度）
+        self.right_panel = ttk.Frame(self.main_frame, width=400)
+        self.right_panel.grid(row=0, column=2, sticky=tk.NSEW, padx=(5, 0))
         
         # 配置网格权重
-        self.main_frame.grid_columnconfigure(0, weight=left_weight)
-        self.main_frame.grid_columnconfigure(1, weight=right_weight)
+        self.main_frame.grid_columnconfigure(0, weight=0)  # 左侧固定
+        self.main_frame.grid_columnconfigure(1, weight=1)  # 中间弹性
+        self.main_frame.grid_columnconfigure(2, weight=0)  # 右侧固定
         self.main_frame.grid_rowconfigure(0, weight=1)
         
         # 强制更新布局
         self.main_frame.update_idletasks()
     
-    def create_tab_notebook(self) -> None:
-        """创建 Tab 容器"""
-        self.notebook = ttk.Notebook(self.left_panel)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
+    def create_left_tab_navigation(self) -> None:
+        """创建左侧 Tab 导航栏"""
+        # 创建垂直排列的 Tab 按钮
+        tab_buttons = [
+            ("📱 设备管理", "device"),
+            ("📦 应用管理", "app"),
+            ("📋 日志调试", "log"),
+            ("📸 屏幕操作", "screen"),
+            ("⚙️ 高级工具", "advanced"),
+        ]
         
-        # 配置 Tab 样式
-        style = ttk.Style()
-        style.configure('TNotebook.Tab', padding=[15, 8], font=('Arial', 10))
-        style.configure('TNotebook', padding=5)
+        for i, (text, tab_name) in enumerate(tab_buttons):
+            btn = ttk.Button(
+                self.left_panel,
+                text=text,
+                command=lambda t=tab_name: self.switch_tab(t),
+                width=15
+            )
+            btn.grid(row=i, column=0, sticky=tk.EW, padx=2, pady=2)
+            self.left_panel.grid_rowconfigure(i, weight=1)
+        
+        # 默认显示第一个 Tab
+        self.current_tab_index = 0
+        self.switch_tab("device")
+    
+    def switch_tab(self, tab_name: str) -> None:
+        """切换 Tab 页"""
+        # 隐藏所有 Tab 内容
+        for name, frame in self.tabs.items():
+            frame.grid_forget()
+        
+        # 显示选中的 Tab 内容
+        if tab_name in self.tabs:
+            self.tabs[tab_name].grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
     
     def create_device_tab(self) -> None:
         """创建设备管理 Tab"""
-        tab = ttk.Frame(self.notebook)
-        self.notebook.add(tab, text="📱 设备管理")
+        tab = ttk.Frame(self.center_panel)
         self.tabs['device'] = tab
         
         # 创建输入区域
@@ -125,13 +149,13 @@ class LayoutTabView:
         )
         
         ip_frame = ttk.Frame(parent)
-        ip_frame.grid(row=0, column=1, columnspan=2, padx=5, pady=5, sticky=tk.EW)
+        ip_frame.grid(row=0, column=1, columnspan=3, padx=5, pady=5, sticky=tk.EW)
         
         # IP 下拉框
         self.app.ip_combobox = ttk.Combobox(ip_frame)
         self.app.ip_combobox.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.app.ip_combobox['height'] = 8
-        self.app.ip_combobox['width'] = 15
+        self.app.ip_combobox['width'] = 20
         self.app.ip_combobox.insert(0, "192.168.")
         
         # 连接状态标签
@@ -149,12 +173,10 @@ class LayoutTabView:
         # 配置列权重
         parent.grid_columnconfigure(0, weight=0)
         parent.grid_columnconfigure(1, weight=1)
-        parent.grid_columnconfigure(2, weight=0)
     
     def create_app_tab(self) -> None:
         """创建应用管理 Tab"""
-        tab = ttk.Frame(self.notebook)
-        self.notebook.add(tab, text="📦 应用管理")
+        tab = ttk.Frame(self.center_panel)
         self.tabs['app'] = tab
         
         # 创建输入区域
@@ -181,9 +203,9 @@ class LayoutTabView:
             row=0, column=0, padx=5, pady=5, sticky=tk.W
         )
         self.app.pkg_combobox = ttk.Combobox(parent)
-        self.app.pkg_combobox.grid(row=0, column=1, columnspan=2, padx=5, pady=5, sticky=tk.EW)
+        self.app.pkg_combobox.grid(row=0, column=1, columnspan=3, padx=5, pady=5, sticky=tk.EW)
         self.app.pkg_combobox['height'] = 10
-        self.app.pkg_combobox['width'] = 15
+        self.app.pkg_combobox['width'] = 20
         self.app.pkg_entry = self.app.pkg_combobox  # 兼容
         
         # APK 文件
@@ -202,12 +224,10 @@ class LayoutTabView:
         # 配置列权重
         parent.grid_columnconfigure(0, weight=0)
         parent.grid_columnconfigure(1, weight=1)
-        parent.grid_columnconfigure(2, weight=0)
     
     def create_log_tab(self) -> None:
         """创建日志调试 Tab"""
-        tab = ttk.Frame(self.notebook)
-        self.notebook.add(tab, text="📋 日志调试")
+        tab = ttk.Frame(self.center_panel)
         self.tabs['log'] = tab
         
         # 创建日志路径输入
@@ -243,12 +263,10 @@ class LayoutTabView:
         # 配置列权重
         parent.grid_columnconfigure(0, weight=0)
         parent.grid_columnconfigure(1, weight=1)
-        parent.grid_columnconfigure(2, weight=0)
     
     def create_screen_tab(self) -> None:
         """创建屏幕操作 Tab"""
-        tab = ttk.Frame(self.notebook)
-        self.notebook.add(tab, text="📸 屏幕操作")
+        tab = ttk.Frame(self.center_panel)
         self.tabs['screen'] = tab
         
         # 创建屏幕功能按钮
@@ -262,8 +280,7 @@ class LayoutTabView:
     
     def create_advanced_tab(self) -> None:
         """创建高级工具 Tab"""
-        tab = ttk.Frame(self.notebook)
-        self.notebook.add(tab, text="⚙️ 高级工具")
+        tab = ttk.Frame(self.center_panel)
         self.tabs['advanced'] = tab
         
         # 创建高级功能按钮
@@ -298,12 +315,12 @@ class LayoutTabView:
                     pady=5
                 )
                 # 设置按钮最小宽度
-                parent.grid_columnconfigure(col, weight=1, minsize=120)
+                parent.grid_columnconfigure(col, weight=1, minsize=150)
     
     def create_output_section(self) -> None:
         """创建输出区域"""
         # 状态文本框
-        self.app.status_text = tk.Text(self.right_panel, wrap=tk.WORD, width=25)
+        self.app.status_text = tk.Text(self.right_panel, wrap=tk.WORD, width=40)
         self.app.status_text.pack(fill=tk.BOTH, expand=True, padx=0, pady=(0, 5))
         
         # 配置文本标签样式
@@ -315,7 +332,7 @@ class LayoutTabView:
         self.app.progress = ttk.Progressbar(
             self.right_panel,
             mode="indeterminate",
-            length=Config.PROGRESS_BAR_LENGTH
+            length=380
         )
         self.app.progress.pack(fill=tk.X, pady=5)
         self.app.progress.pack_forget()  # 默认隐藏
