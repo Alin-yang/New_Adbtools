@@ -671,19 +671,25 @@ class ADBToolApp:
     def _run_install_with_progress(self, apk_path):
         """实际执行安装并捕获输出"""
         try:
-            # 获取目标设备IP
+            # 获取目标设备 IP
             target_ip = self.get_ip_address()
-            
+                
+            # 调试日志
+            self._update_install_status(f"[调试] 开始安装，APK 路径：{apk_path}, 目标设备：{target_ip}")
+                
             # 获取所有已连接设备并构建支持多设备的安装命令
             from utils import build_adb_command_with_device
-            
-            # 获取APK大小用于计算进度
+                
+            # 获取 APK 大小用于计算进度
             apk_size = os.path.getsize(apk_path)
             current_size = 0
-            
+                
             # 构建支持多设备的安装命令
             install_cmd = f"adb install -r -d \"{apk_path}\""
             install_cmd = build_adb_command_with_device(install_cmd, target_ip)
+                
+            # 显示调试信息
+            self._update_install_status(f"[调试] 安装命令：{install_cmd}")
             
             # 显示当前操作的设备信息
             if target_ip:
