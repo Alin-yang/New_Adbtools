@@ -135,49 +135,36 @@ class ADBToolApp:
             connected_devices = get_connected_devices()
             
             if connected_devices:
-                # 提取 IP 地址部分（只保留网络设备，过滤 USB 设备）
-                detected_ips = []
+                # 提取所有设备（包括 USB 设备和网络 IP）
+                detected_devices = []
                 for device in connected_devices:
-                    # 只处理 IP:端口格式的网络设备
-                    if ':' in device:
-                        ip_part = device.split(':')[0]
-                        if ip_part not in detected_ips:
-                            detected_ips.append(ip_part)
-                    # 注意：USB 设备（纯序列号）不添加到 IP 历史记录
-                
-                # 将检测到的IP添加到历史记录中（保持原有顺序，新IP放在前面）
-                for ip in detected_ips:
-                    if ip not in self.ip_history:
-                        self.ip_history.insert(0, ip)
-                    
+                    if device not in detected_devices:
+                        detected_devices.append(device)
+                            
+                # 将所有设备添加到历史记录中（保持原有顺序，新设备放在前面）
+                for device in detected_devices:
+                    if device not in self.ip_history:
+                        self.ip_history.insert(0, device)
+                                
                 # 限制历史记录数量
                 self.ip_history = self.ip_history[:Config.MAX_IP_HISTORY]
-                
+                            
                 # 保存到文件
                 save_ip_history(self.ip_history)
-                
+                            
                 # 更新下拉框
                 if hasattr(self, 'ip_combobox'):
                     self.ip_combobox['values'] = self.ip_history
-                    # 如果输入框为空或只有默认值，设置第一个检测到的IP
+                    # 如果输入框为空或只有默认值，设置第一个检测到的设备
                     current_value = self.ip_combobox.get().strip()
                     if not current_value or current_value == "192.168." and self.ip_history:
                         self.ip_combobox.delete(0, tk.END)
                         self.ip_combobox.insert(0, self.ip_history[0])
-                        # 触发IP变更事件以更新连接状态
+                        # 触发 IP 变更事件以更新连接状态
                         self.on_ip_changed()
-                
-                # 显示检测结果（显示所有设备，包括 USB）
-                device_display_list = []
-                for device in connected_devices:
-                    if ':' in device:
-                        # 网络设备显示 IP
-                        device_display_list.append(device)
-                    else:
-                        # USB 设备显示为 USB 设备
-                        device_display_list.append(f"{device} (USB)")
-                                
-                self.update_status(f"启动时检测到 {len(connected_devices)} 台设备：{', '.join(device_display_list)}", True)
+                            
+                # 显示检测结果（显示所有设备）
+                self.update_status(f"启动时检测到 {len(detected_devices)} 台设备：{', '.join(detected_devices)}", True)
             else:
                 # 没有检测到设备时的提示
                 self.update_status("启动时未检测到已连接的设备", True)
