@@ -96,7 +96,13 @@ class LayoutTabView:
         style.configure('LeftTab.TButton', 
                        font=('Arial', 9, 'bold'),
                        padding=8,
-                       anchor='w')
+                       anchor='w',
+                       background='#f0f0f0',
+                       relief='raised')  # 浮雕效果
+        
+        # 鼠标悬停样式
+        style.map('LeftTab.TButton',
+                 background=[('active', '#e0e0e0'), ('pressed', '#d0d0d0')])
         
         # 创建各个 Tab 按钮
         tab_configs = [
