@@ -117,8 +117,26 @@ class ADBToolApp:
         self._last_displayed_ip = ""  # 记录上次显示的IP地址
 
     def _load_ip_history(self):
-        """加载IP历史记录到下拉框"""
-        self.ip_history = load_ip_history()
+        """加载 IP 历史记录到下拉框（合并已检测到的设备）"""
+        # 从文件加载历史记录
+        file_history = load_ip_history()
+            
+        # 合并已检测到的设备（如果有）
+        merged_history = []
+        # 先添加已检测到的设备
+        for device in self.ip_history:
+            if device not in merged_history:
+                merged_history.append(device)
+        # 再添加文件中的历史记录（去重）
+        for item in file_history:
+            if item not in merged_history:
+                merged_history.append(item)
+            
+        # 限制数量
+        merged_history = merged_history[:Config.MAX_IP_HISTORY]
+            
+        # 更新实例变量和下拉框
+        self.ip_history = merged_history
         if hasattr(self, 'ip_combobox'):
             self.ip_combobox['values'] = self.ip_history
 
