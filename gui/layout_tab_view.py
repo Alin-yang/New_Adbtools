@@ -68,18 +68,18 @@ class LayoutTabView:
         self.left_panel.grid(row=0, column=0, sticky=tk.NSEW, padx=(0, 5))
         self.left_panel.grid_propagate(False)  # 固定宽度
         
-        # 中间功能面板（弹性宽度）
+        # 中间功能面板（根据内容自适应宽度）
         self.center_panel = ttk.Frame(self.main_frame)
         self.center_panel.grid(row=0, column=1, sticky=tk.NSEW, padx=5)
         
-        # 右侧输出面板（固定宽度，调整为 500px）
-        self.right_panel = ttk.Frame(self.main_frame, width=500)
+        # 右侧输出面板（占据剩余所有空间）
+        self.right_panel = ttk.Frame(self.main_frame)
         self.right_panel.grid(row=0, column=2, sticky=tk.NSEW, padx=(5, 0))
         
-        # 配置网格权重 - 中间区域优先扩展
+        # 配置网格权重 - 右侧输出区域弹性扩展
         self.main_frame.grid_columnconfigure(0, weight=0)  # 左侧固定
-        self.main_frame.grid_columnconfigure(1, weight=1)  # 中间弹性扩展
-        self.main_frame.grid_columnconfigure(2, weight=0)  # 右侧固定
+        self.main_frame.grid_columnconfigure(1, weight=0)  # 中间根据内容自适应
+        self.main_frame.grid_columnconfigure(2, weight=1)  # 右侧占据剩余空间
         self.main_frame.grid_rowconfigure(0, weight=1)
         
         # 强制更新布局
@@ -343,8 +343,8 @@ class LayoutTabView:
     
     def create_output_section(self) -> None:
         """创建输出区域"""
-        # 状态文本框（宽度调整为 55）
-        self.app.status_text = tk.Text(self.right_panel, wrap=tk.WORD, width=55)
+        # 状态文本框（自动填充整个右侧面板）
+        self.app.status_text = tk.Text(self.right_panel, wrap=tk.WORD)
         self.app.status_text.pack(fill=tk.BOTH, expand=True, padx=0, pady=(0, 5))
         
         # 配置文本标签样式
@@ -352,11 +352,10 @@ class LayoutTabView:
         self.app.status_text.tag_configure("error", foreground="red")
         self.app.status_text.tag_configure("info", foreground="blue")
         
-        # 进度条（长度调整为 480）
+        # 进度条（自动适应宽度）
         self.app.progress = ttk.Progressbar(
             self.right_panel,
-            mode="indeterminate",
-            length=480
+            mode="indeterminate"
         )
         self.app.progress.pack(fill=tk.X, pady=5)
         self.app.progress.pack_forget()  # 默认隐藏
