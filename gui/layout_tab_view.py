@@ -80,6 +80,9 @@ class LayoutTabView:
         self.main_frame.grid_columnconfigure(0, weight=left_weight)
         self.main_frame.grid_columnconfigure(1, weight=right_weight)
         self.main_frame.grid_rowconfigure(0, weight=1)
+        
+        # 强制更新布局
+        self.main_frame.update_idletasks()
     
     def create_tab_notebook(self) -> None:
         """创建 Tab 容器"""
