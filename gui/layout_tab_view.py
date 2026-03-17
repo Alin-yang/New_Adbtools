@@ -87,8 +87,18 @@ class LayoutTabView:
     
     def create_left_tab_navigation(self) -> None:
         """创建左侧 Tab 导航栏"""
-        # 创建垂直排列的 Tab 按钮
-        tab_buttons = [
+        # 使用 Notebook 创建真正的 Tab 导航
+        self.notebook = ttk.Notebook(self.left_panel)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        
+        # 配置 Tab 样式为垂直布局
+        style = ttk.Style()
+        style.configure('Vertical.TNotebook.Tab', 
+                       padding=[10, 20], 
+                       font=('Arial', 9, 'bold'))
+        
+        # 创建各个 Tab 页
+        tab_configs = [
             ("📱 设备管理", "device"),
             ("📦 应用管理", "app"),
             ("📋 日志调试", "log"),
@@ -96,19 +106,18 @@ class LayoutTabView:
             ("⚙️ 高级工具", "advanced"),
         ]
         
-        for i, (text, tab_name) in enumerate(tab_buttons):
-            btn = ttk.Button(
-                self.left_panel,
-                text=text,
-                command=lambda t=tab_name: self.switch_tab(t),
-                width=15
-            )
-            btn.grid(row=i, column=0, sticky=tk.EW, padx=2, pady=2)
-            self.left_panel.grid_rowconfigure(i, weight=1)
+        for text, tab_name in tab_configs:
+            # 创建空的 Tab 框架 (实际内容在中心面板)
+            tab_frame = ttk.Frame(self.notebook)
+            self.notebook.add(tab_frame, text=text)
+            
+            # 绑定 Tab 切换事件
+            self.notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
         
         # 默认显示第一个 Tab
         self.current_tab_index = 0
-        self.switch_tab("device")
+        # 初始化时显示第一个 Tab 的内容
+        self.app.root.after(100, lambda: self.switch_tab("device"))
     
     def switch_tab(self, tab_name: str) -> None:
         """切换 Tab 页"""
@@ -119,6 +128,18 @@ class LayoutTabView:
         # 显示选中的 Tab 内容
         if tab_name in self.tabs:
             self.tabs[tab_name].grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+    
+    def _on_tab_changed(self, event):
+        """Tab 切换事件处理"""
+        # 获取当前选中的 Tab 索引
+        current_index = self.notebook.index(self.notebook.select())
+        
+        # 根据索引获取 Tab 名称
+        tab_names = ["device", "app", "log", "screen", "advanced"]
+        if current_index < len(tab_names):
+            current_tab_name = tab_names[current_index]
+            # 切换中间面板的内容
+            self.switch_tab(current_tab_name)
     
     def create_device_tab(self) -> None:
         """创建设备管理 Tab"""
