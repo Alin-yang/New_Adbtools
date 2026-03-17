@@ -24,6 +24,7 @@ class LayoutTabView:
         self.center_panel = None    # 中间功能按钮
         self.right_panel = None     # 右侧输出窗口
         self.current_tab_frame = None  # 当前选中的 Tab 内容框架
+        self.tabs = {}  # 存储各个 Tab 页
         
     def setup_gui(self):
         """构建完整的三栏布局"""
