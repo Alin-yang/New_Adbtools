@@ -91,6 +91,13 @@ class LayoutTabView:
         tab_frame = ttk.Frame(self.left_panel)
         tab_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         
+        # 配置自定义样式
+        style = ttk.Style()
+        style.configure('LeftTab.TButton', 
+                       font=('Arial', 9, 'bold'),
+                       padding=8,
+                       anchor='w')
+        
         # 创建各个 Tab 按钮
         tab_configs = [
             ("📱 设备管理", "device"),
@@ -106,9 +113,10 @@ class LayoutTabView:
                 text=text,
                 command=lambda t=tab_name: self.switch_tab(t),
                 width=15,
-                takefocus=True
+                takefocus=True,
+                style='LeftTab.TButton'
             )
-            btn.grid(row=i, column=0, sticky=tk.EW, padx=2, pady=2)
+            btn.grid(row=i, column=0, sticky=tk.EW, padx=1, pady=1)  # 减小间距
             tab_frame.grid_rowconfigure(i, weight=1)
         
         tab_frame.grid_columnconfigure(0, weight=1)
