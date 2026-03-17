@@ -72,13 +72,13 @@ class LayoutTabView:
         self.center_panel = ttk.Frame(self.main_frame)
         self.center_panel.grid(row=0, column=1, sticky=tk.NSEW, padx=5)
         
-        # 右侧输出面板（固定宽度，增加到 600px）
-        self.right_panel = ttk.Frame(self.main_frame, width=600)
+        # 右侧输出面板（固定宽度，调整为 550px）
+        self.right_panel = ttk.Frame(self.main_frame, width=550)
         self.right_panel.grid(row=0, column=2, sticky=tk.NSEW, padx=(5, 0))
         
-        # 配置网格权重
+        # 配置网格权重 - 中间区域优先扩展
         self.main_frame.grid_columnconfigure(0, weight=0)  # 左侧固定
-        self.main_frame.grid_columnconfigure(1, weight=1)  # 中间弹性
+        self.main_frame.grid_columnconfigure(1, weight=1)  # 中间弹性扩展
         self.main_frame.grid_columnconfigure(2, weight=0)  # 右侧固定
         self.main_frame.grid_rowconfigure(0, weight=1)
         
@@ -343,8 +343,8 @@ class LayoutTabView:
     
     def create_output_section(self) -> None:
         """创建输出区域"""
-        # 状态文本框（增加宽度到 65）
-        self.app.status_text = tk.Text(self.right_panel, wrap=tk.WORD, width=65)
+        # 状态文本框（宽度调整为 60）
+        self.app.status_text = tk.Text(self.right_panel, wrap=tk.WORD, width=60)
         self.app.status_text.pack(fill=tk.BOTH, expand=True, padx=0, pady=(0, 5))
         
         # 配置文本标签样式
@@ -352,11 +352,11 @@ class LayoutTabView:
         self.app.status_text.tag_configure("error", foreground="red")
         self.app.status_text.tag_configure("info", foreground="blue")
         
-        # 进度条（增加长度到 580）
+        # 进度条（长度调整为 530）
         self.app.progress = ttk.Progressbar(
             self.right_panel,
             mode="indeterminate",
-            length=580
+            length=530
         )
         self.app.progress.pack(fill=tk.X, pady=5)
         self.app.progress.pack_forget()  # 默认隐藏
