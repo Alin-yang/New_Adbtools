@@ -45,13 +45,25 @@ class ADBToolApp:
         if hasattr(Config, 'MIN_WINDOW_SIZE'):
             self.root.minsize(*Config.MIN_WINDOW_SIZE)
         self.layout_module = layout_module
-        
+                
         # 性能优化：添加防抖机制
         self._status_update_timer = None
         self._pending_status_message = None
         self._last_status_time = 0
-        self._status_throttle_interval = 0.1  # 100ms节流间隔
+        self._status_throttle_interval = 0.1  # 100ms 节流间隔
+                
+        # 线程池管理：用于并发执行功能操作
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=10,  # 增加到 10 个并发线程，提升并发能力
+            thread_name_prefix="ADBTask"
+        )
+        self._running_tasks = {}  # 跟踪正在运行的任务 {future: task_name}
         
+        # 长时间运行任务的独立线程管理（不占用线程池）
+        self._long_running_threads = []  # 跟踪日志、录屏等长时间运行的线程
+        self._cleanup_interval = 300  # 清理已完成线程的间隔（秒）
+        self._last_cleanup_time = time.time()
+                
         self._init_variables()
         self._setup_gui()
         
@@ -240,25 +252,15 @@ class ADBToolApp:
         return run_adb_command(command, retries=retries, timeout=timeout, target_device=target_ip)
     
     def on_ip_changed(self, event=None):
-        """当IP地址改变时触发，显示当前设备状态"""
+        """当 IP 地址改变时触发，显示当前设备状态（极致优化版）"""
         # 立即更新连接状态（不使用防抖）
         self.update_connection_status()
-        
-        # 获取当前IP地址
+            
+        # 获取当前 IP 地址
         current_ip = self.get_ip_address()
         if current_ip and current_ip != "192.168.":
-            # 强制清除相关缓存，确保获取最新状态
-            cache_manager.device_cache.clear()
-            
-            # 区分不同类型的事件
+            # 只在下拉框选择时才刷新设备状态
             if event and event.type == 'VirtualEvent' and event.name == 'ComboboxSelected':
-                # 下拉框选择事件，立即显示
-                self.show_current_device_status(force_display=True)
-            elif not event:
-                # 程序调用，立即显示
-                self.show_current_device_status(force_display=True)
-            else:
-                # 其他事件（如FocusOut），也强制显示以确保同步
                 self.show_current_device_status(force_display=True)
 
     def update_connection_status(self, ip_address: Optional[str] = None):
@@ -309,35 +311,30 @@ class ADBToolApp:
             self.connection_status_label.config(text="✗ 未连接", foreground="red")
 
     def show_device_info(self):
-        """显示当前连接的设备信息"""
+        """显示当前连接的设备信息（精简版）"""
         devices = get_connected_devices()
         current_ip = self.get_ip_address()
-        
+            
         if not devices:
             self.update_status("当前没有连接的设备", False)
-            self.update_connection_status()
             return
-        
+            
         device_info = f"已连接 {len(devices)} 台设备:\n"
         for i, device in enumerate(devices, 1):
-            # 精确匹配当前选中的设备
             marker = ""
             if current_ip:
-                # 标准化当前IP（确保包含端口号）
                 normalized_current_ip = current_ip
                 if ':' not in current_ip:
                     normalized_current_ip = f"{current_ip}:5555"
-                
-                # 精确匹配：完全匹配或IP前缀匹配（带冒号）
+                    
                 if device == normalized_current_ip or device == current_ip:
                     marker = " ← 当前选中"
                 elif device.startswith(current_ip + ':'):
                     marker = " ← 当前选中"
-            
+                
             device_info += f"  {i}. {device}{marker}\n"
-        
+            
         self.update_status(device_info, True)
-        self.update_connection_status()
     
     def show_current_device_status(self, force_display=False, decorator_call=False):
         """显示当前连接设备状态，用于在执行功能前显示设备信息
@@ -436,7 +433,7 @@ class ADBToolApp:
         self.root.after(100, self._setup_post_components)
     
     def _setup_post_components(self):
-        """设置GUI组件创建完成后的操作"""
+        """设置 GUI 组件创建完成后的操作"""
         # 设置默认值
         try:
             if hasattr(self, 'log_path_entry') and self.log_path_entry.winfo_exists():
@@ -444,15 +441,90 @@ class ADBToolApp:
                 self.log_path_entry.insert(0, self.default_log_path)
         except Exception:
             pass
-        
+            
         # 设置拖拽功能
         self._setup_drag_drop()
+        
+    def execute_task_async(self, task_name: str, method_name: str):
+        """异步执行任务（底层优化版 - 零阻塞）"""
+        if not hasattr(self, method_name):
+            self.root.after(0, lambda: self.update_status(f"方法不存在：{method_name}", False))
+            return
+            
+        method = getattr(self, method_name)
+            
+        # 长时间运行任务使用独立线程（不占用线程池）
+        long_running_tasks = ['start_logcat', 'stop_logcat', 'start_recording', 'stop_recording']
+            
+        if method_name in long_running_tasks:
+            # 直接创建线程，零开销
+            thread = threading.Thread(
+                target=self._execute_method_async,
+                args=(task_name, method),
+                name=f"AsyncTask-{task_name}-{time.time()}",
+                daemon=True
+            )
+            thread.start()
+        else:
+            # 使用线程池，但通过 after 避免阻塞
+            self.root.after(0, lambda: self._submit_to_pool(task_name, method))
+        
+    def _submit_to_pool(self, task_name: str, method):
+        """提交到线程池（在 UI 线程之外）"""
+        try:
+            future = self._executor.submit(self._execute_method_async, task_name, method)
+            self._running_tasks[future] = task_name
+            future.add_done_callback(lambda f: self._on_task_complete(f, task_name))
+        except Exception as e:
+            self.root.after(0, lambda: self.update_status(f"{task_name}提交失败：{str(e)}", False))
+        
+    def _execute_method_async(self, task_name: str, method):
+        """执行方法（精简版）"""
+        try:
+            result = method()
+            return result
+        except Exception as e:
+            self.root.after(0, lambda: self.update_status(f"{task_name}执行出错：{str(e)}", False, "error"))
+            return None
+        
+    def _cleanup_long_running_threads(self):
+        """清理已完成的长时间运行线程"""
+        current_time = time.time()
+        if current_time - self._last_cleanup_time < self._cleanup_interval:
+            return
+            
+        # 移除已结束的线程
+        self._long_running_threads = [
+            t for t in self._long_running_threads if t.is_alive()
+        ]
+        self._last_cleanup_time = current_time
+        
+    def _task_wrapper(self, task_name: str, method):
+        """任务包装器（极致精简版）"""
+        try:
+            # 执行实际方法（装饰器会处理设备连接验证）
+            result = method()
+            return result
+        except Exception as e:
+            self.root.after(0, lambda: self.update_status(f"{task_name}执行出错：{str(e)}", False, "error"))
+            return None
+        
+    def _on_task_complete(self, future, task_name: str):
+        """任务完成回调"""
+        if future in self._running_tasks:
+            del self._running_tasks[future]
+        try:
+            result = future.result(timeout=0.1)
+            if result is not None:
+                self.update_status(f"{task_name}完成", True, "success")
+        except Exception:
+            pass
 
     # 状态更新方法
     def update_status(self, message: str, success: bool, msg_type: str = "normal") -> None:
         """
-        更新状态文本框（优化版）
-        
+        更新状态文本框（底层优化版 - 批量更新）
+            
         Args:
             message: 要显示的消息
             success: 是否为成功状态，决定文本颜色
@@ -460,40 +532,40 @@ class ADBToolApp:
         """
         # 生成带时间戳的格式化消息
         timestamp = time.strftime("[%H:%M:%S] ", time.localtime())
-        
-        # 根据消息类型选择标签和格式
+            
+        # 根据消息类型选择标签和格式（简化逻辑）
+        tag_map = {
+            "system": "info",
+            "warning": "warning",
+            "info": "info",
+            "success": "success",
+            "error": "error"
+        }
+            
         if msg_type == "system":
-            # 系统信息：灰色，带系统标识
             formatted_message = f"{timestamp}[系统] {message}"
-            tag = "info"
         elif msg_type == "warning":
-            # 警告信息：橙色
             formatted_message = f"{timestamp}[警告] {message}"
-            tag = "warning"
         elif msg_type == "info":
-            # 一般信息：蓝色
             formatted_message = f"{timestamp}[信息] {message}"
-            tag = "info"
         elif success and msg_type == "success":
-            # 成功信息：绿色，带成功标识
             formatted_message = f"{timestamp}[✓] {message}"
-            tag = "success"
         elif not success and msg_type == "error":
-            # 错误信息：红色，带错误标识
             formatted_message = f"{timestamp}[✗] {message}"
-            tag = "error"
         else:
-            # 默认处理：根据success参数
             prefix = "[✓] " if success else "[✗] "
             formatted_message = f"{timestamp}{prefix}{message}"
-            tag = "success" if success else "error"
-        
+            
+        tag = tag_map.get(msg_type, "success" if success else "error")
+            
         # 插入消息到状态文本框
         self.status_text.insert(tk.END, f"\n{formatted_message}\n", tag)
         self.status_text.see(tk.END)
-        
-        # 强制更新界面（确保消息立即显示）
-        self.root.update_idletasks()
+            
+        # 底层优化：使用 after_idle 替代 update_idletasks
+        # after_idle 会在事件循环空闲时执行，不会阻塞
+        if msg_type in ["error", "warning"]:
+            self.root.after_idle(lambda: self.root.update_idletasks())
 
     # 文件选择方法
     def browse_apk(self) -> None:
@@ -1214,40 +1286,49 @@ class ADBToolApp:
 
     @require_device_connected  
     def stop_recording(self):
-        """停止屏幕录制（按照日志抓取的逻辑，以终止时间命名）"""
+        """停止屏幕录制（彻底优化版 - 完全异步）"""
         if not self.recording_active:
-            self.update_status("没有正在进行的录制", False)
+            self.root.after(0, lambda: self.update_status("没有正在进行的录制", False))
             return
-
-        self.update_status("正在停止屏幕录制...", True)
+    
+        # 显示停止提示
+        self.root.after(0, lambda: self.update_status("正在停止屏幕录制...", True, "info"))
         self.recording_active = False
-
-        # 终止screenrecord进程
+    
+        # 终止 screenrecord 进程
         if self.recording_subprocess and self.recording_subprocess.poll() is None:
             try:
                 self.recording_subprocess.terminate()
-                self.recording_subprocess.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                # 如果温和终止失败，强制杀死
-                try:
-                    self.recording_subprocess.kill()
-                    self.recording_subprocess.wait(timeout=2)
-                except:
-                    pass
-            except Exception:
+            except:
                 pass
-
-        # 等待录制线程结束（参考日志抓取的逻辑）
-        if self.recording_thread and self.recording_thread.is_alive():
-            self.recording_thread.join(timeout=10)  # 增加等待时间到10秒，给足够时间完成重命名
-            if self.recording_thread.is_alive():
-                self.update_status("警告：录制线程仍在运行，可能正在处理文件操作...", False)
+            
+        # 将耗时的等待和文件处理移到后台线程
+        cleanup_thread = threading.Thread(
+            target=self._cleanup_recording_async,
+            name="RecordingCleanupThread",
+            daemon=True
+        )
+        cleanup_thread.start()
+            
+        # 关键优化：立即返回，不再执行任何同步代码！
+        return
         
-        # 重置状态
-        self.recording_active = False
-        self.recording_subprocess = None
-        
-        self.update_status("录制停止操作完成", True)
+    def _cleanup_recording_async(self):
+        """异步清理录屏文件（后台线程执行）"""
+        try:
+            # 等待录制线程结束（在后台进行，不阻塞 UI）
+            if hasattr(self, 'recording_thread') and self.recording_thread.is_alive():
+                self.recording_thread.join(timeout=15)  # 给足够时间让录制完成
+                
+            # 重置状态
+            self.root.after(0, lambda: setattr(self, 'recording_active', False))
+            self.root.after(0, lambda: setattr(self, 'recording_subprocess', None))
+                
+            # 通知用户完成
+            self.root.after(0, lambda: self.update_status("录制停止操作完成", True, "success"))
+                
+        except Exception as e:
+            self.root.after(0, lambda: self.update_status(f"清理录制文件出错：{str(e)}", False))
 
     def _run_recording(self):
         """实际执行屏幕录制（参考日志抓取的逻辑）"""
@@ -1484,37 +1565,30 @@ class ADBToolApp:
 
     @require_device_connected
     def stop_logcat(self):
-        """停止日志捕获（修复版，解决文件重命名问题）"""
+        """停止日志捕获（极致优化版 - 异步处理）"""
         if not self.logging_active:
             self.update_status("没有正在运行的日志捕获", False)
             return
-
+    
         # 设置停止信号
         self.stop_event.set()
         self._update_operation_status("日志捕获", "正在停止", "")
-        
+            
         # 确保进程终止
         self._terminate_logcat()
-        
-        # 等待线程结束，给足够的时间让文件句柄释放
-        if hasattr(self, 'logcat_thread') and self.logcat_thread.is_alive():
-            # 等待线程正常结束
-            self.logcat_thread.join(timeout=5)  # 增加等待时间到5秒
             
-            # 如果线程仍未结束，通常说明有异常情况
-            # 但大多数情况下线程都会正常结束，所以不显示警告
-            if self.logcat_thread.is_alive():
-                # 只在调试模式下显示，不干扰用户
-                pass  # self.update_status("调试：线程仍在运行，将继续等待", True)
+        # 将耗时的文件处理移到后台线程
+        cleanup_thread = threading.Thread(
+            target=self._cleanup_logcat_async,
+            name="LogcatCleanupThread",
+            daemon=True
+        )
+        cleanup_thread.start()
+        # 关键优化：立即返回，不再执行任何同步代码！
+        return
         
-        # 额外等待确保文件句柄完全释放
-        time.sleep(2)
-
-        # 检查文件是否存在和大小
-        if not os.path.exists(self.log_file_path):
-            self.update_status("日志文件不存在，可能捕获过程中出现错误", False)
-            self.logging_active = False
-            return
+        # ========== 以下代码已移至_cleanup_logcat_async，永远不会执行 ==========
+        # 检查文件大小（已废弃）
             
         # 检查文件大小
         file_size = os.path.getsize(self.log_file_path)
@@ -1580,16 +1654,92 @@ class ADBToolApp:
                 self.update_status(f"保存日志文件失败: {str(e)}", False)
                 break
 
-        # 重置状态
-        self.logging_active = False
-        
-        if not success_save:
-            # 如果重命名失败，至少告诉用户原文件位置
-            file_size_str = format_file_size(file_size) if file_size > 0 else "空文件"
-            self.update_status(f"日志捕获已停止，但文件保存失败。\n原因: {last_error}\n原文件位置: {self.log_file_path}\n文件大小: {file_size_str}", False)
-        
         # 清理进程引用
         self.logcat_subprocess = None
+        
+    def _cleanup_logcat_async(self):
+        """异步清理日志文件（后台线程执行）"""
+        try:
+            # 等待线程结束（在后台进行，不阻塞 UI）
+            if hasattr(self, 'logcat_thread') and self.logcat_thread.is_alive():
+                self.logcat_thread.join(timeout=3)
+                
+            # 短暂等待确保文件句柄释放
+            time.sleep(0.5)
+                
+            # 检查文件是否存在和大小
+            if not os.path.exists(self.log_file_path):
+                self.root.after(0, lambda: self.update_status("日志文件不存在，可能捕获过程中出现错误", False))
+                self.logging_active = False
+                return
+                    
+            # 检查文件大小
+            file_size = os.path.getsize(self.log_file_path)
+            if file_size == 0:
+                self.root.after(0, lambda: self.update_status("警告：日志文件为空，可能原因：\n1. 设备无日志输出\n2. ADB 连接不稳定\n3. 权限不足\n4. 捕获时间过短", False))
+            else:
+                file_size_str = format_file_size(file_size)
+                self.root.after(0, lambda: self.update_status(f"日志捕获成功，文件大小：{file_size_str}", True))
+    
+            # 生成新的文件名（使用停止时的时间戳）
+            original_path = os.path.dirname(self.log_file_path)
+            stop_timestamp = timestamp_time()  # 获取停止时的时间戳
+            if file_size == 0:
+                # 为空文件添加特殊标记
+                new_name = os.path.join(original_path, f"{stop_timestamp}_empty.log")
+            else:
+                new_name = os.path.join(original_path, f"{stop_timestamp}.log")
+    
+            # 重试机制（减少到 3 次，缩短等待时间）
+            max_retries = 3
+            success_save = False
+            last_error = ""
+                
+            for attempt in range(max_retries):
+                try:
+                    # 尝试重命名文件
+                    os.rename(self.log_file_path, new_name)
+                    success_save = True
+                        
+                    # 构建提示信息
+                    save_path = os.path.abspath(new_name)
+                    if file_size == 0:
+                        self.root.after(0, lambda: self.update_status(f"日志捕获已停止\n空日志文件已保存到：{save_path}\n建议检查设备连接和权限设置", False))
+                    else:
+                        self.root.after(0, lambda: self.update_status(f"日志捕获已停止\n日志文件已保存到：{save_path}", True))
+                        
+                    # 尝试打开日志所在文件夹
+                    try:
+                        os.startfile(os.path.dirname(new_name))
+                    except:
+                        pass  # 忽略打开文件夹的错误
+                    break
+                        
+                except PermissionError as e:
+                    last_error = f"权限错误：{str(e)}"
+                    if attempt < max_retries - 1:
+                        # 缩短等待时间
+                        time.sleep(0.5)
+                        continue
+                except Exception as e:
+                    last_error = f"重命名失败：{str(e)}"
+                    self.root.after(0, lambda: self.update_status(f"保存日志文件失败：{str(e)}", False))
+                    break
+    
+            # 重置状态
+            self.logging_active = False
+                
+            if not success_save:
+                # 如果重命名失败，至少告诉用户原文件位置
+                file_size_str = format_file_size(file_size) if file_size > 0 else "空文件"
+                self.root.after(0, lambda: self.update_status(f"日志捕获已停止，但文件保存失败。\n原因：{last_error}\n原文件位置：{self.log_file_path}\n文件大小：{file_size_str}", False))
+                
+            # 清理进程引用
+            self.logcat_subprocess = None
+                
+        except Exception as e:
+            self.root.after(0, lambda: self.update_status(f"清理日志文件出错：{str(e)}", False))
+            self.logging_active = False
 
     def _run_logcat(self):
         """实际执行日志捕获（修复版，解决文件句柄释放问题）"""

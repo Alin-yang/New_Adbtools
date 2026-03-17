@@ -1,9 +1,10 @@
 """
-Tab页布局模块
-为ADB工具提供基于Tab页的界面分类功能
+Tab 页布局模块
+为 ADB 工具提供基于 Tab 页的界面分类功能
 """
 import tkinter as tk
 from tkinter import ttk
+from functools import partial  # 添加 partial 导入
 from typing import Dict, Any, Callable, List, Tuple
 from config import Config, get_text
 
@@ -218,27 +219,34 @@ class TabLayout:
         self._create_button_grid(parent_frame, system_buttons, columns=2)
     
     def _create_button_grid(self, parent_frame: ttk.Frame, buttons: List[Tuple[str, str]], columns: int = 2) -> None:
-        """创建按钮网格布局
-        
+        """创建按钮网格布局（底层优化版 - 添加视觉反馈）
+            
         Args:
             parent_frame: 父框架
-            buttons: 按钮配置列表 [(文本, 方法名), ...]
+            buttons: 按钮配置列表 [(文本，方法名), ...]
             columns: 列数
         """
         for i, (text, method_name) in enumerate(buttons):
             row = i // columns
             col = i % columns
-            
+                
             # 检查方法是否存在
             if hasattr(self.app, method_name):
-                command = getattr(self.app, method_name)
-                btn = ttk.Button(parent_frame, text=text, command=command)
+                # 创建按钮
+                btn = ttk.Button(parent_frame, text=text)
+                    
+                # 底层优化：绑定点击事件，添加视觉反馈
+                def on_click(m=method_name, t=text):
+                    # 立即返回，让 UI 线程可以响应
+                    self.app.root.after(0, lambda: self.app.execute_task_async(t, m))
+                    
+                btn.configure(command=on_click)
                 btn.grid(row=row, column=col, sticky=tk.EW, padx=5, pady=5)
             else:
                 # 如果方法不存在，创建禁用的按钮
                 btn = ttk.Button(parent_frame, text=text, state="disabled")
                 btn.grid(row=row, column=col, sticky=tk.EW, padx=5, pady=5)
-        
+            
         # 配置列权重使按钮能够伸缩
         for i in range(columns):
             parent_frame.grid_columnconfigure(i, weight=1)
@@ -276,16 +284,16 @@ class TabLayout:
         self.app.progress.pack_forget()  # 默认隐藏
     
     def setup_keyboard_shortcuts(self) -> None:
-        """设置键盘快捷键"""
+        """设置键盘快捷键（异步优化版）"""
         shortcuts = {
             '<Control-q>': lambda e: self.app.root.quit(),
-            '<Control-c>': lambda e: self.app.connect_adb() if hasattr(self.app, 'connect_adb') else None,
-            '<Control-d>': lambda e: self.app.disconnect_adb() if hasattr(self.app, 'disconnect_adb') else None,
-            '<Control-i>': lambda e: self.app.force_install() if hasattr(self.app, 'force_install') else None,
-            '<Control-u>': lambda e: self.app.uninstall() if hasattr(self.app, 'uninstall') else None,
-            '<Control-l>': lambda e: self.app.package_list() if hasattr(self.app, 'package_list') else None,
-            '<F5>': lambda e: self.app.reboot() if hasattr(self.app, 'reboot') else None,
-            '<F12>': lambda e: self.app.screencap() if hasattr(self.app, 'screencap') else None,
+            '<Control-c>': lambda e: self.app.execute_task_async("连接 ADB", "connect_adb"),
+            '<Control-d>': lambda e: self.app.execute_task_async("断开 ADB", "disconnect_adb"),
+            '<Control-i>': lambda e: self.app.execute_task_async("强制安装", "force_install"),
+            '<Control-u>': lambda e: self.app.execute_task_async("卸载应用", "uninstall"),
+            '<Control-l>': lambda e: self.app.execute_task_async("获取应用列表", "package_list"),
+            '<F5>': lambda e: self.app.execute_task_async("重启设备", "reboot"),
+            '<F12>': lambda e: self.app.execute_task_async("屏幕截图", "screencap"),
         }
         
         for shortcut, handler in shortcuts.items():
