@@ -99,13 +99,14 @@ class LayoutTabView:
                        anchor='w',
                        background='#e8e8e8')  # 未选中：浅灰色
         
-        # 选中状态样式 - 添加蓝色边框
+        # 选中状态样式 - 添加明显的蓝色边框和背景
         style.configure('SelectedTab.TButton',
                        font=('Arial', 10, 'bold'),
                        padding=10,
                        anchor='w',
-                       background='#d0e0f0',  # 选中：浅蓝色背景
-                       relief='ridge')  # 隆起边框效果
+                       background='#5ba3d0',  # 选中：深蓝色背景
+                       relief='solid',        # 实线边框
+                       borderwidth=3)         # 边框宽度 3px
         
         # 鼠标悬停样式
         style.map('LeftTab.TButton',
