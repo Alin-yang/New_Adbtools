@@ -60,7 +60,7 @@ class LayoutTabView:
         if hasattr(Config, 'MIN_WINDOW_SIZE'):
             self.app.root.minsize(*Config.MIN_WINDOW_SIZE)
     
-    def create_panels(self, left_weight: int = 55, right_weight: int = 45) -> None:
+    def create_panels(self, left_weight: int = 45, right_weight: int = 55) -> None:
         """
         创建左右分栏面板
         
@@ -70,11 +70,11 @@ class LayoutTabView:
         """
         # 左侧 Tab 面板
         self.left_panel = ttk.Frame(self.main_frame)
-        self.left_panel.grid(row=0, column=0, sticky=tk.NSEW, padx=(0, 10))
+        self.left_panel.grid(row=0, column=0, sticky=tk.NSEW, padx=(0, 5))
         
         # 右侧输出面板
         self.right_panel = ttk.Frame(self.main_frame)
-        self.right_panel.grid(row=0, column=1, sticky=tk.NSEW)
+        self.right_panel.grid(row=0, column=1, sticky=tk.NSEW, padx=(5, 0))
         
         # 配置网格权重
         self.main_frame.grid_columnconfigure(0, weight=left_weight)
