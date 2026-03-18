@@ -145,11 +145,11 @@ class TabLayout:
         # 配置Tab页的权重
         self.left_panel.grid_rowconfigure(4, weight=1)
         
-        # 定义Tab页配置
+        # 定义 Tab 页配置
         tab_configs = [
             ("设备管理", self._create_device_management_tab),
             ("应用管理", self._create_app_management_tab),
-            ("日志调试", self._create_log_debug_tab),
+            ("日志与录屏", self._create_log_screen_tab),  # 合并后的 Tab
             ("系统信息", self._create_system_info_tab),
         ]
         
@@ -187,17 +187,58 @@ class TabLayout:
         
         self._create_button_grid(parent_frame, app_buttons, columns=2)
     
-    def _create_log_debug_tab(self, parent_frame: ttk.Frame) -> None:
-        """创建日志调试Tab页"""
+    def _create_log_screen_tab(self, parent_frame: ttk.Frame) -> None:
+        """创建日志调试与屏幕操作合并的 Tab 页"""
         # 日志调试相关按钮
         log_buttons = [
             ("启动日志捕获", "start_logcat"),
             ("停止日志捕获", "stop_logcat"),
             ("清除日志缓存", "log_clear"),
-            ("导出ANR文件", "pull_anr_file"),
+            ("导出 ANR 文件", "pull_anr_file"),
         ]
-        
+            
         self._create_button_grid(parent_frame, log_buttons, columns=2)
+            
+        # 添加分隔标签
+        separator = ttk.Label(parent_frame, text="─ 屏幕操作 ─")
+        separator.grid(row=2, column=0, columnspan=2, pady=(15, 5), sticky=tk.W)
+            
+        # 屏幕操作相关按钮（按用户要求的顺序）
+        screen_buttons = [
+            ("开始屏幕录制", "start_recording"),      # 第一
+            ("停止屏幕录制", "stop_recording"),      # 第二
+            ("截取当前屏幕", "screencap"),          # 第三
+        ]
+            
+        # 从第 3 行开始放置屏幕操作按钮（横向排列）
+        for i, (text, method_name) in enumerate(screen_buttons):
+            row = 3  # 都在第 3 行
+            col = i  # 第 0、1、2 列，横向排列
+                    
+            if hasattr(self.app, method_name):
+                btn = ttk.Button(parent_frame, text=text)
+                def on_click(m=method_name, t=text):
+                    self.app.root.after(0, lambda: self.app.execute_task_async(t, m))
+                btn.configure(command=on_click)
+                btn.grid(row=row, column=col, sticky=tk.EW, padx=5, pady=5)
+            else:
+                btn = ttk.Button(parent_frame, text=text, state="disabled")
+                btn.grid(row=row, column=col, sticky=tk.EW, padx=5, pady=5)
+        
+        # 添加存储文件夹按钮
+        separator2 = ttk.Label(parent_frame, text="─ 文件管理 ─")
+        separator2.grid(row=5, column=0, columnspan=2, pady=(15, 5), sticky=tk.W)
+        
+        storage_btn = ttk.Button(
+            parent_frame,
+            text="打开日志截屏录屏储存文件夹",
+            command=self.app.open_storage_folder
+        )
+        storage_btn.grid(row=6, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=5)
+            
+        # 配置列权重使按钮能够伸缩
+        for i in range(2):
+            parent_frame.grid_columnconfigure(i, weight=1)
     
     def _create_system_info_tab(self, parent_frame: ttk.Frame) -> None:
         """创建系统信息Tab页"""
@@ -322,19 +363,19 @@ def get_tab_button_configs() -> Dict[str, List[Tuple[str, str]]]:
             ("获取当前包名版本号", "get_version"),
             ("获取当前包名应用安装路径", "get_package_path"),
         ],
-        "日志调试": [
+        "日志与录屏": [
             ("启动日志捕获", "start_logcat"),
             ("停止日志捕获", "stop_logcat"),
             ("清除日志缓存", "log_clear"),
-            ("导出ANR文件", "pull_anr_file"),
-        ],
-        "系统信息": [
-            ("获取Android版本号", "get_android_version"),
-            ("获取设备串号", "get_serial_number"),
+            ("导出 ANR 文件", "pull_anr_file"),
             ("截取当前屏幕", "screencap"),
             ("开始屏幕录制", "start_recording"),
             ("停止屏幕录制", "stop_recording"),
-            ("获取Root权限", "root_device"),
+        ],
+        "系统信息": [
+            ("获取 Android 版本号", "get_android_version"),
+            ("获取设备串号", "get_serial_number"),
+            ("获取 Root 权限", "root_device"),
             ("重新挂载分区", "remount"),
             ("重启设备", "reboot"),
             ("获取当前打开应用包名", "get_package_name"),

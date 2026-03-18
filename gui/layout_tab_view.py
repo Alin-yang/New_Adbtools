@@ -40,8 +40,7 @@ class LayoutTabView:
         # 创建各个 Tab 页内容（功能按钮）
         self.create_device_tab()      # 设备管理
         self.create_app_tab()         # 应用管理
-        self.create_log_tab()         # 日志调试
-        self.create_screen_tab()      # 屏幕操作
+        self.create_log_screen_tab()  # 日志调试与屏幕操作（合并）
         self.create_advanced_tab()    # 高级工具
         
         # 创建右侧输出区域
@@ -116,8 +115,7 @@ class LayoutTabView:
         tab_configs = [
             ("📱 设备管理", "device"),
             ("📦 应用管理", "app"),
-            ("📋 日志调试", "log"),
-            ("📸 屏幕操作", "screen"),
+            ("📋 日志与录屏", "log_screen"),  # 合并后的 Tab 名称
             ("⚙️ 高级工具", "advanced"),
         ]
         
@@ -282,25 +280,54 @@ class LayoutTabView:
         parent.grid_columnconfigure(0, weight=0)
         parent.grid_columnconfigure(1, weight=1)
     
-    def create_log_tab(self) -> None:
-        """创建日志调试 Tab"""
+    def create_log_screen_tab(self) -> None:
+        """创建日志调试与屏幕操作合并的 Tab"""
         tab = ttk.Frame(self.center_panel)
-        self.tabs['log'] = tab
+        self.tabs['log_screen'] = tab
         
-        # 创建日志路径输入
+        # 创建输入区域（日志路径）
         self._create_log_input_section(tab)
         
-        # 创建日志功能按钮
+        # 创建日志功能按钮（从第 1 行开始）
         log_buttons = [
-            ("▶️ 启动日志捕获", 3, 0, "start_logcat"),
-            ("⏹️ 停止日志捕获", 3, 1, "stop_logcat"),
-            ("🧹 清除日志缓存", 3, 2, "log_clear"),
-            ("📥 导出 ANR 文件", 4, 0, "pull_anr_file"),
-            ("📋 查看日志文件", 4, 1, "log_clear"),  # 补齐空格 (临时使用清除日志功能)
-            ("📜 功能按键原始命令", 4, 2, "show_all_adb_commands"),
+            ("▶️ 启动日志捕获", 1, 0, "start_logcat"),
+            ("⏹️ 停止日志捕获", 1, 1, "stop_logcat"),
+            ("🧹 清除日志缓存", 1, 2, "log_clear"),
+            ("📥 导出 ANR 文件", 2, 0, "pull_anr_file"),
+            ("📜 功能按键原始命令", 2, 1, "show_all_adb_commands"),
         ]
         
-        self._create_button_grid(tab, log_buttons)
+        self._create_button_grid(tab, log_buttons, row_offset=0)
+        
+        # 创建屏幕录制功能按钮（添加分隔标签，从第 3 行开始）
+        ttk.Label(tab, text="─ 屏幕操作 ─").grid(
+            row=3, column=0, columnspan=3, padx=5, pady=(15, 5), sticky=tk.W
+        )
+        
+        screen_buttons = [
+            ("🎥 开始屏幕录制", 4, 0, "start_recording"),
+            ("⏹️ 停止屏幕录制", 4, 1, "stop_recording"),
+            ("📷 截取当前屏幕", 4, 2, "screencap"),
+        ]
+        
+        self._create_button_grid(tab, screen_buttons, row_offset=0)
+        
+        # 添加存储文件夹按钮（使用不同的样式突出显示）
+        ttk.Label(tab, text="─ 文件管理 ─").grid(
+            row=5, column=0, columnspan=3, padx=5, pady=(15, 5), sticky=tk.W
+        )
+        
+        storage_btn = ttk.Button(
+            tab,
+            text="📂 打开日志截屏录屏储存文件夹",
+            command=self.app.open_storage_folder
+        )
+        storage_btn.grid(
+            row=6, column=0, columnspan=3, sticky=tk.EW, padx=5, pady=5
+        )
+        tab.grid_columnconfigure(0, weight=1, minsize=150)
+        tab.grid_columnconfigure(1, weight=1, minsize=150)
+        tab.grid_columnconfigure(2, weight=1, minsize=150)
     
     def _create_log_input_section(self, parent) -> None:
         """创建日志输入区域"""
@@ -322,19 +349,7 @@ class LayoutTabView:
         parent.grid_columnconfigure(0, weight=0)
         parent.grid_columnconfigure(1, weight=1)
     
-    def create_screen_tab(self) -> None:
-        """创建屏幕操作 Tab"""
-        tab = ttk.Frame(self.center_panel)
-        self.tabs['screen'] = tab
-        
-        # 创建屏幕功能按钮
-        screen_buttons = [
-            ("📷 截取当前屏幕", 0, 0, "screencap"),
-            ("🎥 开始屏幕录制", 1, 0, "start_recording"),
-            ("⏹️ 停止屏幕录制", 1, 1, "stop_recording"),
-        ]
-        
-        self._create_button_grid(tab, screen_buttons, row_offset=0)
+
     
     def create_advanced_tab(self) -> None:
         """创建高级工具 Tab"""

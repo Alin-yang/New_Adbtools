@@ -264,47 +264,43 @@ class ADBToolApp:
                 self.show_current_device_status(force_display=True)
 
     def update_connection_status(self, ip_address: Optional[str] = None):
-        """更新连接状态标签（优化版本，减少不必要的设备检查）"""
+        """更新连接状态标签（支持 USB 设备）"""
         if not hasattr(self, 'connection_status_label'):
             return
-        
+            
         if not ip_address:
             ip_address = self.get_ip_address()
-        
-        if not ip_address or ip_address == "192.168.":
+            
+        # 获取所有已连接设备
+        devices = get_connected_devices()
+            
+        if not devices:
             self.connection_status_label.config(text="未连接", foreground="gray")
             return
-        
-        # 优化：只在必要时检查设备连接状态
-        # 检查是否已经有缓存的结果
-        cached_status = cache_manager.get_device_status(ip_address)
-        if cached_status is not None:
-            # 使用缓存结果
-            if cached_status:
-                self.connection_status_label.config(text="✓ 已连接", foreground="green")
+            
+        # 如果没有输入 IP 地址，检查是否有 USB 设备
+        if not ip_address or ip_address == "192.168.":
+            # 查找 USB 设备（非 IP 格式的设备标识）
+            usb_device = None
+            for device in devices:
+                # USB 设备序列号通常不包含冒号（端口号）或点号（IP 地址）
+                if ':' not in device and '.' not in device:
+                    usb_device = device
+                    break
+                
+            if usb_device:
+                self.connection_status_label.config(text=f"✓ USB 设备", foreground="green")
             else:
-                self.connection_status_label.config(text="✗ 未连接", foreground="red")
+                self.connection_status_label.config(text="未连接", foreground="gray")
             return
-        
-        # 只有缓存失效时才检查设备
-        devices = get_connected_devices()
-        
-        # 标准化IP地址
-        if ':' not in ip_address:
-            ip_with_port = f"{ip_address}:5555"
-        else:
-            ip_with_port = ip_address
-        
-        # 检查是否匹配任何已连接设备
+            
+        # 有 IP 地址时，检查是否匹配任何已连接设备
         is_connected = False
         for device in devices:
-            if device == ip_with_port or device == ip_address or ip_address in device:
+            if device == ip_address or device.startswith(ip_address + ':'):
                 is_connected = True
                 break
-        
-        # 更新缓存
-        cache_manager.set_device_status(ip_address, is_connected)
-        
+            
         if is_connected:
             self.connection_status_label.config(text="✓ 已连接", foreground="green")
         else:
@@ -403,7 +399,17 @@ class ADBToolApp:
                 else:
                     status_info += ", 未选择目标设备或IP格式无效"
         else:
-            status_info += ", 未选择目标设备"
+            # 没有输入 IP 时，检查是否有 USB 设备
+            usb_device = None
+            for device in all_devices:
+                if ':' not in device and '.' not in device:
+                    usb_device = device
+                    break
+            
+            if usb_device:
+                status_info += f", 当前控制：{usb_device} (USB 设备)"
+            else:
+                status_info += ", 未选择目标设备"
         
         self.update_status(status_info, True)
         # 更新上次显示时间
@@ -621,13 +627,16 @@ class ADBToolApp:
 
     def get_ip_address(self) -> Optional[str]:
         """
-        获取IP地址（仅支持中文版本的Combobox）
-        
+        获取 IP 地址或设备标识（支持 USB 设备）
+            
         Returns:
-            Optional[str]: IP地址字符串，如果未输入则返回None
+            Optional[str]: IP 地址或设备序列号，如果未输入则返回 None
         """
         if hasattr(self, 'ip_combobox'):
-            return self.ip_combobox.get().strip()
+            value = self.ip_combobox.get().strip()
+            # 如果是完整的 IP 地址或设备序列号，则返回
+            if value and value != "192.168.":
+                return value
         return None
 
     # @require_device_connected
@@ -1170,12 +1179,7 @@ class ADBToolApp:
             
             if success:
                 file_size = format_file_size(os.path.getsize(new_file))
-                self.update_status(f"截图已保存至路径: {new_file}\n文件大小: {file_size}", True)
-                # 尝试打开截图所在文件夹
-                try:
-                    os.startfile(os.path.dirname(new_file))
-                except:
-                    pass
+                self.update_status(f"截图已保存至路径：{new_file}\n文件大小：{file_size}", True)
             else:
                 self.update_status(f"截图失败: {error_msg}", False)
                 
@@ -1330,6 +1334,24 @@ class ADBToolApp:
         except Exception as e:
             self.root.after(0, lambda: self.update_status(f"清理录制文件出错：{str(e)}", False))
 
+    def open_storage_folder(self):
+        """打开日志截屏录屏存储文件夹"""
+        try:
+            # 获取用户定义的日志路径
+            from utils import get_user_defined_log_path
+            user_log_path = get_user_defined_log_path(self)
+            
+            # 检查路径是否存在
+            if not os.path.exists(user_log_path):
+                self.update_status(f"存储文件夹不存在：{user_log_path}\n请先执行截图、日志或录屏操作以创建文件夹", False)
+                return
+            
+            # 打开文件夹
+            os.startfile(user_log_path)
+            self.update_status(f"已打开存储文件夹：{user_log_path}", True)
+        except Exception as e:
+            self.update_status(f"打开文件夹失败：{str(e)}", False)
+
     def _run_recording(self):
         """实际执行屏幕录制（参考日志抓取的逻辑）"""
         try:
@@ -1441,11 +1463,7 @@ class ADBToolApp:
                             else:
                                 self.update_status(f"录制已完成\n录制文件已保存到: {save_path}\n文件大小: {file_size_str}", True)
                             
-                            # 尝试打开文件夹
-                            try:
-                                os.startfile(os.path.dirname(new_name))
-                            except:
-                                pass
+                            # 移除自动打开文件夹功能，改为手动点击按钮
                             break
                             
                         except Exception as e:
@@ -1632,15 +1650,9 @@ class ADBToolApp:
                 # 构建提示信息
                 save_path = os.path.abspath(new_name)
                 if file_size == 0:
-                    self.update_status(f"日志捕获已停止\n空日志文件已保存到: {save_path}\n建议检查设备连接和权限设置", False)
+                    self.update_status(f"日志捕获已停止\n空日志文件已保存到：{save_path}\n建议检查设备连接和权限设置", False)
                 else:
-                    self.update_status(f"日志捕获已停止\n日志文件已保存到: {save_path}", True)
-                
-                # 尝试打开日志所在文件夹
-                try:
-                    os.startfile(os.path.dirname(new_name))
-                except:
-                    pass  # 忽略打开文件夹的错误
+                    self.update_status(f"日志捕获已停止\n日志文件已保存到：{save_path}", True)
                 break
                 
             except PermissionError as e:
@@ -1707,12 +1719,6 @@ class ADBToolApp:
                         self.root.after(0, lambda: self.update_status(f"日志捕获已停止\n空日志文件已保存到：{save_path}\n建议检查设备连接和权限设置", False))
                     else:
                         self.root.after(0, lambda: self.update_status(f"日志捕获已停止\n日志文件已保存到：{save_path}", True))
-                        
-                    # 尝试打开日志所在文件夹
-                    try:
-                        os.startfile(os.path.dirname(new_name))
-                    except:
-                        pass  # 忽略打开文件夹的错误
                     break
                         
                 except PermissionError as e:
