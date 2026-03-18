@@ -1375,7 +1375,7 @@ class ADBToolApp:
             # 启动screenrecord进程（使用较低的分辨率和码率以保证兼容性）
             from utils import build_adb_command_with_device
             target_ip = self.get_ip_address()
-            record_cmd = build_adb_command_with_device(f"adb shell screenrecord --bit-rate 4000000 --size 1280x720 {device_temp_file}", target_ip)
+            record_cmd = build_adb_command_with_device(f"adb shell screenrecord --bit-rate 4000000  {device_temp_file}", target_ip)
             
             # 分割命令为参数列表
             cmd_parts = record_cmd.split()
