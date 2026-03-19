@@ -15,7 +15,7 @@ from utils import (
     get_next_filename, load_ip_history, save_ip_history,
     load_pkg_history, save_pkg_history, is_valid_package_name,
     get_accurate_package_version, calculate_optimal_workers, format_file_size,
-    get_connected_devices
+    get_connected_devices, get_connected_devices_simple
 )
 from config import Config
 from cache_manager import cache_manager
@@ -66,37 +66,49 @@ class ADBToolApp:
                 
         self._init_variables()
         self._setup_gui()
-        
-        # 延迟加载非关键组件以提高启动速度
-        self.root.after(100, self._delayed_initialization)
+        # 注意：_delayed_initialization 已经在_setup_gui 中调用，不需要在此重复调用
 
     def _delayed_initialization(self):
-        """延迟初始化非关键组件"""
-        # 在后台线程中执行设备检测（使用原有的完整检测逻辑）
-        device_thread = threading.Thread(target=self._async_device_detection_full, daemon=True)
+        """延迟初始化非关键组件（极致优化版）"""
+        # 立即在后台启动设备检测（使用快速检测策略）
+        device_thread = threading.Thread(target=self._async_device_detection_fast, daemon=True)
         device_thread.start()
         
-        # 延迟加载历史记录
-        self.root.after(200, self._load_ip_history)
-        self.root.after(300, self._load_pkg_history)
-        self.root.after(400, Config.ensure_directories)
+        # 合并历史记录加载，减少延迟次数（从 100ms 减少到 30ms）
+        self.root.after(30, self._load_all_history_async)
+        
+        # 目录创建移到更晚且异步执行（从 200ms 减少到 80ms）
+        self.root.after(80, self._ensure_directories_async)
 
+    def _async_device_detection_fast(self):
+        """快速的异步设备检测（简化版本，不阻塞 UI）"""
+        try:
+            # 使用简化的设备检测，不进行深度验证
+            connected_devices = get_connected_devices_simple()
+            # 在主线程中更新 UI
+            self.root.after(0, lambda: self._handle_detected_devices(connected_devices))
+        except Exception as error:
+            error_msg = str(error)
+            self.root.after(0, lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
+        
     def _async_device_detection_full(self):
-        """完整的异步设备检测（包含IP历史记录更新）"""
+        """完整的异步设备检测（包含 IP 历史记录更新）"""
         try:
             # 在主线程中执行完整的设备检测逻辑
             self.root.after(0, self._detect_connected_devices_on_startup)
-        except Exception as e:
-            self.root.after(0, lambda: self.update_status(f"启动时设备检测失败: {str(e)}", False))
+        except Exception as error:
+            error_msg = str(error)
+            self.root.after(0, lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
 
     def _async_device_detection(self):
         """异步设备检测（简化版本）"""
         try:
             connected_devices = get_connected_devices()
-            # 在主线程中更新UI
+            # 在主线程中更新 UI
             self.root.after(0, lambda: self._handle_detected_devices(connected_devices))
-        except Exception as e:
-            self.root.after(0, lambda: self.update_status(f"启动时设备检测失败: {str(e)}", False))
+        except Exception as error:
+            error_msg = str(error)
+            self.root.after(0, lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
 
     def _init_variables(self) -> None:
         """
@@ -128,35 +140,51 @@ class ADBToolApp:
         self.device_status_cooldown = 0.5  # 缩短冷却时间到0.5秒，提高响应性
         self._last_displayed_ip = ""  # 记录上次显示的IP地址
 
-    def _load_ip_history(self):
-        """加载 IP 历史记录到下拉框（合并已检测到的设备）"""
-        # 从文件加载历史记录
-        file_history = load_ip_history()
-            
-        # 合并已检测到的设备（如果有）
-        merged_history = []
-        # 先添加已检测到的设备
-        for device in self.ip_history:
-            if device not in merged_history:
-                merged_history.append(device)
-        # 再添加文件中的历史记录（去重）
-        for item in file_history:
-            if item not in merged_history:
-                merged_history.append(item)
-            
-        # 限制数量
-        merged_history = merged_history[:Config.MAX_IP_HISTORY]
-            
-        # 更新实例变量和下拉框
-        self.ip_history = merged_history
+    def _load_all_history_async(self):
+        """异步加载所有历史记录（合并 IP 和 pkg 历史）"""
+        # 在后台线程中同时加载两种历史记录
+        def load_history():
+            try:
+                # 加载 IP 历史
+                file_history = load_ip_history()
+                merged_history = []
+                for device in self.ip_history:
+                    if device not in merged_history:
+                        merged_history.append(device)
+                for item in file_history:
+                    if item not in merged_history:
+                        merged_history.append(item)
+                merged_history = merged_history[:Config.MAX_IP_HISTORY]
+                
+                # 加载 pkg 历史
+                pkg_history = load_pkg_history()
+                
+                # 在主线程中更新 UI
+                self.root.after(0, lambda: self._update_history_ui(merged_history, pkg_history))
+            except Exception as error:
+                error_msg = str(error)
+                self.root.after(0, lambda msg=error_msg: self.update_status(f"加载历史记录失败：{msg}", False))
+        
+        # 启动后台线程
+        thread = threading.Thread(target=load_history, daemon=True)
+        thread.start()
+    
+    def _update_history_ui(self, ip_history, pkg_history):
+        """更新历史记录 UI"""
+        self.ip_history = ip_history
+        self.pkg_history = pkg_history
+        
         if hasattr(self, 'ip_combobox'):
             self.ip_combobox['values'] = self.ip_history
-
-    def _load_pkg_history(self):
-        """加载包名历史记录到下拉框"""
-        self.pkg_history = load_pkg_history()
         if hasattr(self, 'pkg_combobox'):
             self.pkg_combobox['values'] = self.pkg_history
+    
+    def _ensure_directories_async(self):
+        """异步创建必要目录"""
+        try:
+            Config.ensure_directories()
+        except Exception as e:
+            self.update_status(f"创建目录失败：{str(e)}", False)
     
     def _detect_connected_devices_on_startup(self):
         """启动时检测已连接的设备并更新IP历史记录"""
@@ -422,21 +450,24 @@ class ADBToolApp:
     def _setup_gui(self) -> None:
         """
         设置图形用户界面
-        
-        动态调用布局模块的setup_gui方法，配置状态文本框的
+            
+        动态调用布局模块的 setup_gui 方法，配置状态文本框的
         标签样式，并设置默认日志路径。
         """
         # 动态调用布局模块的 setup_gui 方法
         self.layout_module.setup_gui(self)
-        
+            
         # 配置状态文本框的标签样式
         self.status_text.tag_configure("success", foreground="green")
         self.status_text.tag_configure("error", foreground="red")
         self.status_text.tag_configure("info", foreground="blue")
         self.status_text.tag_configure("warning", foreground="orange")  # 添加警告颜色
-        
-        # 使用after确保所有GUI组件都创建完成后再进行后续操作
-        self.root.after(100, self._setup_post_components)
+            
+        # 立即设置默认值和拖拽功能（不延迟）
+        self._setup_post_components()
+            
+        # 延迟加载非关键组件以提高启动速度（从 100ms 减少到 50ms）
+        self.root.after(50, self._delayed_initialization)
     
     def _setup_post_components(self):
         """设置 GUI 组件创建完成后的操作"""

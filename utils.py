@@ -7,10 +7,10 @@ from typing import Tuple, Optional, List
 from config import Config
 
 def get_connected_devices() -> List[str]:
-    """获取当前连接的所有设备列表
+    """获取当前连接的所有设备列表（标准版本，带验证）
     
     Returns:
-        List[str]: 已连接设备的序列号/IP地址列表
+        List[str]: 已连接设备的序列号/IP 地址列表
     """
     try:
         result = subprocess.run(
@@ -38,6 +38,33 @@ def get_connected_devices() -> List[str]:
                     except Exception:
                         # 如果验证失败，跳过此设备
                         continue
+        return devices
+    except Exception:
+        return []
+
+
+def get_connected_devices_simple() -> List[str]:
+    """获取当前连接的所有设备列表（快速版本，不深度验证）
+    
+    用于启动时快速检测，不进行额外的命令验证
+    
+    Returns:
+        List[str]: 已连接设备的序列号/IP 地址列表
+    """
+    try:
+        result = subprocess.run(
+            "adb devices", shell=True, check=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=3  # 更短的超时时间
+        )
+        output = result.stdout.decode('utf-8', errors='ignore')
+        devices = []
+        for line in output.splitlines()[1:]:  # 跳过第一行标题
+            # 只检查基本格式，不进行深度验证
+            if '\t' in line and 'device' in line and 'unauthorized' not in line and 'offline' not in line:
+                device_id = line.split('\t')[0].strip()
+                if device_id and device_id != 'List':
+                    devices.append(device_id)
         return devices
     except Exception:
         return []
