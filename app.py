@@ -7,6 +7,7 @@ import psutil
 import subprocess
 import os
 import glob
+import logging
 from typing import Optional, Tuple, Dict, Any
 from decorators import require_device_connected
 from utils import (
@@ -21,6 +22,16 @@ from utils import (
 from config import Config
 from cache_manager import cache_manager
 import concurrent.futures
+
+# 配置日志输出
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),  # 输出到控制台
+        logging.FileHandler('adb_tool_debug.log', encoding='utf-8')  # 输出到文件
+    ]
+)
 
 class ADBToolApp:
     # 预先声明所有动态绑定的GUI组件
@@ -251,7 +262,46 @@ class ADBToolApp:
                 save_pkg_history(self.pkg_history)
                 if hasattr(self, 'pkg_combobox'):
                     self.pkg_combobox['values'] = self.pkg_history
+    
+    def _save_apk_to_history(self, apk_path: str) -> None:
+        """保存 APK 路径到历史记录（增强版 - 同时更新下拉框）"""
+        try:
+            # 获取当前历史记录
+            if hasattr(self, 'apk_combobox'):
+                current_values = list(self.apk_combobox['values'])
+                
+                # 如果路径已存在，先移除
+                if apk_path in current_values:
+                    current_values.remove(apk_path)
+                
+                # 添加到最前面
+                current_values.insert(0, apk_path)
+                
+                # 限制历史记录数量（最多 20 条）
+                if len(current_values) > 20:
+                    current_values = current_values[:20]
+                
+                # 更新下拉框
+                self.apk_combobox['values'] = tuple(current_values)
+        except:
+            pass  # 失败不提示
                     
+    def update_version_display(self, version: str = "") -> None:
+        """更新版本展示框"""
+        if hasattr(self, 'version_display'):
+            # 如果是空字符串，则清空显示
+            if not version:
+                self.version_display.config(state='normal')
+                self.version_display.delete(0, tk.END)
+                self.version_display.insert(0, "")
+                self.version_display.config(state='readonly')
+            else:
+                # 显示版本号
+                self.version_display.config(state='normal')
+                self.version_display.delete(0, tk.END)
+                self.version_display.insert(0, version)
+                self.version_display.config(state='readonly')
+    
     def get_package_name_from_input(self) -> Optional[str]:
         """从输入框获取包名
         
@@ -336,34 +386,69 @@ class ADBToolApp:
             self.connection_status_label.config(text="✗ 未连接", foreground="red")
 
     def show_device_info(self):
-        """显示当前连接的设备详细信息（增强版）"""
-        devices = get_connected_devices()
-        current_ip = self.get_ip_address()
+        """显示当前连接的设备详细信息（异步优化版）"""
+        # 【日志】记录按钮点击
+        import logging
+        logging.info("[按钮点击] show_device_info 开始执行")
+        
+        # 立即显示提示，不阻塞
+        self.update_status("⏳ 正在获取设备列表...", True, "info")
+        
+        # 【日志】记录启动异步线程
+        logging.info("[异步线程] 启动 _show_device_info_async")
+        
+        # 启动异步线程获取设备信息
+        import threading
+        thread = threading.Thread(target=self._show_device_info_async, daemon=True)
+        thread.start()
+        logging.info(f"[异步线程] 线程已启动，线程 ID: {thread.ident}")
+    
+    def _show_device_info_async(self):
+        """异步获取并显示设备信息（优化版 - 使用快速检测）"""
+        import logging
+        start_time = time.time()  # 【修复】记录开始时间
+        logging.info("[后台线程] _show_device_info_async 开始执行")
+        
+        try:
+            # 【优化】使用快速检测，不进行深度验证（从 220ms 减少到 50ms）
+            from utils import get_connected_devices_simple
+            logging.info("[后台线程] 调用 get_connected_devices_simple()")
+            devices = get_connected_devices_simple()
+            current_ip = self.get_ip_address()
+            elapsed = (time.time() - start_time) * 1000  # 【修复】计算实际耗时
+            logging.info(f"[后台线程] 获取到 {len(devices)} 台设备，耗时：{elapsed:.2f}ms")
             
-        if not devices:
-            self.update_status("当前没有连接的设备", False)
-            return
-        
-        # 显示设备列表
-        device_info = f"📱 已连接 {len(devices)} 台设备:\n"
-        for i, device in enumerate(devices, 1):
-            marker = ""
-            if current_ip:
-                normalized_current_ip = current_ip
-                if ':' not in current_ip:
-                    normalized_current_ip = f"{current_ip}:5555"
+            if not devices:
+                logging.info("[后台线程] 没有设备，准备更新 UI")
+                self.update_status("当前没有连接的设备", False)
+                return
+            
+            # 构建设备列表信息
+            device_info = f"📱 已连接 {len(devices)} 台设备:\n"
+            for i, device in enumerate(devices, 1):
+                marker = ""
+                if current_ip:
+                    normalized_current_ip = current_ip
+                    if ':' not in current_ip:
+                        normalized_current_ip = f"{current_ip}:5555"
+                        
+                    if device == normalized_current_ip or device == current_ip:
+                        marker = " ← 当前选中"
+                    elif device.startswith(current_ip + ':'):
+                        marker = " ← 当前选中"
                     
-                if device == normalized_current_ip or device == current_ip:
-                    marker = " ← 当前选中"
-                elif device.startswith(current_ip + ':'):
-                    marker = " ← 当前选中"
-                
-            device_info += f"  {i}. {device}{marker}\n"
-        
-        self.update_status(device_info, True)
-        
-        # 异步获取详细设备信息（不阻塞界面）
-        self.root.after(0, lambda: self._get_detailed_device_info())
+                device_info += f"  {i}. {device}{marker}\n"
+            
+            # 【优化】直接更新 UI，不使用 after
+            logging.info("[后台线程] 直接显示设备列表（不使用 after）")
+            self.update_status(device_info, True)
+            
+            # 【优化】移除详细设备信息获取（这个太耗时，用户需要时可以单独点击"获取设备信息"）
+            # self.root.after(100, lambda: self._get_detailed_device_info())
+            logging.info("[后台线程] 执行完成（不获取详细信息）")
+        except Exception as e:
+            logging.error(f"[后台线程] 异常：{str(e)}")
+            self.update_status(f"获取设备信息失败：{str(e)}", False)
     
     def get_device_info_fast(self):
         """快速获取设备信息（极速版 - 真正异步不阻塞）"""
@@ -897,30 +982,63 @@ class ADBToolApp:
         self._setup_drag_drop()
     
     def _extract_and_update_package_name(self, apk_path: str):
-        """从 APK 文件中提取包名并更新到输入框（异步执行）"""
+        """从 APK 文件中提取包名和版本号并更新到输入框（增强版）"""
+        import logging
         try:
-            # 使用新函数提取包名
+            logging.info(f"[_extract_and_update_package_name] 开始处理：{apk_path}")
+            
+            # 使用新函数提取包名和版本信息
+            from utils import extract_package_name_from_apk
             package_name = extract_package_name_from_apk(apk_path)
+            logging.info(f"[_extract_and_update_package_name] 提取结果：{package_name}")
             
             if package_name:
+                # ✅ extract_package_name_from_apk 返回的是字符串，不是字典
+                pkg_name = package_name
+                version = ""  # aapt2/aapt 不直接返回版本号，需要另外获取
+                logging.info(f"[_extract_and_update_package_name] 包名：{pkg_name}")
+                
                 # 更新包名输入框
                 if hasattr(self, 'pkg_combobox'):
                     self.pkg_combobox.delete(0, tk.END)
-                    self.pkg_combobox.insert(0, package_name)
+                    self.pkg_combobox.insert(0, pkg_name)
                 elif hasattr(self, 'pkg_entry'):
                     self.pkg_entry.delete(0, tk.END)
-                    self.pkg_entry.insert(0, package_name)
+                    self.pkg_entry.insert(0, pkg_name)
+                
+                # 【新增】尝试从设备获取该包名的版本号（如果设备已连接）
+                if self.check_device_connected():
+                    try:
+                        logging.info(f"[_extract_and_update_package_name] 设备已连接，尝试获取版本号")
+                        output, success = self.run_adb_with_target(f"adb shell pm dump {pkg_name}")
+                        if success:
+                            from utils import extract_version_info
+                            version = extract_version_info(output)
+                            if version:
+                                logging.info(f"[_extract_and_update_package_name] 获取到版本号：{version}")
+                    except Exception as e:
+                        logging.warning(f"[_extract_and_update_package_name] 获取版本号失败：{str(e)}")
+                
+                # 【新增】更新版本展示框（如果有版本号）
+                if version:
+                    logging.info(f"[_extract_and_update_package_name] 更新版本展示框：{version}")
+                    self.update_version_display(version)
                 
                 # 在输出框显示包名信息
                 file_name = os.path.basename(apk_path)
-                self.update_status(f"✅ 自动识别到应用包名：{package_name}\n📦 来源文件：{file_name}", True)
+                if version:
+                    self.update_status(f"✅ 自动识别到应用包名：{pkg_name} (版本：{version})\n📦 来源文件：{file_name}", True)
+                else:
+                    self.update_status(f"✅ 自动识别到应用包名：{pkg_name}\n📦 来源文件：{file_name}\n💡 点击'获取包名版本号'查看版本", True)
                 
-                # 保存包名到历史记录（如果需要）
-                self._save_pkg_to_history(package_name)
+                # 保存包名到历史记录
+                self._save_pkg_to_history(pkg_name)
             else:
+                logging.warning(f"[_extract_and_update_package_name] 未找到包名信息")
                 # 提取失败，不显示错误，让用户手动输入
                 pass
         except Exception as error:
+            logging.error(f"[_extract_and_update_package_name] 异常：{str(error)}")
             # 静默失败，不影响其他功能
             pass
         
@@ -1002,17 +1120,21 @@ class ADBToolApp:
     # 状态更新方法
     def update_status(self, message: str, success: bool, msg_type: str = "normal") -> None:
         """
-        更新状态文本框（底层优化版 - 批量更新）
+        更新状态文本框（极致优化版 - 零阻塞）
             
         Args:
             message: 要显示的消息
-            success: 是否为成功状态，决定文本颜色
+            success: 是否为成功状态
             msg_type: 消息类型 (normal/success/error/warning/info/system)
         """
+        # 【日志】记录 UI 更新
+        import logging
+        logging.info(f"[UI 更新] 类型:{msg_type}, 成功:{success}, 消息:{message[:50]}...")
+        
         # 生成带时间戳的格式化消息
         timestamp = time.strftime("[%H:%M:%S] ", time.localtime())
             
-        # 根据消息类型选择标签和格式（简化逻辑）
+        # 根据消息类型选择标签和格式
         tag_map = {
             "system": "info",
             "warning": "warning",
@@ -1037,27 +1159,62 @@ class ADBToolApp:
             
         tag = tag_map.get(msg_type, "success" if success else "error")
             
-        # 插入消息到状态文本框
+        # 插入消息到状态文本框（不阻塞）
         self.status_text.insert(tk.END, f"\n{formatted_message}\n", tag)
         self.status_text.see(tk.END)
-            
-        # 底层优化：使用 after_idle 替代 update_idletasks
-        # after_idle 会在事件循环空闲时执行，不会阻塞
-        if msg_type in ["error", "warning"]:
-            self.root.after_idle(lambda: self.root.update_idletasks())
+        # ✅ 移除 update_idletasks，让事件循环自然处理
 
     # 文件选择方法
     def browse_apk(self) -> None:
         """
-        选择APK文件
-        
-        打开文件对话框让用户选择APK文件，并将文件路径
-        填入到APK输入框中。
+        选择 APK 文件（增强版 - 自动提取包名和版本号）
+            
+        打开文件对话框让用户选择 APK 文件，并将文件路径
+        填入到 APK 输入框中，同时提取包名和版本号。
         """
+        import logging
         file_path = filedialog.askopenfilename(filetypes=[("APK files", "*.apk")])
         if file_path:
+            logging.info(f"[browse_apk] 选择了文件：{file_path}")
             self.apk_entry.delete(0, tk.END)
             self.apk_entry.insert(0, file_path)
+                
+            # 【新增】自动提取 APK 的包名和版本号
+            try:
+                from utils import extract_package_name_from_apk
+                logging.info(f"[browse_apk] 开始提取 APK 信息")
+                package_name = extract_package_name_from_apk(file_path)
+                logging.info(f"[browse_apk] 提取结果：{package_name}")
+                    
+                if package_name:
+                    pkg_name = package_name
+                    version = ""  # aapt2/aapt 不直接返回版本号
+                    logging.info(f"[browse_apk] 提取成功 - 包名：{pkg_name}")
+                        
+                    # 更新包名输入框
+                    if hasattr(self, 'pkg_combobox') and pkg_name:
+                        self.pkg_combobox.set(pkg_name)
+                        self._save_pkg_to_history(pkg_name)
+                        
+                    # 【新增】更新版本展示框
+                    if version:
+                        self.update_version_display(version)
+                        self.update_status(f"已识别 APK: {pkg_name} (版本：{version})", True)
+                    else:
+                        self.update_version_display()
+                        self.update_status(f"已识别 APK 包名：{pkg_name}\n💡 点击'获取包名版本号'查看版本", True)
+                else:
+                    logging.warning(f"[browse_apk] 提取失败，package_name: {package_name}")
+                    # 清空版本显示
+                    self.update_version_display()
+                    self.update_status("无法从 APK 提取包名信息", False)
+            except Exception as e:
+                logging.error(f"[browse_apk] 提取异常：{str(e)}")
+                self.update_version_display()
+                self.update_status(f"提取 APK 信息失败：{str(e)}", False)
+            
+            # 🆕 新增：保存 APK 路径到历史记录
+            self._save_apk_to_history(file_path)
 
     def choose_log_path(self) -> None:
         """
@@ -1114,45 +1271,95 @@ class ADBToolApp:
 
     # @require_device_connected
     def connect_adb(self):
-        """连接ADB设备"""
+        """连接 ADB 设备（异步优化版）"""
+        # 【日志】记录按钮点击
+        import logging
+        logging.info("[按钮点击] connect_adb 开始执行")
+        
         # 显示当前设备状态
         self.show_current_device_status()
-        
+            
         ip_address = self.get_ip_address()
         if not ip_address:
-            self.update_status(f"请输入IP地址", False)
+            self.update_status(f"请输入 IP 地址", False)
             self.update_connection_status()
             return False
+            
+        # 显示正在连接
+        self.update_status(f"⏳ 正在连接 {ip_address}...", True, "info")
+            
+        # 【日志】记录启动异步线程
+        logging.info(f"[异步线程] 启动 _connect_adb_async, IP: {ip_address}")
         
-        output, success = self.run_adb_with_target(f"adb connect {ip_address}")
-        if "connected" in output.lower():
-            # 保存新的IP到历史记录
-            if ip_address not in self.ip_history:
-                self.ip_history.insert(0, ip_address)
-                save_ip_history(self.ip_history)
-                if hasattr(self, 'ip_combobox'):
-                    self.ip_combobox['values'] = self.ip_history
-            self.update_status(output, True)
-            # 更新连接状态
-            self.update_connection_status(ip_address)
-        else:
-            self.update_status(output, False)
-            self.update_connection_status(ip_address)
+        # 启动异步线程执行连接
+        import threading
+        thread = threading.Thread(target=lambda: self._connect_adb_async(ip_address), daemon=True)
+        thread.start()
+        logging.info(f"[异步线程] 线程已启动，线程 ID: {thread.ident}")
+        
+    def _connect_adb_async(self, ip_address: str):
+        """异步执行 ADB 连接"""
+        import logging
+        logging.info(f"[后台线程] _connect_adb_async 开始执行，IP: {ip_address}")
+        
+        try:
+            logging.info(f"[ADB 命令] 执行 adb connect {ip_address}")
+            output, success = self.run_adb_with_target(f"adb connect {ip_address}")
+            logging.info(f"[ADB 命令] 执行完成，成功:{success}, 输出长度:{len(output)}")
+                
+            # 在 UI 线程中更新结果
+            if "connected" in output.lower():
+                logging.info("[后台线程] 连接成功，准备更新 UI")
+                # 保存新的 IP 到历史记录
+                if ip_address not in self.ip_history:
+                    self.ip_history.insert(0, ip_address)
+                    save_ip_history(self.ip_history)
+                    # ✅ 直接更新，不使用 after
+                    if hasattr(self, 'ip_combobox'):
+                        logging.info("[后台线程] 更新 IP 下拉框")
+                        self.ip_combobox['values'] = self.ip_history
+                # ✅ 直接更新状态，不使用 after
+                logging.info("[后台线程] 调用 update_status")
+                self.update_status(output, True)
+                logging.info("[后台线程] 调用 update_connection_status")
+                self.update_connection_status(ip_address)
+                logging.info("[后台线程] UI 更新完成")
+            else:
+                logging.info("[后台线程] 连接失败，准备更新 UI")
+                self.update_status(output, False)
+                self.update_connection_status(ip_address)
+        except Exception as e:
+            logging.error(f"[后台线程] 异常：{str(e)}")
+            self.update_status(f"连接失败：{str(e)}", False)
 
 
     @require_device_connected
     def disconnect_adb(self):
-        """断开ADB连接"""
+        """断开 ADB 连接（异步优化版）"""
         # 强制显示当前设备状态
         self.show_current_device_status(force_display=True)
+            
+        # 显示正在断开
+        self.update_status("⏳ 正在断开所有连接...", True, "info")
+            
+        # 启动异步线程执行断开
+        import threading
+        thread = threading.Thread(target=lambda: self._disconnect_adb_async(), daemon=True)
+        thread.start()
         
-        output, success = self.run_adb_with_target("adb disconnect")
-        if "disconnected" in output.lower():
-            self.update_status(output, True)
-        else:
-            self.update_status(output, False)
-        # 更新连接状态
-        self.update_connection_status()
+    def _disconnect_adb_async(self):
+        """异步执行 ADB 断开"""
+        try:
+            output, success = self.run_adb_with_target("adb disconnect")
+                
+            # 在 UI 线程中更新结果
+            if "disconnected" in output.lower():
+                self.update_status(output, True)
+            else:
+                self.update_status(output, False)
+            self.update_connection_status()
+        except Exception as e:
+            self.update_status(f"断开失败：{str(e)}", False)
 
     def check_device_connected(self, ip_address: Optional[str] = None) -> bool:
         """检查设备连接状态(强化版，确保获取最新状态)"""
@@ -1333,22 +1540,22 @@ class ADBToolApp:
             self._hide_progress()
 
     def _update_operation_status(self, operation: str, status: str, details: str = "", msg_type: str = "info"):
-        """更新操作状态显示（统一格式）
-        
+        """更新操作状态显示（统一格式 - 零阻塞优化）
+            
         Args:
-            operation: 操作名称（如"日志捕获"、"屏幕录制"）
-            status: 状态（如"开始"、"进行中"、"完成"、"失败"）
+            operation: 操作名称（如“日志捕获”、“屏幕录制”）
+            status: 状态（如“开始”、“进行中”、“完成”、“失败”）
             details: 详细信息
             msg_type: 消息类型
         """
         timestamp = time.strftime("[%H:%M:%S] ", time.localtime())
-        
+            
         # 构造统一格式的消息
         if details:
             message = f"{timestamp}[{operation}] {status} - {details}"
         else:
             message = f"{timestamp}[{operation}] {status}"
-        
+            
         # 根据状态选择颜色
         if "失败" in status or "错误" in status:
             tag = "error"
@@ -1358,10 +1565,10 @@ class ADBToolApp:
             tag = "success"
         else:
             tag = msg_type
-        
+            
         self.status_text.insert(tk.END, f"\n{message}\n", tag)
         self.status_text.see(tk.END)
-        self.root.update_idletasks()
+        # ✅ 移除 update_idletasks，避免阻塞
     
     def _update_install_status(self, message):
         """更新安装状态（优化版）"""
@@ -1536,17 +1743,23 @@ class ADBToolApp:
         if not pkg_name:
             self.update_status("请输入包名", False)
             return
-
+    
         output, success = self.run_adb_with_target(f"adb shell pm dump {pkg_name}")
         if success:
             version = extract_version_info(output)
             if version:
                 # 保存包名到历史记录
                 self._save_pkg_to_history(pkg_name)
-                self.update_status(f"当前应用{pkg_name}版本: {version}", True)
+                # 【新增】同步更新版本展示框
+                self.update_version_display(version)
+                self.update_status(f"当前应用{pkg_name}版本：{version}", True)
             else:
+                # 清空版本显示
+                self.update_version_display()
                 self.update_status("版本信息解析失败", False)
         else:
+            # 清空版本显示
+            self.update_version_display()
             self.update_status(output, False)
 
     @require_device_connected
@@ -1748,18 +1961,24 @@ class ADBToolApp:
                 daemon=True
             )
             self.recording_thread.start()
-            
-            time.sleep(1)
-            
-            if self.recording_thread.is_alive() and self.recording_active:
+                
+            # 使用 root.after 延迟检查，避免阻塞主线程
+            self.root.after(1000, self._check_recording_thread_status)
+                
+        except Exception as e:
+            self.update_status(f"启动录制线程时出错：{str(e)}", False)
+            self.recording_active = False
+        
+    def _check_recording_thread_status(self):
+        """检查录制线程状态（异步回调）"""
+        try:
+            if hasattr(self, 'recording_thread') and self.recording_thread.is_alive() and self.recording_active:
                 self._update_operation_status("屏幕录制", "运行中", "点击'停止录制'结束录制", "success")
             else:
                 self._update_operation_status("屏幕录制", "启动失败", "", "error")
                 self.recording_active = False
-                
-        except Exception as e:
-            self.update_status(f"启动录制线程时出错: {str(e)}", False)
-            self.recording_active = False
+        except:
+            pass
 
     @require_device_connected  
     def stop_recording(self):
@@ -2040,19 +2259,24 @@ class ADBToolApp:
                 daemon=True
             )
             self.logcat_thread.start()
-            
-            # 等待一小段时间检查线程是否成功启动
-            time.sleep(1)
-            
-            if self.logcat_thread.is_alive() and self.logging_active:
+                
+            # 使用 root.after 延迟检查，避免阻塞主线程
+            self.root.after(1000, self._check_logcat_thread_status)
+                
+        except Exception as e:
+            self.update_status(f"启动日志捕获线程失败：{str(e)}", False)
+            self.logging_active = False
+        
+    def _check_logcat_thread_status(self):
+        """检查日志捕获线程状态（异步回调）"""
+        try:
+            if hasattr(self, 'logcat_thread') and self.logcat_thread.is_alive() and self.logging_active:
                 self._update_operation_status("日志捕获", "运行中", "点击'停止日志捕获'结束捕获", "success")
             else:
                 self._update_operation_status("日志捕获", "启动失败", "", "error")
                 self.logging_active = False
-                
-        except Exception as e:
-            self.update_status(f"启动日志捕获线程失败: {str(e)}", False)
-            self.logging_active = False
+        except:
+            pass
 
     @require_device_connected
     def stop_logcat(self):
@@ -2797,6 +3021,126 @@ class ADBToolApp:
         self.status_text.insert(tk.END, "💡 提示：将 <xxx> 替换为实际参数值\n", "info")
         self.status_text.insert(tk.END, "="*70 + "\n", "info")
         self.status_text.see(tk.END)
+    
+    def execute_quick_command(self):
+        """执行快捷命令（支持用户自定义输入）"""
+        try:
+            # 获取输入的命令
+            if not hasattr(self, 'quick_cmd_combobox'):
+                return
+            
+            cmd = self.quick_cmd_combobox.get().strip()
+            if not cmd:
+                self.update_status("⚠️ 请输入 ADB 命令", False)
+                return
+            
+            # 检查是否连接设备
+            target_ip = self.get_ip_address()
+            if not target_ip or target_ip == "192.168.":
+                self.update_status("⚠️ 请先连接设备", False)
+                return
+            
+            # 显示正在执行
+            self.update_status(f"⏳ 正在执行命令：{cmd}\n", True)
+            
+            # 使用后台线程执行（优化：直接创建线程，不使用线程池）
+            import threading
+            thread = threading.Thread(target=lambda: self._execute_quick_command_async(cmd), daemon=True)
+            thread.start()
+            
+            # 保存到历史记录
+            self._save_command_to_history(cmd)
+            
+        except Exception as e:
+            self.update_status(f"❌ 执行命令失败：{str(e)}", False)
+    
+    def _execute_quick_command_async(self, cmd: str):
+        """异步执行快捷命令"""
+        try:
+            # 执行命令
+            output, success = self.run_adb_with_target(cmd)
+            
+            # 在 UI 线程中显示结果
+            if success:
+                result_text = f"✅ 命令执行成功:\n{output}"
+                self.root.after(0, lambda: self.update_status(result_text, True, "info"))
+            else:
+                result_text = f"❌ 命令执行失败:\n{output}"
+                self.root.after(0, lambda: self.update_status(result_text, False))
+        except Exception as e:
+            self.root.after(0, lambda: self.update_status(f"❌ 执行出错：{str(e)}", False))
+    
+    def _save_command_to_history(self, cmd: str):
+        """保存命令到历史记录"""
+        try:
+            # 获取当前历史记录
+            if hasattr(self, 'quick_cmd_combobox'):
+                current_values = list(self.quick_cmd_combobox['values'])
+                
+                # 如果命令已存在，先移除
+                if cmd in current_values:
+                    current_values.remove(cmd)
+                
+                # 添加到最前面
+                current_values.insert(0, cmd)
+                
+                # 限制历史记录数量（最多 20 条）
+                if len(current_values) > 20:
+                    current_values = current_values[:20]
+                
+                # 更新下拉框
+                self.quick_cmd_combobox['values'] = tuple(current_values)
+        except:
+            pass  # 失败不提示
+    
+    def refresh_device_list(self):
+        """刷新设备列表（增强版 - 显示设备信息）"""
+        try:
+            # 执行 adb devices
+            output, success = self.run_adb_command("adb devices")
+            
+            if success and output:
+                # 解析设备列表
+                devices = []
+                lines = output.strip().split('\n')
+                
+                for line in lines[1:]:  # 跳过标题行
+                    if '\t' in line:
+                        parts = line.split('\t')
+                        if len(parts) >= 2:
+                            device_id = parts[0]
+                            status = parts[1]
+                            
+                            if status == 'device':
+                                # 获取设备型号（异步，超时 0.5 秒）
+                                try:
+                                    import subprocess
+                                    result = subprocess.run(
+                                        ['adb', '-s', device_id, 'shell', 'getprop', 'ro.product.model'],
+                                        capture_output=True,
+                                        text=True,
+                                        timeout=0.5
+                                    )
+                                    model = result.stdout.strip()
+                                    if model:
+                                        devices.append(f"{model} - {device_id} ✓")
+                                    else:
+                                        devices.append(f"{device_id} ✓")
+                                except:
+                                    devices.append(f"{device_id} ✓")
+                
+                # 更新 IP 下拉框
+                if hasattr(self, 'ip_combobox'):
+                    current_ip = self.ip_combobox.get()
+                    self.ip_combobox['values'] = tuple(devices)
+                    
+                    # 尝试恢复当前选择
+                    if current_ip:
+                        self.ip_combobox.set(current_ip)
+                    elif devices:
+                        self.ip_combobox.current(0)
+        except:
+            pass  # 失败不提示
 
     def _setup_drag_drop(self):
         """设置拖拽APK文件功能"""

@@ -41,6 +41,7 @@ a = Analysis(
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
+    optimize=1,  # 启用 Python 优化 -O
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
@@ -66,4 +67,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     uac_admin=False,
+    icon=None,
 )

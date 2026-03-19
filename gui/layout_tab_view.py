@@ -235,23 +235,26 @@ class LayoutTabView:
         """创建应用管理 Tab"""
         tab = ttk.Frame(self.center_panel)
         self.tabs['app'] = tab
-        
+            
         # 创建输入区域
         self._create_app_input_section(tab)
-        
+            
+        # 创建应用版本展示框
+        self._create_app_version_display(tab)
+            
         # 创建应用功能按钮
         app_buttons = [
-            ("📲 强制安装 APK", 4, 0, "force_install"),
-            ("🗑️ 卸载当前包名应用", 4, 1, "uninstall"),
-            ("📋 获取已安装应用列表", 4, 2, "package_list"),
-            ("🧹 清除应用缓存", 5, 0, "clear_cache"),
-            ("⏹️ 终止当前包名进程", 5, 1, "kill_app_process"),
-            ("📊 查看内存CPU资源占用", 5, 2, "get_app_resource_usage"),
-            ("🔍 获取包名版本号", 6, 0, "get_version"),
-            ("📂 获取应用安装路径", 6, 1, "get_package_path"),
-            ("🔍 获取当前打开应用包名", 6, 2, "get_package_name"),
+            ("📲 强制安装 APK", 5, 0, "force_install"),
+            ("🗑️ 卸载当前包名应用", 5, 1, "uninstall"),
+            ("📋 获取已安装应用列表", 5, 2, "package_list"),
+            ("🧹 清除应用缓存", 6, 0, "clear_cache"),
+            ("⏹️ 终止当前包名进程", 6, 1, "kill_app_process"),
+            ("📊 查看内存 CPU 资源占用", 6, 2, "get_app_resource_usage"),
+            ("🔍 获取包名版本号", 7, 0, "get_version"),
+            ("📂 获取应用安装路径", 7, 1, "get_package_path"),
+            ("🔍 获取当前打开应用包名", 7, 2, "get_package_name"),
         ]
-        
+            
         self._create_button_grid(tab, app_buttons)
     
     def _create_app_input_section(self, parent) -> None:
@@ -278,6 +281,20 @@ class LayoutTabView:
             command=self.app.browse_apk
         )
         self.app.browse_btn.grid(row=1, column=2, padx=5, pady=5, sticky=tk.EW)
+        
+        # 配置列权重
+        parent.grid_columnconfigure(0, weight=0)
+        parent.grid_columnconfigure(1, weight=1)
+    
+    def _create_app_version_display(self, parent) -> None:
+        """创建应用版本展示框"""
+        # 版本号
+        ttk.Label(parent, text="应用版本:").grid(
+            row=2, column=0, padx=5, pady=5, sticky=tk.W
+        )
+        self.app.version_display = ttk.Entry(parent, state='readonly')
+        self.app.version_display.grid(row=2, column=1, columnspan=3, padx=5, pady=5, sticky=tk.EW)
+        self.app.version_display['width'] = 20
         
         # 配置列权重
         parent.grid_columnconfigure(0, weight=0)
