@@ -186,12 +186,14 @@ class LayoutTabView:
             ("🔌 连接 ADB", 4, 0, "connect_adb"),
             ("❌ 断开所有 ADB 连接", 4, 1, "disconnect_adb"),
             ("📱 查看已连接设备", 4, 2, "show_device_info"),
-            ("🔄 重启设备", 5, 0, "reboot"),
-            ("🔑 获取 Root 权限", 5, 1, "root_device"),
-            ("📀 重新挂载分区", 5, 2, "remount"),
-            (" 获取 Android 版本号", 6, 0, "get_android_version"),
-            ("📱 获取设备串号", 6, 1, "get_serial_number"),
-            ("📊 查看设备信息", 6, 2, "show_device_info"),  # 补齐空格
+            ("📋 获取设备信息", 5, 0, "get_device_info_fast"),
+            ("🖥️ 打开 CMD 窗口", 5, 1, "open_cmd_window"),
+            ("🔄 重启设备", 5, 2, "reboot"),
+            ("📝 常用 ADB 命令", 6, 0, "show_common_adb_commands"),
+            ("🔑 获取 Root 权限", 6, 1, "root_device"),
+            ("📀 重新挂载分区", 6, 2, "remount"),
+            ("获取 Android 版本号", 7, 0, "get_android_version"),
+            ("📱 获取设备串号", 7, 1, "get_serial_number"),
         ]
         
         self._create_button_grid(tab, device_buttons)
@@ -244,6 +246,7 @@ class LayoutTabView:
             ("📋 获取已安装应用列表", 4, 2, "package_list"),
             ("🧹 清除应用缓存", 5, 0, "clear_cache"),
             ("⏹️ 终止当前包名进程", 5, 1, "kill_app_process"),
+            ("📊 查看内存CPU资源占用", 5, 2, "get_app_resource_usage"),
             ("🔍 获取包名版本号", 6, 0, "get_version"),
             ("📂 获取应用安装路径", 6, 1, "get_package_path"),
             ("🔍 获取当前打开应用包名", 6, 2, "get_package_name"),

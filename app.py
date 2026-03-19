@@ -15,7 +15,8 @@ from utils import (
     get_next_filename, load_ip_history, save_ip_history,
     load_pkg_history, save_pkg_history, is_valid_package_name,
     get_accurate_package_version, calculate_optimal_workers, format_file_size,
-    get_connected_devices, get_connected_devices_simple
+    get_connected_devices, get_connected_devices_simple,
+    extract_package_name_from_apk
 )
 from config import Config
 from cache_manager import cache_manager
@@ -335,15 +336,16 @@ class ADBToolApp:
             self.connection_status_label.config(text="✗ 未连接", foreground="red")
 
     def show_device_info(self):
-        """显示当前连接的设备信息（精简版）"""
+        """显示当前连接的设备详细信息（增强版）"""
         devices = get_connected_devices()
         current_ip = self.get_ip_address()
             
         if not devices:
             self.update_status("当前没有连接的设备", False)
             return
-            
-        device_info = f"已连接 {len(devices)} 台设备:\n"
+        
+        # 显示设备列表
+        device_info = f"📱 已连接 {len(devices)} 台设备:\n"
         for i, device in enumerate(devices, 1):
             marker = ""
             if current_ip:
@@ -357,8 +359,420 @@ class ADBToolApp:
                     marker = " ← 当前选中"
                 
             device_info += f"  {i}. {device}{marker}\n"
-            
+        
         self.update_status(device_info, True)
+        
+        # 异步获取详细设备信息（不阻塞界面）
+        self.root.after(0, lambda: self._get_detailed_device_info())
+    
+    def get_device_info_fast(self):
+        """快速获取设备信息（极速版 - 真正异步不阻塞）"""
+        devices = get_connected_devices()
+        current_ip = self.get_ip_address()
+            
+        if not devices:
+            self.update_status("当前没有连接的设备", False)
+            return
+        
+        # 立即显示设备列表（0 延迟）
+        device_info = f"📱 已连接 {len(devices)} 台设备:\n"
+        for i, device in enumerate(devices, 1):
+            marker = ""
+            if current_ip:
+                normalized_current_ip = current_ip
+                if ':' not in current_ip:
+                    normalized_current_ip = f"{current_ip}:5555"
+                    
+                if device == normalized_current_ip or device == current_ip:
+                    marker = " ← 当前选中"
+                elif device.startswith(current_ip + ':'):
+                    marker = " ← 当前选中"
+                
+            device_info += f"  {i}. {device}{marker}\n"
+        
+        self.update_status(device_info, True)
+        
+        # 使用后台线程异步获取详细设备信息（真正不阻塞）
+        import threading
+        thread = threading.Thread(target=self._get_device_info_fast_async, daemon=True)
+        thread.start()
+    
+    def _get_device_info_fast_async(self):
+        """异步获取设备详细信息（增强版 - 更多设备信息）"""
+        try:
+            current_ip = self.get_ip_address()
+            if not current_ip:
+                return
+            
+            # 显示正在获取的提示
+            self.root.after(0, lambda: self.update_status("⏳ 正在获取设备信息...", True, "info"))
+            
+            # 使用线程池并行获取（最大速度）
+            import concurrent.futures
+            import re
+            
+            def get_prop_quick(prop_name):
+                """超快速获取单个属性（1.5 秒超时）"""
+                try:
+                    output, _ = self.run_adb_with_target(f"adb shell getprop {prop_name}")
+                    return output.strip() if output else None
+                except:
+                    return None
+            
+            # 核心信息（6 个，必获取）
+            core_props = {
+                "Android 版本": "ro.build.version.release",
+                "SDK 版本": "ro.build.version.sdk",
+                "设备型号": "ro.product.model",
+                "品牌": "ro.product.brand",
+                "安全补丁": "ro.build.version.security_patch",
+                "CPU ABI": "ro.product.cpu.abi",
+            }
+            
+            # 并行获取核心属性（4 线程并发）
+            core_results = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                future_to_name = {
+                    executor.submit(get_prop_quick, prop): name 
+                    for name, prop in core_props.items()
+                }
+                for future in concurrent.futures.as_completed(future_to_name):
+                    name = future_to_name[future]
+                    try:
+                        value = future.result(timeout=1.5)
+                        if value:
+                            core_results[name] = value
+                    except:
+                        pass  # 超时或失败就跳过
+            
+            # 额外信息（串行获取，更详细的设备信息）
+            extra_info = {}
+            
+            # 1. 设备串号（优化版 - 使用更快的命令）
+            try:
+                # 方式 1：尝试获取 IMEI（更快）
+                output, _ = self.run_adb_with_target("adb shell service call iphonesubinfo 1")
+                if output:
+                    imei_match = re.search(r'[0-9]{15}', output.replace('.', '').replace("'", ''))
+                    if imei_match:
+                        extra_info["设备串号"] = imei_match.group()
+                else:
+                    # 方式 2：尝试获取序列号（备用）
+                    output, _ = self.run_adb_with_target("adb shell getprop ro.serialno")
+                    if output and output.strip():
+                        extra_info["设备序列号"] = output.strip()
+            except:
+                # 失败时尝试获取序列号
+                try:
+                    output, _ = self.run_adb_with_target("adb shell getprop ro.serialno")
+                    if output and output.strip():
+                        extra_info["设备序列号"] = output.strip()
+                except:
+                    pass
+            
+            # 2. 软件版本号
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.build.display.id")
+                if output and output.strip():
+                    extra_info["软件版本"] = output.strip()
+            except:
+                pass
+            
+            # 3. 硬件平台
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.hardware")
+                if output and output.strip():
+                    extra_info["硬件平台"] = output.strip()
+            except:
+                pass
+            
+            # 4. 构建 ID
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.build.id")
+                if output and output.strip():
+                    extra_info["构建 ID"] = output.strip()
+            except:
+                pass
+            
+            # 5. 基带版本
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop gsm.version.baseband")
+                if output and output.strip():
+                    extra_info["基带版本"] = output.strip()
+            except:
+                pass
+            
+            # 6. 内核版本（精简）
+            try:
+                output, _ = self.run_adb_with_target("adb shell uname -r")
+                if output and output.strip():
+                    extra_info["内核版本"] = output.strip()
+            except:
+                pass
+            
+            # 7. 屏幕密度
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.sf.lcd_density")
+                if output and output.strip():
+                    extra_info["屏幕密度"] = output.strip() + " dpi"
+            except:
+                pass
+            
+            # 8. 电池电量
+            try:
+                output, _ = self.run_adb_with_target("adb shell dumpsys battery | grep level")
+                if output and "level" in output:
+                    match = re.search(r'level:\s*(\d+)', output)
+                    if match:
+                        extra_info["电池电量"] = match.group(1) + "%"
+            except:
+                pass
+            
+            # 9. 设备制造商
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.product.manufacturer")
+                if output and output.strip():
+                    extra_info["制造商"] = output.strip()
+            except:
+                pass
+            
+            # 10. 产品名称
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.product.name")
+                if output and output.strip():
+                    extra_info["产品名称"] = output.strip()
+            except:
+                pass
+            
+            # 11. 设备代号
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.product.device")
+                if output and output.strip():
+                    extra_info["设备代号"] = output.strip()
+            except:
+                pass
+            
+            # 12. 构建时间
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.build.date.utc")
+                if output and output.strip():
+                    import datetime
+                    timestamp = int(output.strip())
+                    build_date = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                    extra_info["构建时间"] = build_date
+            except:
+                pass
+            
+            # 13. 系统版本
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.build.version.incremental")
+                if output and output.strip():
+                    extra_info["系统版本号"] = output.strip()
+            except:
+                pass
+            
+            # 14. 用户版本
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.build.user")
+                if output and output.strip():
+                    extra_info["构建用户"] = output.strip()
+            except:
+                pass
+            
+            # 15. 主机信息
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.build.host")
+                if output and output.strip():
+                    extra_info["构建主机"] = output.strip()
+            except:
+                pass
+            
+            # 16. 主板信息
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.board.platform")
+                if output and output.strip():
+                    extra_info["主板平台"] = output.strip()
+            except:
+                pass
+            
+            # 17. Bootloader 版本
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.bootloader")
+                if output and output.strip():
+                    extra_info["Bootloader"] = output.strip()
+            except:
+                pass
+            
+            # 18. 蓝牙版本
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.bluetooth.version")
+                if output and output.strip():
+                    extra_info["蓝牙版本"] = output.strip()
+            except:
+                pass
+            
+            # 19. WiFi 芯片版本
+            try:
+                output, _ = self.run_adb_with_target("adb shell getprop ro.wifi.version")
+                if output and output.strip():
+                    extra_info["WiFi 版本"] = output.strip()
+            except:
+                pass
+            
+            # 20. 屏幕分辨率（如果支持）
+            try:
+                output, _ = self.run_adb_with_target("adb shell wm size")
+                if output and "Physical size" in output:
+                    match = re.search(r'Physical size: (\d+x\d+)', output)
+                    if match:
+                        extra_info["屏幕分辨率"] = match.group(1)
+            except:
+                pass
+            
+            # 构建显示信息（分类显示）
+            info_lines = []
+            info_lines.append("\n" + "="*50)
+            info_lines.append("📋 设备核心信息")
+            info_lines.append("="*50)
+            
+            # 显示核心信息
+            for name, value in core_results.items():
+                info_lines.append(f"  {name}: {value}")
+            
+            # 显示额外信息（如果获取到了）
+            if extra_info:
+                info_lines.append("\n📋 扩展信息")
+                for name, value in extra_info.items():
+                    info_lines.append(f"  {name}: {value}")
+            
+            info_lines.append("="*50)
+            
+            # 在 UI 线程中显示
+            detailed_info = "\n".join(info_lines)
+            self.root.after(0, lambda: self.update_status(detailed_info, True, "info"))
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.update_status(f"获取设备信息失败：{str(e)}", False))
+    
+    def _get_detailed_device_info(self):
+        """异步获取详细的设备信息（优化版 - 并行获取 + 精简数据）"""
+        try:
+            current_ip = self.get_ip_address()
+            if not current_ip:
+                return
+            
+            # 显示正在获取的提示
+            self.root.after(0, lambda: self.update_status("⏳ 正在快速获取设备信息...", True, "info"))
+            
+            # 使用线程池并行获取（提升速度）
+            import concurrent.futures
+            
+            def get_prop(prop_name):
+                """快速获取单个属性（带超时）"""
+                try:
+                    output, _ = self.run_adb_with_target(f"adb shell getprop {prop_name}")
+                    return output.strip() if output else "未知"
+                except:
+                    return "获取失败"
+            
+            # 关键信息优先（先显示这些）
+            quick_info = {
+                "Android 版本": "ro.build.version.release",
+                "SDK 版本": "ro.build.version.sdk",
+                "设备型号": "ro.product.model",
+                "品牌": "ro.product.brand",
+            }
+            
+            # 并行获取关键信息
+            results = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                future_to_name = {
+                    executor.submit(get_prop, prop): name 
+                    for name, prop in quick_info.items()
+                }
+                for future in concurrent.futures.as_completed(future_to_name):
+                    name = future_to_name[future]
+                    try:
+                        results[name] = future.result(timeout=2)
+                    except:
+                        results[name] = "超时"
+            
+            # 立即显示关键信息（快速响应）
+            quick_lines = []
+            quick_lines.append("\n" + "="*50)
+            quick_lines.append("📱 设备关键信息 (快速获取)")
+            quick_lines.append("="*50)
+            for name, value in results.items():
+                quick_lines.append(f"  {name}: {value}")
+            
+            quick_info_text = "\n".join(quick_lines)
+            self.root.after(0, lambda: self.update_status(quick_info_text, True, "info"))
+            
+            # 后台继续获取详细信息（可选）
+            def get_full_info():
+                info_lines = []
+                
+                # 安全补丁级别（重要）
+                security_patch = get_prop("ro.build.version.security_patch")
+                if security_patch != "获取失败":
+                    info_lines.append(f"  安全补丁：{security_patch}")
+                
+                # 硬件信息（快速）
+                cpu_abi = get_prop("ro.product.cpu.abi")
+                hardware = get_prop("ro.hardware")
+                if cpu_abi != "获取失败":
+                    info_lines.append(f"  CPU ABI: {cpu_abi}")
+                if hardware != "获取失败":
+                    info_lines.append(f"  硬件平台：{hardware}")
+                
+                # 存储信息（较慢，选择性获取）
+                try:
+                    output, _ = self.run_adb_with_target("adb shell df /data | tail -1")
+                    if output:
+                        parts = output.split()
+                        if len(parts) >= 4:
+                            available = self._format_storage_size(parts[3])
+                            info_lines.append(f"  可用存储：{available}")
+                except:
+                    pass
+                
+                # 电池信息（可选）
+                try:
+                    output, _ = self.run_adb_with_target("adb shell dumpsys battery | grep level")
+                    if output and "level" in output:
+                        import re
+                        match = re.search(r'level:\s*(\d+)', output)
+                        if match:
+                            info_lines.append(f"  电池电量：{match.group(1)}%")
+                except:
+                    pass
+                
+                info_lines.append("="*50)
+                detailed_info = "\n".join(info_lines)
+                
+                # 追加显示
+                if info_lines:
+                    self.root.after(0, lambda info=detailed_info: self.update_status(f"\n📋 更多设备信息:\n{info}", True, "info"))
+            
+            # 异步获取完整信息（不阻塞）
+            detail_thread = threading.Thread(target=get_full_info, daemon=True)
+            detail_thread.start()
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.update_status(f"获取设备信息失败：{str(e)}", False))
+    
+    def _format_storage_size(self, size_str: str) -> str:
+        """格式化存储大小字符串"""
+        try:
+            size_kb = int(size_str)
+            if size_kb >= 1024 * 1024:
+                return f"{size_kb / (1024 * 1024):.1f} GB"
+            elif size_kb >= 1024:
+                return f"{size_kb / 1024:.1f} MB"
+            else:
+                return f"{size_kb} KB"
+        except:
+            return size_str
     
     def show_current_device_status(self, force_display=False, decorator_call=False):
         """显示当前连接设备状态，用于在执行功能前显示设备信息
@@ -481,6 +895,34 @@ class ADBToolApp:
             
         # 设置拖拽功能
         self._setup_drag_drop()
+    
+    def _extract_and_update_package_name(self, apk_path: str):
+        """从 APK 文件中提取包名并更新到输入框（异步执行）"""
+        try:
+            # 使用新函数提取包名
+            package_name = extract_package_name_from_apk(apk_path)
+            
+            if package_name:
+                # 更新包名输入框
+                if hasattr(self, 'pkg_combobox'):
+                    self.pkg_combobox.delete(0, tk.END)
+                    self.pkg_combobox.insert(0, package_name)
+                elif hasattr(self, 'pkg_entry'):
+                    self.pkg_entry.delete(0, tk.END)
+                    self.pkg_entry.insert(0, package_name)
+                
+                # 在输出框显示包名信息
+                file_name = os.path.basename(apk_path)
+                self.update_status(f"✅ 自动识别到应用包名：{package_name}\n📦 来源文件：{file_name}", True)
+                
+                # 保存包名到历史记录（如果需要）
+                self._save_pkg_to_history(package_name)
+            else:
+                # 提取失败，不显示错误，让用户手动输入
+                pass
+        except Exception as error:
+            # 静默失败，不影响其他功能
+            pass
         
     def execute_task_async(self, task_name: str, method_name: str):
         """异步执行任务（底层优化版 - 零阻塞）"""
@@ -2039,7 +2481,7 @@ class ADBToolApp:
         if not pkg_name:
             self.update_status("请输入包名", False)
             return
-        
+            
         try:
             output, success = self.run_adb_with_target(f"adb shell pm path {pkg_name}")
             if success and output:
@@ -2047,12 +2489,157 @@ class ADBToolApp:
                 self._save_pkg_to_history(pkg_name)
                 # 移除"package:"前缀并清理输出
                 path = output.replace("package:", "").strip()
-                self.status_text.insert(tk.END, f"\n应用安装路径: {path}\n", "info")
+                self.status_text.insert(tk.END, f"\n应用安装路径：{path}\n", "info")
                 self.status_text.see(tk.END)
             else:
                 self.update_status(f"未找到包名 {pkg_name} 的安装路径", False)
         except Exception as e:
-            self.update_status(f"获取安装路径失败: {str(e)}", False)
+            self.update_status(f"获取安装路径失败：{str(e)}", False)
+        
+    @require_device_connected
+    def get_app_resource_usage(self):
+        """获取当前包名应用的内存和 CPU 占用情况"""
+        pkg_name = self.get_package_name_from_input()
+        if not pkg_name:
+            self.update_status("请输入包名", False)
+            return
+            
+        try:
+            # 显示正在获取的提示
+            self.update_status(f"⏳ 正在获取应用 {pkg_name} 的资源占用情况...", True, "info")
+                
+            # 使用后台线程异步获取（不阻塞界面）
+            import threading
+            thread = threading.Thread(target=lambda: self._get_app_resource_usage_async(pkg_name), daemon=True)
+            thread.start()
+        except Exception as e:
+            self.update_status(f"获取资源占用失败：{str(e)}", False)
+        
+    def _get_app_resource_usage_async(self, pkg_name: str):
+        """异步获取应用资源占用（后台线程执行）"""
+        try:
+            import re
+            info_lines = []
+            info_lines.append("\n" + "="*60)
+            info_lines.append(f"📊 应用资源占用监控：{pkg_name}")
+            info_lines.append("="*60)
+                
+            # 1. 获取 CPU 和内存占用（使用更可靠的命令）
+            try:
+                # 方式 1：使用 top -n 1 获取单行输出
+                output, _ = self.run_adb_with_target(f"adb shell top -n 1 | grep {pkg_name}")
+                
+                if not output or not output.strip():
+                    # 方式 2：使用 top -m 1 获取单行
+                    output, _ = self.run_adb_with_target(f"adb shell top -m 1 | grep {pkg_name}")
+                
+                if output and output.strip():
+                    # 解析 top 输出
+                    for line in output.strip().split('\n'):
+                        if line.strip():
+                            parts = line.split()
+                            # 尝试多种格式解析
+                            cpu = None
+                            mem = None
+                            
+                            # Android 8.0+ 格式：USER PID %CPU %MEM VSZ RSS ...
+                            if len(parts) >= 10:
+                                # 查找包含 % 的值作为 CPU
+                                for i, part in enumerate(parts):
+                                    if '%' in part and part.replace('%', '').replace('.', '').isdigit():
+                                        cpu = part.replace('%', '')
+                                        # 下一个数字可能是内存
+                                        if i+1 < len(parts) and parts[i+1].replace('.', '').isdigit():
+                                            mem = parts[i+1]
+                                        break
+                            
+                            # 旧版 Android 格式
+                            if not cpu and len(parts) >= 9:
+                                cpu = parts[2] if len(parts) > 2 else None
+                                mem = parts[4] if len(parts) > 4 else None
+                            
+                            if cpu:
+                                info_lines.append(f"\n【CPU 占用】")
+                                info_lines.append(f"  CPU: {cpu}%")
+                                if mem:
+                                    info_lines.append(f"\n【内存占用】")
+                                    info_lines.append(f"  内存：{mem}")
+                            break
+                    else:
+                        info_lines.append("\n⚠️ 未找到该应用的进程信息（可能未运行）")
+                else:
+                    info_lines.append("\n⚠️ 未找到该应用的进程信息（可能未运行）")
+            except Exception as e:
+                info_lines.append(f"\n⚠️ 无法获取 CPU/内存信息：{str(e)}")
+                
+            # 2. 获取详细内存信息（dumpsys meminfo）
+            try:
+                output, _ = self.run_adb_with_target(f"adb shell dumpsys meminfo {pkg_name}")
+                if output:
+                    info_lines.append("\n【详细内存信息】")
+                        
+                    # 解析 PSS 内存
+                    pss_match = re.search(r'TOTAL.*?(\d+)', output)
+                    if pss_match:
+                        pss_total = int(pss_match.group(1))
+                        info_lines.append(f"  PSS 总内存：{self._format_memory_size(pss_total)}")
+                        
+                    # 解析 Native Heap
+                    native_match = re.search(r'Native Heap.*?(\d+)', output)
+                    if native_match:
+                        native_heap = int(native_match.group(1))
+                        info_lines.append(f"  Native Heap: {self._format_memory_size(native_heap)}")
+                        
+                    # 解析 Dalvik Heap
+                    dalvik_match = re.search(r'Dalvik Heap.*?(\d+)', output)
+                    if dalvik_match:
+                        dalvik_heap = int(dalvik_match.group(1))
+                        info_lines.append(f"  Dalvik Heap: {self._format_memory_size(dalvik_heap)}")
+            except:
+                info_lines.append("\n⚠️ 无法获取详细内存信息")
+                
+            # 3. 获取进程信息
+            try:
+                output, _ = self.run_adb_with_target(f"adb shell ps -A | grep {pkg_name}")
+                if output:
+                    lines = output.strip().split('\n')
+                    info_lines.append(f"\n【进程信息】")
+                    info_lines.append(f"  进程数：{len(lines)}")
+                    for i, line in enumerate(lines[:3], 1):  # 只显示前 3 个进程
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            pid = parts[0]
+                            info_lines.append(f"  进程{i} PID: {pid}")
+            except:
+                info_lines.append("\n⚠️ 无法获取进程信息")
+                
+            # 4. 获取电池消耗（可选）
+            try:
+                output, _ = self.run_adb_with_target("adb shell dumpsys batterystats --checkin")
+                if output and pkg_name in output:
+                    info_lines.append("\n【电池消耗】")
+                    # 简化显示
+                    info_lines.append(f"  有电池消耗记录")
+            except:
+                pass
+                
+            info_lines.append("\n" + "="*60)
+                
+            # 在 UI 线程中显示
+            result_text = "\n".join(info_lines)
+            self.root.after(0, lambda: self.update_status(result_text, True, "info"))
+                
+        except Exception as e:
+            self.root.after(0, lambda: self.update_status(f"获取资源占用失败：{str(e)}", False))
+        
+    def _format_memory_size(self, size_kb: int) -> str:
+        """格式化内存大小（KB 转换为易读单位）"""
+        if size_kb >= 1024 * 1024:
+            return f"{size_kb / (1024 * 1024):.1f} MB"
+        elif size_kb >= 1024:
+            return f"{size_kb / 1024:.1f} MB"
+        else:
+            return f"{size_kb} KB"
 
     # 帮助文档
 
@@ -2084,9 +2671,131 @@ class ADBToolApp:
             ("终止当前包名所有进程", "adb shell am force-stop <包名>"),
             ("获取当前包名应用安装路径", "adb shell pm path <包名>"),
         ]
-        self.status_text.insert(tk.END, "\n功能按钮与对应ADB命令如下：\n", "info")
+        self.status_text.insert(tk.END, "\n功能按钮与对应 ADB 命令如下：\n", "info")
         for name, cmd in cmd_map:
             self.status_text.insert(tk.END, f"{name}：{cmd}\n", "info")
+        self.status_text.see(tk.END)
+        
+    def show_common_adb_commands(self):
+        """输出 30 条常用的 ADB 命令（优化版 - 清晰分组）"""
+        # 按功能分组的 ADB 命令
+        command_groups = [
+            {
+                "title": "📱 设备连接",
+                "commands": [
+                    ("查看已连接设备", "adb devices"),
+                    ("连接无线设备", "adb connect <IP 地址>:5555"),
+                    ("断开无线连接", "adb disconnect <IP 地址>:5555"),
+                    ("断开所有连接", "adb disconnect"),
+                ]
+            },
+            {
+                "title": "🔄 重启与模式",
+                "commands": [
+                    ("重启设备", "adb reboot"),
+                    ("重启到 Recovery", "adb reboot recovery"),
+                    ("重启到 Bootloader", "adb reboot bootloader"),
+                    ("进入 Fastboot", "adb reboot bootloader"),
+                ]
+            },
+            {
+                "title": "🔧 系统操作",
+                "commands": [
+                    ("获取 Root 权限", "adb root"),
+                    ("重新挂载分区", "adb remount"),
+                ]
+            },
+            {
+                "title": "ℹ️ 系统信息",
+                "commands": [
+                    ("查看系统属性", "adb shell getprop"),
+                    ("查看 Android 版本", "adb shell getprop ro.build.version.release"),
+                    ("查看 SDK 版本", "adb shell getprop ro.build.version.sdk"),
+                    ("查看设备型号", "adb shell getprop ro.product.model"),
+                    ("查看设备品牌", "adb shell getprop ro.product.brand"),
+                    ("查看设备串号", "adb shell getprop ro.serialno"),
+                ]
+            },
+            {
+                "title": "📺 屏幕信息",
+                "commands": [
+                    ("查看屏幕分辨率", "adb shell wm size"),
+                    ("查看屏幕密度", "adb shell wm density"),
+                ]
+            },
+            {
+                "title": "📦 应用管理",
+                "commands": [
+                    ("查看已安装应用", "adb shell pm list packages"),
+                    ("查看第三方应用", "adb shell pm list packages -3"),
+                    ("查看系统应用", "adb shell pm list packages -s"),
+                    ("安装 APK", "adb install <APK 路径>"),
+                    ("覆盖安装", "adb install -r <APK 路径>"),
+                    ("降级安装", "adb install -d <APK 路径>"),
+                    ("卸载应用", "adb uninstall <包名>"),
+                    ("清除应用数据", "adb shell pm clear <包名>"),
+                    ("强制停止应用", "adb shell am force-stop <包名>"),
+                    ("查看应用安装路径", "adb shell pm path <包名>"),
+                ]
+            },
+            {
+                "title": "📝 日志操作",
+                "commands": [
+                    ("查看日志", "adb logcat"),
+                    ("清除日志", "adb logcat -c"),
+                ]
+            },
+            {
+                "title": "📸 截屏录屏",
+                "commands": [
+                    ("截图", "adb shell screencap -p /sdcard/screen.png"),
+                    ("下载截图", "adb pull /sdcard/screen.png <本地路径>"),
+                    ("屏幕录制", "adb shell screenrecord /sdcard/test.mp4"),
+                    ("下载录屏", "adb pull /sdcard/test.mp4 <本地路径>"),
+                ]
+            },
+            {
+                "title": "💻 硬件信息",
+                "commands": [
+                    ("查看 CPU 信息", "adb shell cat /proc/cpuinfo"),
+                    ("查看内存信息", "adb shell cat /proc/meminfo"),
+                    ("查看存储信息", "adb shell df"),
+                ]
+            },
+            {
+                "title": "⚙️ 系统进程",
+                "commands": [
+                    ("查看进程", "adb shell ps"),
+                    ("查看顶层活动", "adb shell dumpsys window windows"),
+                    ("查看电池信息", "adb shell dumpsys battery"),
+                ]
+            },
+        ]
+            
+        # 输出标题
+        self.status_text.insert(tk.END, "\n" + "="*70 + "\n", "info")
+        self.status_text.insert(tk.END, "📝 常用 ADB 命令速查手册\n", "info")
+        self.status_text.insert(tk.END, "="*70 + "\n\n", "info")
+            
+        # 按组输出命令
+        cmd_index = 1
+        for group in command_groups:
+            # 输出分组标题
+            self.status_text.insert(tk.END, f"{group['title']}\n", "info")
+            self.status_text.insert(tk.END, "-" * 70 + "\n", "info")
+                
+            # 输出该组的命令
+            for name, cmd in group['commands']:
+                self.status_text.insert(tk.END, f"  {cmd_index:2d}. {name:<20} → {cmd}\n", "info")
+                cmd_index += 1
+                
+            # 组间空行
+            self.status_text.insert(tk.END, "\n", "info")
+            
+        # 输出结尾
+        self.status_text.insert(tk.END, "="*70 + "\n", "info")
+        self.status_text.insert(tk.END, "💡 提示：将 <xxx> 替换为实际参数值\n", "info")
+        self.status_text.insert(tk.END, "="*70 + "\n", "info")
         self.status_text.see(tk.END)
 
     def _setup_drag_drop(self):
@@ -2135,7 +2844,10 @@ class ADBToolApp:
                             file_name = os.path.basename(file_path)
                             self.update_status(f"📦 已选择APK文件: {file_name}\n📊 文件大小: {file_size}", True)
                         except:
-                            self.update_status(f"📦 已选择APK文件: {os.path.basename(file_path)}", True)
+                            self.update_status(f"📦 已选择 APK 文件：{os.path.basename(file_path)}", True)
+                                                
+                        # 🆕 新增：自动提取包名并更新到输入框（异步执行，不阻塞界面）
+                        self.root.after(0, lambda: self._extract_and_update_package_name(file_path))
                             
                         # 提示用户可以安装
                         self.update_status("🚀 请点击'强制安装apk'按钮进行安装", True)
@@ -2166,7 +2878,9 @@ class ADBToolApp:
                 if file_path:
                     self.apk_entry.delete(0, tk.END)
                     self.apk_entry.insert(0, file_path)
-                    self.update_status(f"已选择APK文件: {os.path.basename(file_path)}", True)
+                    self.update_status(f"已选择 APK 文件：{os.path.basename(file_path)}", True)
+                    # 🆕 新增：自动提取包名并更新到输入框
+                    self.root.after(0, lambda: self._extract_and_update_package_name(file_path))
             
             # 为apk_entry添加右键菜单
             def show_context_menu(event):
@@ -2222,7 +2936,78 @@ class ADBToolApp:
             if success:
                 self.update_status("工厂菜单已打开", True)
             else:
-                self.update_status(f"打开工厂菜单失败: {output}", False)
+                self.update_status(f"打开工厂菜单失败：{output}", False)
         except Exception as e:
-            self.update_status(f"打开工厂菜单时出错: {str(e)}", False)
+            self.update_status(f"打开工厂菜单时出错：{str(e)}", False)
+        
+    def open_cmd_window(self):
+        """打开 CMD 窗口（在当前目录或设备相关目录）"""
+        try:
+            # 获取目标设备 IP
+            target_ip = self.get_ip_address()
+                
+            # 构建 ADB 命令提示符窗口标题和初始命令
+            if target_ip and target_ip != "192.168.":
+                # 如果有指定设备，在标题中显示
+                cmd_title = f"ADB Command Prompt - {target_ip}"
+                initial_commands = [
+                    f"title {cmd_title}",
+                    f"echo ADB Device: {target_ip}",
+                    "echo."
+                ]
+            else:
+                cmd_title = "ADB Command Prompt"
+                initial_commands = [
+                    f"title {cmd_title}",
+                    "echo ADB Command Line Tool",
+                    "echo."
+                ]
+                
+            # 设置工作目录为应用所在目录
+            work_dir = os.path.dirname(os.path.abspath(__file__))
+                
+            # 创建批处理脚本来启动带初始命令的 CMD
+            import tempfile
+            temp_dir = tempfile.gettempdir()
+            bat_file = os.path.join(temp_dir, "adb_cmd_temp.bat")
+                
+            # 写入批处理内容
+            with open(bat_file, 'w', encoding='utf-8') as f:
+                # 先执行初始命令（设置标题等）
+                for cmd in initial_commands:
+                    f.write(f"{cmd}\n")
+                    
+                # 添加常用提示和 adb 路径设置（如果需要）
+                f.write("echo You can use ADB commands here.\n")
+                f.write("echo Type 'adb help' for available commands.\n")
+                f.write("echo.\n")
+                    
+                # 保持窗口打开（进入交互模式）
+                f.write("cmd /k\n")
+                
+            # 使用新进程启动 CMD 窗口，不阻塞主程序
+            subprocess.Popen(
+                [bat_file],
+                cwd=work_dir,
+                creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+                
+            # 延迟一小段时间后删除临时文件（让 CMD 有时间读取）
+            def cleanup_bat():
+                try:
+                    import time
+                    time.sleep(2)  # 等待 2 秒确保文件被读取
+                    if os.path.exists(bat_file):
+                        os.remove(bat_file)
+                except:
+                    pass
+                
+            cleanup_thread = threading.Thread(target=cleanup_bat, daemon=True)
+            cleanup_thread.start()
+                
+            # 显示成功信息
+            self.update_status("🖥️ CMD 窗口已打开", True)
+                
+        except Exception as e:
+            self.update_status(f"打开 CMD 窗口失败：{str(e)}", False)
 

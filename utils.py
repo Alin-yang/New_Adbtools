@@ -262,17 +262,17 @@ def extract_version_info(output: str) -> Optional[str]:
     """从 adb shell 命令输出中提取版本号（简化增强版）
     
     Args:
-        output: ADB命令的输出
+        output: ADB 命令的输出
         
     Returns:
-        Optional[str]: 版本号字符串，如果未找到则返回None
+        Optional[str]: 版本号字符串，如果未找到则返回 None
     """
     if not output:
         return None
         
     lines = output.split('\n')
     
-    # 方法1：直接查找versionName=的行（最快最直接）
+    # 方法 1：直接查找 versionName=的行（最快最直接）
     for line in lines:
         line = line.strip()
         if 'versionName=' in line and not line.startswith('#'):
@@ -286,7 +286,7 @@ def extract_version_info(output: str) -> Optional[str]:
             except (IndexError, ValueError):
                 continue
     
-    # 方法2：查找包含versionName的行并使用等号分割
+    # 方法 2：查找包含 versionName 的行并使用等号分割
     for line in lines:
         line = line.strip()
         if 'versionName' in line and '=' in line and not line.startswith('#'):
@@ -300,7 +300,7 @@ def extract_version_info(output: str) -> Optional[str]:
             except (IndexError, ValueError):
                 continue
     
-    # 方法3：使用原来的复杂逻辑作为备选
+    # 方法 3：使用原来的复杂逻辑作为备选
     versions = []
     for i, line in enumerate(lines):
         line = line.strip()
@@ -340,6 +340,91 @@ def extract_version_info(output: str) -> Optional[str]:
             top_versions.sort(key=lambda x: parse_version_number(x[0]), reverse=True)
         
         return top_versions[0][0]
+    
+    return None
+
+
+def extract_package_name_from_apk(apk_path: str) -> Optional[str]:
+    """从 APK 文件中提取应用包名（本地解析，无需设备连接）
+    
+    使用 aapt2 或 aapt 工具解析 APK 文件的 AndroidManifest.xml
+    
+    Args:
+        apk_path: APK 文件路径
+        
+    Returns:
+        Optional[str]: 应用包名，失败时返回 None
+    """
+    if not apk_path or not os.path.exists(apk_path):
+        return None
+    
+    # 尝试使用的工具列表（按优先级）
+    tools = ['aapt2', 'aapt']
+    
+    for tool in tools:
+        try:
+            # 构建命令
+            if tool == 'aapt2':
+                # aapt2 dump badging 输出格式更友好
+                cmd = f'{tool} dump badging "{apk_path}"'
+            else:
+                # aapt dump badging 传统格式
+                cmd = f'{tool} dump badging "{apk_path}"'
+            
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=10,
+                text=True,
+                encoding='utf-8',
+                errors='ignore'
+            )
+            
+            if result.returncode == 0:
+                output = result.stdout
+                # 解析 package: 行
+                for line in output.split('\n'):
+                    line = line.strip()
+                    if line.startswith('package:'):
+                        # 格式：package: name='com.example.app' versionCode='1' ...
+                        import re
+                        match = re.search(r"name='([^']+)'", line)
+                        if match:
+                            package_name = match.group(1)
+                            if package_name and is_valid_package_name(package_name):
+                                return package_name
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            # 工具不可用或执行失败，尝试下一个
+            continue
+    
+    # 如果所有工具都失败，尝试使用 zipfile 解析 AndroidManifest.xml（备用方案）
+    try:
+        import zipfile
+        import xml.etree.ElementTree as ET
+        from io import BytesIO
+        
+        with zipfile.ZipFile(apk_path, 'r') as zip_ref:
+            # 读取 AndroidManifest.xml
+            manifest_data = zip_ref.read('AndroidManifest.xml')
+            
+            # 尝试解析二进制 XML（需要额外的库，这里只做简单尝试）
+            # 注意：完整的二进制 XML 解析比较复杂，这里仅作为备选方案
+            # 如果 Manifest 是文本格式（罕见），可以直接解析
+            try:
+                manifest_str = manifest_data.decode('utf-8', errors='ignore')
+                if 'package=' in manifest_str:
+                    import re
+                    match = re.search(r'package=["\']([^"\']+)["\']', manifest_str)
+                    if match:
+                        package_name = match.group(1)
+                        if is_valid_package_name(package_name):
+                            return package_name
+            except:
+                pass
+    except:
+        pass
     
     return None
 
