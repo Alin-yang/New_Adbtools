@@ -186,14 +186,15 @@ class LayoutTabView:
             ("🔌 连接 ADB", 4, 0, "connect_adb"),
             ("❌ 断开所有 ADB 连接", 4, 1, "disconnect_adb"),
             ("📱 查看已连接设备", 4, 2, "show_device_info"),
-            ("📋 获取设备信息", 5, 0, "get_device_info_fast"),
-            ("🖥️ 打开 CMD 窗口", 5, 1, "open_cmd_window"),
-            ("🔄 重启设备", 5, 2, "reboot"),
-            ("📝 常用 ADB 命令", 6, 0, "show_common_adb_commands"),
-            ("🔑 获取 Root 权限", 6, 1, "root_device"),
-            ("📀 重新挂载分区", 6, 2, "remount"),
-            ("获取 Android 版本号", 7, 0, "get_android_version"),
-            ("📱 获取设备串号", 7, 1, "get_serial_number"),
+            ("🔄 重启 ADB 服务", 5, 0, "restart_adb_server"),  # 新增按钮
+            ("📋 获取设备信息", 5, 1, "get_device_info_fast"),
+            ("🖥️ 打开 CMD 窗口", 5, 2, "open_cmd_window"),
+            ("🔁 重启设备", 6, 0, "reboot"),
+            ("📝 常用 ADB 命令", 6, 1, "show_common_adb_commands"),
+            ("🔑 获取 Root 权限", 6, 2, "root_device"),
+            ("📀 重新挂载分区", 7, 0, "remount"),
+            ("获取 Android 版本号", 7, 1, "get_android_version"),
+            ("📱 获取设备串号", 7, 2, "get_serial_number"),
         ]
         
         self._create_button_grid(tab, device_buttons)

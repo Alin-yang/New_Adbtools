@@ -423,6 +423,23 @@ class ADBToolApp:
                 self.update_status("当前没有连接的设备", False)
                 return
             
+            # 【新增】如果有设备但当前 IP 输入框为空或不完整，自动同步第一个设备
+            if hasattr(self, 'ip_combobox') and devices:
+                current_ip = self.get_ip_address()
+                # 检查当前 IP 是否是有效的完整 IP 或 USB 序列号
+                is_valid_current_ip = (
+                    current_ip and  # 不是空值
+                    current_ip != "192.168." and  # 不是默认占位符
+                    (':' in current_ip or '.' in current_ip or len(current_ip) > 10)  # 是完整 IP 或序列号
+                )
+                
+                # 如果当前 IP 无效，自动选择第一个设备
+                if not is_valid_current_ip:
+                    first_device = devices[0]
+                    logging.info(f"[后台线程] 检测到无效 IP '{current_ip}'，准备同步设备：{first_device}")
+                    self.root.after(0, lambda: self._sync_device_to_ip_input(first_device))
+                    current_ip = first_device  # 更新 current_ip 用于后续显示
+            
             # 构建设备列表信息
             device_info = f"📱 已连接 {len(devices)} 台设备:\n"
             for i, device in enumerate(devices, 1):
@@ -443,12 +460,39 @@ class ADBToolApp:
             logging.info("[后台线程] 直接显示设备列表（不使用 after）")
             self.update_status(device_info, True)
             
+            # 【新增】自动更新连接状态标签
+            self.root.after(0, self.update_connection_status)
+            
             # 【优化】移除详细设备信息获取（这个太耗时，用户需要时可以单独点击"获取设备信息"）
             # self.root.after(100, lambda: self._get_detailed_device_info())
             logging.info("[后台线程] 执行完成（不获取详细信息）")
         except Exception as e:
             logging.error(f"[后台线程] 异常：{str(e)}")
             self.update_status(f"获取设备信息失败：{str(e)}", False)
+    
+    def _sync_device_to_ip_input(self, device: str):
+        """同步设备到 IP 输入框"""
+        import logging
+        logging.info(f"[同步操作] 开始同步设备到 IP 输入框：{device}")
+        
+        if hasattr(self, 'ip_combobox'):
+            # 将设备添加到下拉框历史记录
+            if device not in self.ip_history:
+                self.ip_history.insert(0, device)
+                self.ip_history = self.ip_history[:Config.MAX_IP_HISTORY]
+                from utils import save_ip_history
+                save_ip_history(self.ip_history)
+                self.ip_combobox['values'] = self.ip_history
+                logging.info(f"[同步操作] 已更新下拉框历史记录：{self.ip_history}")
+            
+            # 设置当前选中的设备
+            self.ip_combobox.delete(0, tk.END)
+            self.ip_combobox.insert(0, device)
+            logging.info(f"[同步操作] 已设置 IP 输入框值为：{device}")
+            
+            # 触发 IP 变更事件
+            self.on_ip_changed()
+            logging.info(f"[同步操作] 已触发 IP 变更事件")
     
     def get_device_info_fast(self):
         """快速获取设备信息（极速版 - 真正异步不阻塞）"""
@@ -1360,6 +1404,78 @@ class ADBToolApp:
             self.update_connection_status()
         except Exception as e:
             self.update_status(f"断开失败：{str(e)}", False)
+    
+    def restart_adb_server(self):
+        """重启 ADB 服务（异步优化版）"""
+        # 【日志】记录按钮点击
+        import logging
+        logging.info("[按钮点击] restart_adb_server 开始执行")
+        
+        # 显示正在重启
+        self.update_status("⏳ 正在重启 ADB 服务...", True, "info")
+        
+        # 启动异步线程执行重启
+        import threading
+        thread = threading.Thread(target=self._restart_adb_server_async, daemon=True)
+        thread.start()
+        logging.info(f"[异步线程] 线程已启动，线程 ID: {thread.ident}")
+    
+    def _restart_adb_server_async(self):
+        """异步执行 ADB 服务重启"""
+        import logging
+        import time
+        
+        try:
+            # 步骤 1: 停止 ADB 服务
+            logging.info("[后台线程] 开始停止 ADB 服务...")
+            self.root.after(0, lambda: self.update_status("⏳ 正在停止 ADB 服务...", True, "info"))
+            
+            kill_output, kill_success = run_adb_command("adb kill-server")
+            logging.info(f"[后台线程] adb kill-server 完成，成功:{kill_success}")
+            
+            if not kill_success:
+                # kill-server 失败也继续执行 start-server
+                logging.warning(f"[后台线程] adb kill-server 失败，继续执行 start-server: {kill_output}")
+            
+            # 等待一小段时间确保服务完全停止
+            time.sleep(0.5)
+            
+            # 步骤 2: 启动 ADB 服务
+            logging.info("[后台线程] 开始启动 ADB 服务...")
+            self.root.after(0, lambda: self.update_status("⏳ 正在启动 ADB 服务...", True, "info"))
+            
+            start_output, start_success = run_adb_command("adb start-server")
+            logging.info(f"[后台线程] adb start-server 完成，成功:{start_success}")
+            
+            # 构建最终输出信息
+            if start_success:
+                # 重启成功
+                final_message = "ADB 服务重启成功！\n\n"
+                final_message += "建议操作：\n"
+                final_message += "1. 重新连接设备\n"
+                final_message += "2. 查看已连接设备列表\n"
+                final_message += "3. 如仍无法连接，请检查 USB 连接或网络设置"
+                
+                self.root.after(0, lambda: self.update_status(final_message, True))
+                self.root.after(0, self.update_connection_status)
+                
+                # 清空设备缓存，因为重启后所有连接都会断开
+                cache_manager.device_cache.clear()
+            else:
+                # 启动失败
+                error_message = f"ADB 服务重启失败\n\n停止服务：{kill_output if kill_output else '无输出'}\n"
+                error_message += f"启动服务：{start_output if start_output else '无输出'}\n\n"
+                error_message += "请检查：\n"
+                error_message += "1. ADB 是否正确安装\n"
+                error_message += "2. 是否有其他程序占用 ADB\n"
+                error_message += "3. 以管理员身份运行本程序"
+                
+                self.root.after(0, lambda msg=error_message: self.update_status(msg, False))
+                
+        except Exception as e:
+            logging.error(f"[后台线程] 异常：{str(e)}")
+            error_msg = f"重启 ADB 服务过程出错：{str(e)}\n\n请尝试：\n1. 关闭其他 ADB 相关程序\n2. 以管理员身份运行本程序"
+            self.root.after(0, lambda msg=error_msg: self.update_status(msg, False))
 
     def check_device_connected(self, ip_address: Optional[str] = None) -> bool:
         """检查设备连接状态(强化版，确保获取最新状态)"""
