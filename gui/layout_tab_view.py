@@ -64,21 +64,26 @@ class LayoutTabView:
         """创建三栏布局：左侧 Tab + 中间功能 + 右侧输出"""
         # 左侧 Tab 面板（固定宽度）
         self.left_panel = ttk.Frame(self.main_frame, width=140)
-        self.left_panel.grid(row=0, column=0, sticky=tk.NSEW, padx=(0, 5))
+        self.left_panel.grid(row=0, column=0, sticky=tk.NSEW)
         self.left_panel.grid_propagate(False)  # 固定宽度
+        
+        # 垂直分割线（使用 Frame 实现，添加灰色背景）
+        separator = tk.Frame(self.main_frame, bg='#cccccc', width=2)
+        separator.grid(row=0, column=1, sticky=tk.NS, pady=5)
         
         # 中间功能面板（根据内容自适应宽度）
         self.center_panel = ttk.Frame(self.main_frame)
-        self.center_panel.grid(row=0, column=1, sticky=tk.NSEW, padx=5)
+        self.center_panel.grid(row=0, column=2, sticky=tk.NSEW, padx=(10, 10))
         
         # 右侧输出面板（占据剩余所有空间）
         self.right_panel = ttk.Frame(self.main_frame)
-        self.right_panel.grid(row=0, column=2, sticky=tk.NSEW, padx=(5, 0))
+        self.right_panel.grid(row=0, column=3, sticky=tk.NSEW, padx=(5, 0))
         
         # 配置网格权重 - 右侧输出区域弹性扩展
         self.main_frame.grid_columnconfigure(0, weight=0)  # 左侧固定
-        self.main_frame.grid_columnconfigure(1, weight=0)  # 中间根据内容自适应
-        self.main_frame.grid_columnconfigure(2, weight=1)  # 右侧占据剩余空间
+        self.main_frame.grid_columnconfigure(1, weight=0)  # 分割线固定
+        self.main_frame.grid_columnconfigure(2, weight=0)  # 中间根据内容自适应
+        self.main_frame.grid_columnconfigure(3, weight=1)  # 右侧占据剩余空间
         self.main_frame.grid_rowconfigure(0, weight=1)
         
         # 强制更新布局
@@ -86,30 +91,44 @@ class LayoutTabView:
     
     def create_left_tab_navigation(self) -> None:
         """创建左侧 Tab 导航栏（垂直排列）"""
-        # 使用框架垂直排列 Tab 按钮，添加凹陷边框作为背景
-        tab_frame = ttk.Frame(self.left_panel, relief='sunken', borderwidth=2)
-        tab_frame.pack(fill=tk.BOTH, expand=True, padx=3, pady=3)
+        # 使用框架垂直排列 Tab 按钮，添加背景色
+        tab_frame = ttk.Frame(self.left_panel, relief='flat', borderwidth=0)
+        tab_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # 配置自定义样式 - 使用更深的背景色和更大字体
+        # 配置自定义样式 - 使用现代化配色方案
         style = ttk.Style()
+        
+        # 未选中状态：保持默认颜色
         style.configure('LeftTab.TButton', 
-                       font=('Arial', 10, 'bold'),
-                       padding=10,
+                       font=('Microsoft YaHei UI', 10, 'normal'),
+                       padding=(15, 8),  # 左右 15px，上下 8px
                        anchor='w',
-                       background='#e8e8e8')  # 未选中：浅灰色
+                       background='#f0f0f0',  # 浅灰色背景
+                       foreground='#333333',  # 深灰色文字
+                       relief='flat',
+                       borderwidth=0)
         
-        # 选中状态样式 - 添加明显的蓝色边框和背景
+        # 选中状态：添加明显的蓝色边框
         style.configure('SelectedTab.TButton',
-                       font=('Arial', 10, 'bold'),
-                       padding=10,
+                       font=('Microsoft YaHei UI', 10, 'bold'),
+                       padding=(15, 8),
                        anchor='w',
-                       background='#0078d7',  # 选中：深蓝色背景 (Windows 标准蓝)
-                       relief='solid',        # 实线边框
-                       borderwidth=5)         # 边框宽度 5px (更粗)
+                       background='#f0f0f0',  # 保持相同背景色
+                       foreground='#1976D2',  # 选中的文字变为蓝色
+                       relief='solid',
+                       borderwidth=4,
+                       lightcolor='#2196F3',  # 亮蓝色外边框
+                       darkcolor='#1565C0')   # 深蓝色内边框
         
-        # 鼠标悬停样式
+        # 鼠标悬停样式：稍微加深背景
         style.map('LeftTab.TButton',
-                 background=[('active', '#d0d0d0'), ('pressed', '#c0c0c0')])
+                 background=[('active', '#e0e0e0'),  # 悬停时稍深
+                            ('pressed', '#d0d0d0')])  # 按下时更深
+        
+        # 为选中状态也添加悬停效果
+        style.map('SelectedTab.TButton',
+                 background=[('active', '#e0e0e0'),  # 悬停时稍深
+                            ('pressed', '#d0d0d0')])  # 按下时更深
         
         # 创建各个 Tab 按钮
         tab_configs = [
@@ -127,10 +146,10 @@ class LayoutTabView:
                 text=text,
                 command=lambda t=tab_name: self.switch_tab(t),
                 width=16,
-                takefocus=True,
+                takefocus=False,  # 移除焦点框
                 style='LeftTab.TButton'
             )
-            btn.grid(row=i, column=0, sticky=tk.EW, padx=2, pady=3)
+            btn.grid(row=i, column=0, sticky=tk.EW, padx=0, pady=2)
             tab_frame.grid_rowconfigure(i, weight=1)
             self.tab_buttons[tab_name] = btn  # 保存按钮引用
         
@@ -181,23 +200,52 @@ class LayoutTabView:
         # 创建输入区域
         self._create_device_input_section(tab)
         
-        # 创建设备功能按钮
-        device_buttons = [
-            ("🔌 连接 ADB", 4, 0, "connect_adb"),
-            ("❌ 断开所有 ADB 连接", 4, 1, "disconnect_adb"),
-            ("📱 查看已连接设备", 4, 2, "show_device_info"),
-            ("🔄 重启 ADB 服务", 5, 0, "restart_adb_server"),  # 新增按钮
-            ("📋 获取设备信息", 5, 1, "get_device_info_fast"),
-            ("🖥️ 打开 CMD 窗口", 5, 2, "open_cmd_window"),
-            ("🔁 重启设备", 6, 0, "reboot"),
-            ("📝 常用 ADB 命令", 6, 1, "show_common_adb_commands"),
-            ("🔑 获取 Root 权限", 6, 2, "root_device"),
-            ("📀 重新挂载分区", 7, 0, "remount"),
-            ("获取 Android 版本号", 7, 1, "get_android_version"),
-            ("📱 获取设备串号", 7, 2, "get_serial_number"),
+        # === 第一组：ADB 服务管理 ===
+        adb_buttons = [
+            ("🔌 连接 ADB", 1, 0, "connect_adb"),
+            ("❌ 断开所有 ADB 连接", 1, 1, "disconnect_adb"),
+            ("🔄 重启 ADB 服务", 1, 2, "restart_adb_server"),
         ]
+        self._create_button_grid(tab, adb_buttons)
         
-        self._create_button_grid(tab, device_buttons)
+        # 分隔标签
+        ttk.Label(tab, text="─ 设备信息 ─").grid(
+            row=2, column=0, columnspan=3, padx=5, pady=(15, 5), sticky=tk.W
+        )
+        
+        # === 第二组：设备信息 ===
+        info_buttons = [
+            ("📱 查看已连接设备", 3, 0, "show_device_info"),
+            ("📋 获取设备信息", 3, 1, "get_device_info_fast"),
+            ("📱 获取设备串号", 3, 2, "get_serial_number"),
+        ]
+        self._create_button_grid(tab, info_buttons)
+        
+        # 分隔标签
+        ttk.Label(tab, text="─ 设备控制 ─").grid(
+            row=4, column=0, columnspan=3, padx=5, pady=(15, 5), sticky=tk.W
+        )
+        
+        # === 第三组：设备控制 ===
+        control_buttons = [
+            ("🔁 重启设备", 5, 0, "reboot"),
+            ("🔑 获取 Root 权限", 5, 1, "root_device"),
+            ("📀 重新挂载分区", 5, 2, "remount"),
+        ]
+        self._create_button_grid(tab, control_buttons)
+        
+        # 分隔标签
+        ttk.Label(tab, text="─ 系统工具 ─").grid(
+            row=6, column=0, columnspan=3, padx=5, pady=(15, 5), sticky=tk.W
+        )
+        
+        # === 第四组：系统工具 ===
+        system_buttons = [
+            ("🖥️ 打开 CMD 窗口", 7, 0, "open_cmd_window"),
+            ("📝 常用 ADB 命令", 7, 1, "show_common_adb_commands"),
+            ("获取 Android 版本号", 7, 2, "get_android_version"),
+        ]
+        self._create_button_grid(tab, system_buttons)
     
     def _create_device_input_section(self, parent) -> None:
         """创建设备输入区域"""
@@ -242,21 +290,50 @@ class LayoutTabView:
             
         # 创建应用版本展示框
         self._create_app_version_display(tab)
-            
-        # 创建应用功能按钮
+        
+        # === 第一组：应用操作 ===
         app_buttons = [
-            ("📲 强制安装 APK", 5, 0, "force_install"),
-            ("🗑️ 卸载当前包名应用", 5, 1, "uninstall"),
-            ("📋 获取已安装应用列表", 5, 2, "package_list"),
-            ("🧹 清除应用缓存", 6, 0, "clear_cache"),
-            ("⏹️ 终止当前包名进程", 6, 1, "kill_app_process"),
-            ("📊 查看内存 CPU 资源占用", 6, 2, "get_app_resource_usage"),
-            ("🔍 获取包名版本号", 7, 0, "get_version"),
-            ("📂 获取应用安装路径", 7, 1, "get_package_path"),
-            ("🔍 获取当前打开应用包名", 7, 2, "get_package_name"),
+            ("📲 强制安装 APK", 4, 0, "force_install"),
+            ("🗑️ 卸载当前包名应用", 4, 1, "uninstall"),
+            ("🧹 清除应用缓存", 4, 2, "clear_cache"),
         ]
-            
         self._create_button_grid(tab, app_buttons)
+        
+        # 分隔标签
+        ttk.Label(tab, text="─ 进程与资源 ─").grid(
+            row=5, column=0, columnspan=3, padx=5, pady=(15, 5), sticky=tk.W
+        )
+        
+        # === 第二组：进程与资源 ===
+        process_buttons = [
+            ("⏹️ 终止当前包名进程", 6, 0, "kill_app_process"),
+            ("📊 查看内存 CPU 资源占用", 6, 1, "get_app_resource_usage"),
+        ]
+        self._create_button_grid(tab, process_buttons)
+        
+        # 分隔标签
+        ttk.Label(tab, text="─ 应用信息 ─").grid(
+            row=7, column=0, columnspan=3, padx=5, pady=(15, 5), sticky=tk.W
+        )
+        
+        # === 第三组：应用信息 ===
+        info_buttons = [
+            ("🔍 获取包名版本号", 8, 0, "get_version"),
+            ("📂 获取应用安装路径", 8, 1, "get_package_path"),
+            ("🔍 获取当前打开应用包名", 8, 2, "get_package_name"),
+        ]
+        self._create_button_grid(tab, info_buttons)
+        
+        # 分隔标签
+        ttk.Label(tab, text="─ 应用列表 ─").grid(
+            row=9, column=0, columnspan=3, padx=5, pady=(15, 5), sticky=tk.W
+        )
+        
+        # === 第四组：应用列表 ===
+        list_buttons = [
+            ("📋 获取已安装应用列表", 10, 0, "package_list"),
+        ]
+        self._create_button_grid(tab, list_buttons)
     
     def _create_app_input_section(self, parent) -> None:
         """创建应用输入区域"""
@@ -385,7 +462,7 @@ class LayoutTabView:
         self._create_button_grid(tab, advanced_buttons, row_offset=0)
     
     def _create_button_grid(self, parent, button_configs: List[Tuple[str, int, int, str]], 
-                           row_offset: int = 2) -> None:
+                           row_offset: int = 0) -> None:
         """
         创建按钮网格
         
