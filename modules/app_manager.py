@@ -347,7 +347,7 @@ class AppManager:
     def kill_app_process(self) -> bool:
         """
         强制停止应用进程
-        
+            
         Returns:
             bool: 停止是否成功
         """
@@ -355,7 +355,7 @@ class AppManager:
         if not pkg_name:
             self.app.update_status("请输入需要终止进程的应用包名", False)
             return False
-
+    
         try:
             output, success = self.app.run_adb_with_target(f"adb shell am force-stop {pkg_name}")
             if success:
@@ -365,7 +365,31 @@ class AppManager:
                 self.app.update_status(f"终止{pkg_name}进程失败", False)
                 return False
         except Exception as e:
-            self.app.update_status(f"未找到{pkg_name}所属进程: {str(e)}", False)
+            self.app.update_status(f"未找到{pkg_name}所属进程：{str(e)}", False)
+            return False
+        
+    def start_app(self) -> bool:
+        """
+        启动当前包名应用
+            
+        Returns:
+            bool: 启动是否成功
+        """
+        pkg_name = self.app.pkg_entry.get().strip()
+        if not pkg_name:
+            self.app.update_status("请输入要启动的应用包名", False)
+            return False
+    
+        try:
+            output, success = self.app.run_adb_with_target(f"adb shell monkey -p {pkg_name} -c android.intent.category.LAUNCHER 1")
+            if success:
+                self.app.update_status(f"成功启动{pkg_name}应用", True)
+                return True
+            else:
+                self.app.update_status(f"启动{pkg_name}应用失败", False)
+                return False
+        except Exception as e:
+            self.app.update_status(f"启动应用失败：{str(e)}", False)
             return False
     
     def get_package_path(self) -> Optional[str]:

@@ -300,23 +300,24 @@ class LayoutTabView:
         self._create_button_grid(tab, app_buttons)
         
         # 分隔标签
-        ttk.Label(tab, text="─ 进程与资源 ─").grid(
+        ttk.Label(tab, text="─ 应用启动与进程 ─").grid(
             row=5, column=0, columnspan=3, padx=5, pady=(15, 5), sticky=tk.W
         )
         
-        # === 第二组：进程与资源 ===
-        process_buttons = [
-            ("⏹️ 终止当前包名进程", 6, 0, "kill_app_process"),
-            ("📊 查看内存 CPU 资源占用", 6, 1, "get_app_resource_usage"),
+        # === 第二组：应用启动与进程 ===
+        start_buttons = [
+            ("▶️ 启动当前包名应用", 6, 0, "start_app"),
+            ("⏹️ 终止当前包名进程", 6, 1, "kill_app_process"),
+            ("📊 查看内存 CPU 资源占用", 6, 2, "get_app_resource_usage"),
         ]
-        self._create_button_grid(tab, process_buttons)
+        self._create_button_grid(tab, start_buttons)
         
         # 分隔标签
         ttk.Label(tab, text="─ 应用信息 ─").grid(
             row=7, column=0, columnspan=3, padx=5, pady=(15, 5), sticky=tk.W
         )
         
-        # === 第三组：应用信息 ===
+        # === 第二组：应用信息 ===
         info_buttons = [
             ("🔍 获取包名版本号", 8, 0, "get_version"),
             ("📂 获取应用安装路径", 8, 1, "get_package_path"),
@@ -329,7 +330,7 @@ class LayoutTabView:
             row=9, column=0, columnspan=3, padx=5, pady=(15, 5), sticky=tk.W
         )
         
-        # === 第四组：应用列表 ===
+        # === 第三组：应用列表 ===
         list_buttons = [
             ("📋 获取已安装应用列表", 10, 0, "package_list"),
         ]

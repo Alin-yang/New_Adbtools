@@ -1297,6 +1297,25 @@ class ADBToolApp:
                 self.update_status(f"终止{pkg_name}进程失败", False)
         except:
             self.update_status(f"未找到{pkg_name}所属进程:", False)
+    
+    @require_device_connected
+    def start_app(self):
+        """启动当前包名应用"""
+        pkg_name = self.get_package_name_from_input()
+        if not pkg_name:
+            self.update_status("请输入要启动的应用包名", False)
+            return
+
+        try:
+            output, success = self.run_adb_with_target(f"adb shell monkey -p {pkg_name} -c android.intent.category.LAUNCHER 1")
+            if success:
+                # 保存包名到历史记录
+                self._save_pkg_to_history(pkg_name)
+                self.update_status(f"成功启动{pkg_name}应用", True)
+            else:
+                self.update_status(f"启动{pkg_name}应用失败", False)
+        except Exception as e:
+            self.update_status(f"启动应用失败：{str(e)}", False)
 
 
     def get_ip_address(self) -> Optional[str]:

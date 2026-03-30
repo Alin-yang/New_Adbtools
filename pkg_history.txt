@@ -1,3 +1,5 @@
+com.youku.phone
+com.bbk.launcher2
 com.konka.account
 com.konka.apkhall.edu
 com.ypfun.tvmusic
