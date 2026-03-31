@@ -69,6 +69,73 @@ def get_connected_devices_simple() -> List[str]:
     except Exception:
         return []
 
+def get_connected_devices_parallel() -> List[str]:
+    """并行检测多个设备并验证可达性（优化版）
+    
+    使用线程池并行验证设备，提升多设备场景下的检测速度
+    
+    Returns:
+        List[str]: 已连接且可访问的设备列表
+    """
+    try:
+        # 先快速获取所有设备列表
+        result = subprocess.run(
+            "adb devices", shell=True, check=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=3
+        )
+        output = result.stdout.decode('utf-8', errors='ignore')
+        
+        # 提取设备 ID
+        device_ids = []
+        for line in output.splitlines()[1:]:
+            if '\t' in line and 'device' in line and 'unauthorized' not in line and 'offline' not in line:
+                device_id = line.split('\t')[0].strip()
+                if device_id and device_id != 'List':
+                    device_ids.append(device_id)
+        
+        if not device_ids:
+            return []
+        
+        # 使用线程池并行验证设备可达性
+        import concurrent.futures
+        
+        def validate_single_device(device_id):
+            """验证单个设备是否可达"""
+            try:
+                validation_result = subprocess.run(
+                    f"adb -s {device_id} shell echo test", shell=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    timeout=2
+                )
+                return device_id if validation_result.returncode == 0 else None
+            except Exception:
+                return None
+        
+        # 并行验证所有设备（最多 5 个并发）
+        validated_devices = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(5, len(device_ids))) as executor:
+            future_to_device = {
+                executor.submit(validate_single_device, device_id): device_id 
+                for device_id in device_ids
+            }
+            
+            # 收集所有验证通过的设备
+            for future in concurrent.futures.as_completed(future_to_device):
+                try:
+                    result = future.result(timeout=2)
+                    if result:
+                        validated_devices.append(result)
+                except:
+                    # 超时或失败的设备跳过
+                    continue
+        
+        return validated_devices
+        
+    except Exception:
+        return []
+
+
 def get_unique_physical_devices() -> List[str]:
     """获取唯一的物理设备列表（合并同一设备的不同连接方式）
     

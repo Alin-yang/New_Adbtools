@@ -17,11 +17,12 @@ from utils import (
     load_pkg_history, save_pkg_history, is_valid_package_name,
     get_accurate_package_version, calculate_optimal_workers, format_file_size,
     get_connected_devices, get_connected_devices_simple,
-    extract_package_name_from_apk
+    extract_package_name_from_apk, get_connected_devices_parallel
 )
 from config import Config
 from cache_manager import cache_manager
 import concurrent.futures
+from device_monitor import DeviceStatusManager
 
 # 配置日志输出
 logging.basicConfig(
@@ -75,6 +76,9 @@ class ADBToolApp:
         self._long_running_threads = []  # 跟踪日志、录屏等长时间运行的线程
         self._cleanup_interval = 300  # 清理已完成线程的间隔（秒）
         self._last_cleanup_time = time.time()
+        
+        # 设备监控管理器
+        self.device_monitor_manager = None
                 
         self._init_variables()
         self._setup_gui()
@@ -82,8 +86,8 @@ class ADBToolApp:
 
     def _delayed_initialization(self):
         """延迟初始化非关键组件（极致优化版）"""
-        # 立即在后台启动设备检测（使用快速检测策略）
-        device_thread = threading.Thread(target=self._async_device_detection_fast, daemon=True)
+        # 立即在后台启动设备检测（使用并行检测策略）
+        device_thread = threading.Thread(target=self._async_device_detection_parallel, daemon=True)
         device_thread.start()
         
         # 合并历史记录加载，减少延迟次数（从 100ms 减少到 30ms）
@@ -91,17 +95,32 @@ class ADBToolApp:
         
         # 目录创建移到更晚且异步执行（从 200ms 减少到 80ms）
         self.root.after(80, self._ensure_directories_async)
+        
+        # 启动设备监控（延迟 200ms）
+        self.root.after(200, self._start_device_monitoring)
 
-    def _async_device_detection_fast(self):
-        """快速的异步设备检测（简化版本，不阻塞 UI）"""
+    def _async_device_detection_parallel(self):
+        """并行的异步设备检测（优化版本，使用并行验证）"""
         try:
-            # 使用简化的设备检测，不进行深度验证
-            connected_devices = get_connected_devices_simple()
+            # 使用并行检测设备，不进行深度验证
+            connected_devices = get_connected_devices_parallel()
             # 在主线程中更新 UI
             self.root.after(0, lambda: self._handle_detected_devices(connected_devices))
         except Exception as error:
             error_msg = str(error)
             self.root.after(0, lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
+    
+    def _start_device_monitoring(self):
+        """启动后台设备监控"""
+        try:
+            # 初始化设备监控管理器
+            self.device_monitor_manager = DeviceStatusManager(self)
+            # 启动自动监控模式
+            self.device_monitor_manager.start_auto_monitor()
+            self.update_status("✓ 设备监控已启动", True)
+        except Exception as error:
+            error_msg = str(error)
+            self.update_status(f"启动设备监控失败：{error_msg}", False)
         
     def _async_device_detection_full(self):
         """完整的异步设备检测（包含 IP 历史记录更新）"""

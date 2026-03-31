@@ -1,11 +1,12 @@
 """
 缓存管理模块
-实现LRU缓存机制，提供高效的数据缓存功能
+实现 LRU 缓存机制和自适应缓存，提供高效的数据缓存功能
 """
 import time
 from typing import Any, Dict, Optional, Tuple
 from collections import OrderedDict
 from config import Config
+from adaptive_cache import AdaptiveLRUCache
 
 
 class LRUCache:
@@ -125,26 +126,26 @@ class LRUCache:
 
 
 class CacheManager:
-    """缓存管理器，管理不同类型的缓存"""
+    """缓存管理器，管理不同类型的缓存（支持自适应缓存）"""
     
     def __init__(self):
         """初始化缓存管理器"""
-        # 设备连接状态缓存（短期）
-        self.device_cache = LRUCache(
+        # 设备连接状态缓存（短期）- 使用自适应缓存
+        self.device_cache = AdaptiveLRUCache(
             max_size=50,
-            timeout=Config.DEVICE_CACHE_TIMEOUT
+            base_timeout=Config.DEVICE_CACHE_TIMEOUT
         )
         
-        # 应用包信息缓存（长期）
-        self.package_cache = LRUCache(
+        # 应用包信息缓存（长期）- 使用自适应缓存
+        self.package_cache = AdaptiveLRUCache(
             max_size=Config.MAX_CACHE_SIZE,
-            timeout=Config.CACHE_TIMEOUT
+            base_timeout=Config.CACHE_TIMEOUT
         )
         
-        # 系统信息缓存（长期）
-        self.system_cache = LRUCache(
+        # 系统信息缓存（长期）- 使用自适应缓存
+        self.system_cache = AdaptiveLRUCache(
             max_size=20,
-            timeout=Config.CACHE_TIMEOUT * 2  # 系统信息缓存时间更长
+            base_timeout=Config.CACHE_TIMEOUT * 2  # 系统信息缓存时间更长
         )
     
     def get_device_status(self, device_id: str) -> Optional[bool]:

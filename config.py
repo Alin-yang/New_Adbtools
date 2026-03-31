@@ -33,10 +33,14 @@ class Config:
                 return default_path
     
     # 性能优化的缓存配置
-    CACHE_TIMEOUT = 180  # 减少缓存超时时间到3分钟
-    DEVICE_CACHE_TIMEOUT = 3  # 设备连接状态缓存超时减少到3秒
+    CACHE_TIMEOUT = 180  # 减少缓存超时时间到 3 分钟
+    DEVICE_CACHE_TIMEOUT = 3  # 设备连接状态缓存超时减少到 3 秒
     MAX_CACHE_SIZE = 50  # 减少最大缓存条目数
-    CACHE_CLEANUP_INTERVAL = 120  # 增加清理间隔到2分钟
+    CACHE_CLEANUP_INTERVAL = 120  # 增加清理间隔到 2 分钟
+        
+    # 设备监控配置
+    DEVICE_MONITOR_INTERVAL = 3  # 设备监控检查间隔（秒）
+    DEVICE_MONITOR_ENABLED = True  # 默认启用设备监控
     
     # IP历史记录配置
     MAX_IP_HISTORY = 10  # 最大IP历史记录数
