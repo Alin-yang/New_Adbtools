@@ -246,6 +246,14 @@ class LayoutTabView:
             ("获取 Android 版本号", 7, 2, "get_android_version"),
         ]
         self._create_button_grid(tab, system_buttons)
+        
+        # 分隔标签 - 文本输入分区
+        ttk.Label(tab, text="─ 文本输入 ─").grid(
+            row=8, column=0, columnspan=3, padx=5, pady=(15, 5), sticky=tk.W
+        )
+        
+        # === 第五组：文本输入 ===
+        self._create_text_input_section(tab)
     
     def _create_device_input_section(self, parent) -> None:
         """创建设备输入区域"""
@@ -279,6 +287,45 @@ class LayoutTabView:
         # 配置列权重
         parent.grid_columnconfigure(0, weight=0)
         parent.grid_columnconfigure(1, weight=1)
+    
+    def _create_text_input_section(self, parent) -> None:
+        """创建文本输入区域"""
+        # 文本输入框（去掉标签，直接左对齐）
+        text_frame = ttk.Frame(parent)
+        text_frame.grid(row=9, column=0, columnspan=2, padx=5, pady=5, sticky=tk.EW)
+        
+        # 文本输入框
+        self.app.text_input_entry = ttk.Entry(text_frame)
+        self.app.text_input_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.app.text_input_entry['width'] = 20
+        # 添加弱提示
+        self.app.text_input_entry.insert(0, "仅支持数字输入")
+        self.app.text_input_entry.config(foreground='gray')
+        
+        # 绑定焦点事件，实现弱提示效果
+        def on_entry_focus_in(event):
+            if self.app.text_input_entry.get() == "仅支持数字输入":
+                self.app.text_input_entry.delete(0, tk.END)
+                self.app.text_input_entry.config(foreground='black')
+        
+        def on_entry_focus_out(event):
+            if not self.app.text_input_entry.get():
+                self.app.text_input_entry.insert(0, "仅支持数字输入")
+                self.app.text_input_entry.config(foreground='gray')
+        
+        self.app.text_input_entry.bind("<FocusIn>", on_entry_focus_in)
+        self.app.text_input_entry.bind("<FocusOut>", on_entry_focus_out)
+        
+        # 发送按钮
+        self.app.text_send_btn = ttk.Button(
+            text_frame,
+            text="发送输入",
+            command=self.app.send_text_input
+        )
+        self.app.text_send_btn.pack(side=tk.LEFT, padx=(5, 0))
+        
+        # 配置列权重
+        parent.grid_columnconfigure(0, weight=1)
     
     def create_app_tab(self) -> None:
         """创建应用管理 Tab"""

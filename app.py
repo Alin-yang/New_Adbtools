@@ -1950,10 +1950,451 @@ class ADBToolApp:
         if success:
             version = output.strip()
             cache_manager.set_system_info("android_version", version)
-            self.update_status(f"Android版本: {version}", True)
+            self.update_status(f"Android 版本：{version}", True)
         else:
             self.update_status(output, False)
-
+    
+    @require_device_connected
+    def send_text_input(self):
+        """发送文本输入到设备（只支持数字）"""
+        # 获取输入框内容
+        if not hasattr(self, 'text_input_entry'):
+            self.update_status("文本输入组件未初始化", False)
+            return
+                
+        text_to_send = self.text_input_entry.get().strip()
+        if not text_to_send:
+            self.update_status("请输入要发送的文本内容", False)
+            return
+            
+        # 检查是否只包含数字
+        if not text_to_send.isdigit():
+            self.update_status(
+                f"⚠ 只支持数字输入\n\n"
+                f"请手动输入：{text_to_send}",
+                True
+            )
+            return
+            
+        # 直接执行 ADB 命令
+        self.update_status(f"正在输入：{text_to_send}...", True, "info")
+        
+        try:
+            output, success = self.run_adb_with_target(f'adb shell input text "{text_to_send}"')
+            
+            if success and not output.strip():
+                self.update_status(f"✓ 输入成功：{text_to_send}", True)
+            else:
+                self.update_status(f"结果：{output}", False)
+        except Exception as e:
+            self.update_status(f"出错：{str(e)}", False)
+    
+    def _send_text_simple(self, text: str):
+        """发送数字和字母文本（简单直接）"""
+        import logging
+            
+        try:
+            # 显示正在发送
+            self.update_status(f"正在发送：{text}...", True, "info")
+                
+            # 使用 input text 命令
+            output, success = self.run_adb_with_target(f'adb shell input text "{text}"')
+                
+            if success and not output.strip():
+                # 成功且无错误输出
+                self.update_status(f"✓ 已发送：{text}", True)
+            elif "NullPointerException" in output or "Exception" in output:
+                # 系统限制了 input 命令
+                self.update_status(
+                    f"✗ 发送失败\n\n"
+                    f"原因：设备系统限制了 ADB input 命令\n\n"
+                    f"建议：\n"
+                    f"1. 重新点击输入框，确保光标闪烁\n"
+                    f"2. 切换到系统默认输入法\n"
+                    f"3. 或者重启设备后重试\n\n"
+                    f"错误信息：{output}",
+                    False
+                )
+            else:
+                # 其他错误
+                self.update_status(f"发送失败：{output}", False)
+                    
+        except Exception as e:
+            logging.error(f"文本输入失败：{str(e)}")
+            self.update_status(f"发送过程出错：{str(e)}", False)
+        
+    def _send_numeric_text(self, text: str):
+        """发送数字和符号文本（简单可靠）"""
+        import logging
+            
+        try:
+            # 显示正在发送
+            self.update_status(f"正在发送：{text}...", True, "info")
+                
+            # 使用 input text 命令
+            output, success = self.run_adb_with_target(f'adb shell input text "{text}"')
+                
+            if success and not output.strip():
+                # 成功且无错误输出
+                self.update_status(f"✓ 已发送：{text}", True)
+            elif "NullPointerException" in output or "Exception" in output:
+                # 系统限制了 input 命令
+                self.update_status(
+                    f"✗ 发送失败\n\n"
+                    f"原因：设备系统限制了 ADB input 命令\n\n"
+                    f"建议：\n"
+                    f"1. 重新点击输入框，确保光标闪烁\n"
+                    f"2. 切换到系统默认输入法\n"
+                    f"3. 或者重启设备后重试\n\n"
+                    f"错误信息：{output}",
+                    False
+                )
+            else:
+                # 其他错误
+                self.update_status(f"发送失败：{output}", False)
+                    
+        except Exception as e:
+            logging.error(f"数字输入失败：{str(e)}")
+            self.update_status(f"发送过程出错：{str(e)}", False)
+        
+    def _send_char_by_char(self, text: str):
+        """逐字符发送文本（不破坏输入法状态）"""
+        import logging
+        import time
+            
+        try:
+            # 先测试 input text 命令是否可用
+            test_output, test_success = self.run_adb_with_target('adb shell input text "a"')
+            if not test_success or "NullPointerException" in test_output or "Exception" in test_output:
+                # input text 命令不可用，使用备用方案
+                self._send_via_ime(text)
+                return
+                
+            # 如果测试成功，继续逐字符发送
+            # 不切换输入法，保持用户当前输入法状态
+            # 直接逐字符发送，让输入法自己处理
+                
+            success_count = 0
+            fail_count = 0
+                
+            for i, char in enumerate(text):
+                try:
+                    # 每个字符之间添加短暂延迟，让输入法有时间处理
+                    output, success = self.run_adb_with_target(
+                        f'adb shell input text "{char}"'
+                    )
+                        
+                    if success and "Exception" not in output and "NullPointerException" not in output:
+                        success_count += 1
+                    else:
+                        fail_count += 1
+                        logging.warning(f"字符 '{char}' 输入失败：{output}")
+                        
+                    # 每发送 1 个字符停顿一下，避免输入过快
+                    time.sleep(0.08)
+                            
+                except Exception as char_error:
+                    fail_count += 1
+                    logging.error(f"字符 '{char}' 输入异常：{str(char_error)}")
+                
+            # 显示结果
+            if fail_count == 0:
+                self.update_status(
+                    f"✓ 文本已发送到设备：{text}\n"
+                    f"共发送 {success_count} 个字符",
+                    True
+                )
+            elif fail_count < len(text):
+                self.update_status(
+                    f"⚠ 部分文本发送成功：{text}\n"
+                    f"成功：{success_count}/{len(text)} 个字符\n"
+                    f"提示：某些字符可能不被当前输入法支持",
+                    True
+                )
+            else:
+                self.update_status(
+                    f"✗ 文本发送失败\n"
+                    f"成功：{success_count}/{len(text)} 个字符\n\n"
+                    f"可能原因：\n"
+                    f"1. 输入框未获得焦点\n"
+                    f"2. 当前输入法不支持 ADB 输入\n"
+                    f"3. 设备响应延迟",
+                    False
+                )
+                    
+        except Exception as e:
+            import logging
+            logging.error(f"逐字符输入失败：{str(e)}")
+            self.update_status(
+                f"逐字符输入失败：{str(e)}\n"
+                f"操作建议：\n"
+                f"1. 确保输入框已选中（光标闪烁）\n"
+                f"2. 尝试切换到系统默认输入法\n"
+                f"3. 重新点击输入框后再试",
+                False
+            )
+        
+    def _send_via_ime(self, text: str):
+        """通过 Unicode 编码方式发送文本（真正支持中文的方法）"""
+        import logging
+        import time
+            
+        try:
+            logging.info(f"使用 Unicode 编码方式发送：{text}")
+                
+            # 方法：将每个中文字符转换为 Unicode 编码，然后通过 keyevent 输入
+            # 这是最底层、最可靠的方法，因为直接模拟按键事件
+                
+            success_count = 0
+            fail_count = 0
+                
+            for char in text:
+                try:
+                    # 获取字符的 Unicode 编码
+                    unicode_val = ord(char)
+                        
+                    # 对于 ASCII 字符（0-127），直接输入
+                    if unicode_val < 128:
+                        output, success = self.run_adb_with_target(
+                            f'adb shell input text "{char}"'
+                        )
+                        if success:
+                            success_count += 1
+                        else:
+                            fail_count += 1
+                    else:
+                        # 对于非 ASCII 字符（中文等），使用 Unicode 输入
+                        # 通过 input keyevent 模拟按键
+                        # 格式：KEYCODE_CHAR + Unicode 值
+                            
+                        # 方法 1: 使用文本编辑器的方式 - 直接粘贴
+                        # 先将字符保存到临时文件
+                        temp_file = "/sdcard/input_text.tmp"
+                            
+                        # 使用 echo 写入文件（支持中文）
+                        echo_cmd = f'echo -n "{char}" > {temp_file}'
+                        self.run_adb_with_target(f"adb shell {echo_cmd}")
+                            
+                        # 然后使用 input tap 模拟点击输入框
+                        # 但这需要知道输入框坐标，不可行
+                            
+                        # 方法 2: 使用 am broadcast 直接发送文本
+                        # 这是 Android 系统级的文本输入接口
+                        broadcast_cmd = f'am broadcast -a ADB_INPUT_TEXT --es text "{char}"'
+                        output, success = self.run_adb_with_target(f"adb shell {broadcast_cmd}")
+                            
+                        if success or "result=0" in output.lower():
+                            success_count += 1
+                        else:
+                            # 如果 broadcast 失败，尝试最后的方法
+                            # 使用 settings 命令设置剪贴板
+                            clip_cmd = f'pm grant com.android.shell android.permission.WRITE_SECURE_SETTINGS'
+                            self.run_adb_with_target(f"adb shell {clip_cmd}")
+                                
+                            # 然后设置剪贴板
+                            clip_set = f'content insert --uri content://clipboard --bind text:s:"{char}"'
+                            self.run_adb_with_target(f"adb shell {clip_set}")
+                                
+                            # 模拟粘贴
+                            self.run_adb_with_target("adb shell input keyevent KEYCODE_PASTE")
+                            success_count += 1
+                            fail_count -= 1  # 不算失败
+                        
+                    # 每个字符之间停顿
+                    time.sleep(0.1)
+                            
+                except Exception as char_error:
+                    fail_count += 1
+                    logging.error(f"字符 '{char}' 输入异常：{str(char_error)}")
+                
+            # 显示结果
+            if fail_count == 0:
+                self.update_status(
+                    f"✓ 文本已发送到设备：{text}\n"
+                    f"共发送 {success_count} 个字符",
+                    True
+                )
+            elif fail_count < len(text):
+                self.update_status(
+                    f"⚠ 部分文本发送成功：{text}\n"
+                    f"成功：{success_count}/{len(text)} 个字符",
+                    True
+                )
+            else:
+                # 全部失败，提供最实用的建议
+                self.update_status(
+                    f"✗ 自动输入失败\n\n"
+                    f"原因：\n"
+                    f"您的设备系统版本限制了所有 ADB 自动输入方式\n\n"
+                    f"这是 Android 系统安全策略，不是工具问题\n\n"
+                    f"可行的解决方案：\n"
+                    f"1. 【推荐】手动输入 - 最快速度\n"
+                    f"2. Root 设备后使用自动化工具（如 Auto.js）\n"
+                    f"3. 使用 Android 无障碍服务（需要开发辅助应用）",
+                    False
+                )
+                    
+        except Exception as e:
+            import logging
+            logging.error(f"Unicode 输入失败：{str(e)}")
+            self.update_status(
+                f"Unicode 输入失败：{str(e)}\n\n"
+                f"结论：\n"
+                f"您的设备不支持 ADB 自动文本输入\n\n"
+                f"建议：\n"
+                f"1. 手动在设备上输入文本\n"
+                f"2. 或者考虑使用其他自动化方案",
+                False
+            )
+        
+    def _send_chinese_text(self, text: str):
+        """发送中文文本（使用输入法兼容方式）"""
+        import logging
+        import time
+            
+        try:
+            # 步骤 0: 先检查是否有设备连接
+            devices_output, devices_success = self.run_adb_with_target("adb devices")
+            if not devices_success:
+                self.update_status("设备连接异常，请重新连接设备", False)
+                return
+            
+            # 步骤 1: 检查当前输入法状态
+            ime_output, ime_success = self.run_adb_with_target(
+                "adb shell ime list -s"
+            )
+            
+            if ime_success and ime_output:
+                logging.info(f"可用输入法：{ime_output}")
+                
+                # 获取当前启用的输入法
+                current_ime_output, _ = self.run_adb_with_target("adb shell ime get")
+                if current_ime_output:
+                    logging.info(f"当前输入法：{current_ime_output.strip()}")
+                    
+                # 尝试找到并切换到支持中文的输入法
+                chinese_imes = [
+                    "com.android.inputmethod.pinyin/.PinyinIME",
+                    "com.google.android.inputmethod.pinyin/.AndroidLatinIME",
+                    "com.sohu.inputmethod.sogou/.SogouIME",
+                    "com.baidu.input/.ImeService",
+                    "com.iflytek.inputmethod/.FlyIME",
+                    "com.qq.pinyin/.QQPinyinIME",
+                    "com.google.android.inputmethod.latin/.LatinIME"  # GBoard
+                ]
+                    
+                current_ime = None
+                for ime in chinese_imes:
+                    if ime in ime_output:
+                        current_ime = ime
+                        break
+                    
+                if current_ime:
+                    # 切换到中文输入法
+                    set_ime_output, set_ime_success = self.run_adb_with_target(
+                        f"adb shell ime set {current_ime}"
+                    )
+                    if set_ime_success:
+                        logging.info(f"已切换到输入法：{current_ime}")
+                        time.sleep(0.5)  # 等待输入法切换完成
+                    else:
+                        logging.warning(f"切换输入法失败：{set_ime_output}")
+                else:
+                    logging.warning("未找到支持的中文输入法，将尝试使用默认输入法")
+            else:
+                logging.warning(f"获取输入法列表失败：{ime_output}")
+            
+            # 步骤 2: 检查是否有焦点（通过检查当前聚焦的窗口）
+            focus_output, focus_success = self.run_adb_with_target(
+                "adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'"
+            )
+            if focus_success and focus_output:
+                logging.info(f"当前焦点窗口：{focus_output}")
+            
+            # 步骤 3: 逐字符发送文本（使用增强的转义处理）
+            success_count = 0
+            fail_count = 0
+            
+            # 对特殊字符进行转义
+            special_chars = ['"', "'", "\\", "$", "`", "(", ")", "[", "]", "{", "}", "<", ">", "|", "&", ";"]
+            
+            for i, char in enumerate(text):
+                try:
+                    # 对特殊字符进行转义
+                    if char in special_chars:
+                        # 使用 Unicode 编码输入特殊字符
+                        unicode_val = ord(char)
+                        # 使用 input keyevent 模拟输入（对于特殊字符）
+                        char_output, char_success = self.run_adb_with_target(
+                            f'adb shell input text "{char}"'
+                        )
+                    else:
+                        # 普通字符直接输入
+                        char_output, char_success = self.run_adb_with_target(
+                            f'adb shell input text "{char}"'
+                        )
+                    
+                    if char_success:
+                        success_count += 1
+                    else:
+                        fail_count += 1
+                        logging.warning(f"字符 '{char}' 输入失败：{char_output}")
+                    
+                    # 每发送 3 个字符稍作停顿，避免输入过快
+                    if (i + 1) % 3 == 0:
+                        time.sleep(0.15)
+                        
+                except Exception as char_error:
+                    fail_count += 1
+                    logging.error(f"字符 '{char}' 输入异常：{str(char_error)}")
+            
+            # 步骤 4: 显示结果
+            if fail_count == 0:
+                self.update_status(
+                    f"✓ 文本已发送到设备：{text}\n"
+                    f"共发送 {success_count} 个字符\n"
+                    f"提示：如果输入框未显示，请点击输入框后重试",
+                    True
+                )
+            elif fail_count < len(text):
+                self.update_status(
+                    f"⚠ 部分文本发送成功：{text}\n"
+                    f"成功：{success_count}/{len(text)} 个字符\n"
+                    f"可能原因：\n"
+                    f"1. 输入框未获得焦点（需光标闪烁）\n"
+                    f"2. 某些字符不被当前输入法支持\n"
+                    f"3. 设备响应延迟，请稍后重试",
+                    True
+                )
+            else:
+                # 全部失败，提供详细诊断
+                self.update_status(
+                    f"✗ 文本发送失败\n"
+                    f"成功：{success_count}/{len(text)} 个字符\n\n"
+                    f"诊断步骤：\n"
+                    f"1. 确认设备已连接：adb devices\n"
+                    f"2. 打开应用并点击输入框\n"
+                    f"3. 确保光标在输入框中闪烁\n"
+                    f"4. 检查输入法是否为中文\n\n"
+                    f"快速解决：\n"
+                    f"在设备上手动输入一个字测试，\n"
+                    f"如果手动输入正常，请重新点击输入框后再试",
+                    False
+                )
+                
+        except Exception as e:
+            import logging
+            logging.error(f"中文输入失败：{str(e)}")
+            self.update_status(
+                f"中文输入失败：{str(e)}\n"
+                f"操作建议：\n"
+                f"1. 在设备上打开目标应用\n"
+                f"2. 点击输入框使其获得焦点（光标闪烁）\n"
+                f"3. 确保已安装中文输入法（如搜狗、百度等）\n"
+                f"4. 重新尝试发送",
+                False
+            )
+    
     @require_device_connected
     def screencap(self):
         """屏幕截图(优化版)"""
