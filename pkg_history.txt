@@ -1,7 +1,0 @@
-com.youku.phone
-com.bbk.launcher2
-com.konka.account
-com.konka.apkhall.edu
-com.ypfun.tvmusic
-com.future.jetsentv.jst.mobile
-com.konka.onlinevideo
