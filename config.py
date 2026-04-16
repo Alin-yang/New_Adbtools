@@ -3,6 +3,7 @@
 统一管理应用的所有配置参数，避免硬编码
 """
 import os
+import sys
 from typing import Dict, Any
 
 class Config:
@@ -47,7 +48,7 @@ class Config:
     IP_HISTORY_FILE = "ip_history.txt"
     
     # 包名历史记录配置
-    MAX_PKG_HISTORY = 15  # 最大包名历史记录数
+    MAX_PKG_HISTORY = 10  # 最大包名历史记录数（保留最近10个）
     PKG_HISTORY_FILE = "pkg_history.txt"
     
     # 界面配置
@@ -84,13 +85,17 @@ class Config:
     
     @classmethod
     def get_history_file_path(cls) -> str:
-        """获取IP历史记录文件的完整路径"""
-        return os.path.join(os.path.dirname(os.path.abspath(__file__)), cls.IP_HISTORY_FILE)
+        """获取IP历史记录文件的完整路径（存储到 D:\\adbtool_log 目录）"""
+        # 使用统一的数据存储路径
+        base_dir = cls.get_actual_path("D:\\adbtool_log")
+        return os.path.join(base_dir, cls.IP_HISTORY_FILE)
     
     @classmethod
     def get_pkg_history_file_path(cls) -> str:
-        """获取包名历史记录文件的完整路径"""
-        return os.path.join(os.path.dirname(os.path.abspath(__file__)), cls.PKG_HISTORY_FILE)
+        """获取包名历史记录文件的完整路径（存储到 D:\\adbtool_log 目录）"""
+        # 使用统一的数据存储路径
+        base_dir = cls.get_actual_path("D:\\adbtool_log")
+        return os.path.join(base_dir, cls.PKG_HISTORY_FILE)
     
     @classmethod
     def ensure_directories(cls) -> None:
@@ -99,7 +104,8 @@ class Config:
             cls.get_actual_path(cls.DEFAULT_LOG_PATH),
             cls.get_actual_path(cls.DEFAULT_ANR_PATH),
             cls.get_actual_path(cls.DEFAULT_SCREENSHOT_PATH),
-            cls.get_actual_path(cls.DEFAULT_RECORD_PATH)
+            cls.get_actual_path(cls.DEFAULT_RECORD_PATH),
+            cls.get_actual_path("D:\\adbtool_log")  # 历史记录文件根目录
         ]
         for directory in directories:
             os.makedirs(directory, exist_ok=True)

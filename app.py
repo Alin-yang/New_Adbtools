@@ -269,18 +269,25 @@ class ADBToolApp:
             self.update_status("启动时未检测到已连接的设备", True)
 
     def _save_pkg_to_history(self, pkg_name: str) -> None:
-        """保存包名到历史记录
+        """保存包名到历史记录（保持最近使用的10个包名）
         
         Args:
             pkg_name: 要保存的包名
         """
         if pkg_name and pkg_name.strip() and is_valid_package_name(pkg_name.strip()):
             pkg_name = pkg_name.strip()
-            if pkg_name not in self.pkg_history:
-                self.pkg_history.insert(0, pkg_name)
-                save_pkg_history(self.pkg_history)
-                if hasattr(self, 'pkg_combobox'):
-                    self.pkg_combobox['values'] = self.pkg_history
+            # 如果包名已存在，先移除旧位置
+            if pkg_name in self.pkg_history:
+                self.pkg_history.remove(pkg_name)
+            # 将包名插入到最前面（最新使用）
+            self.pkg_history.insert(0, pkg_name)
+            # 只保留最近10个包名
+            self.pkg_history = self.pkg_history[:Config.MAX_PKG_HISTORY]
+            # 保存到文件
+            save_pkg_history(self.pkg_history)
+            # 更新下拉框
+            if hasattr(self, 'pkg_combobox'):
+                self.pkg_combobox['values'] = self.pkg_history
     
     def _save_apk_to_history(self, apk_path: str) -> None:
         """保存 APK 路径到历史记录（增强版 - 同时更新下拉框）"""

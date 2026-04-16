@@ -91,8 +91,12 @@ class LayoutTabView:
     
     def create_left_tab_navigation(self) -> None:
         """创建左侧 Tab 导航栏（垂直排列）"""
-        # 使用框架垂直排列 Tab 按钮，添加背景色
-        tab_frame = ttk.Frame(self.left_panel, relief='flat', borderwidth=0)
+        # 使用 LabelFrame 包裹 Tab 按钮，添加边框和标题
+        tab_frame = ttk.LabelFrame(
+            self.left_panel, 
+            text="功能菜单",
+            padding=(5, 8)
+        )
         tab_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # 配置自定义样式 - 使用现代化配色方案
