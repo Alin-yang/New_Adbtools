@@ -285,14 +285,34 @@ class ADBToolApp:
             self._history_save_timer = None
     
     def _update_history_ui(self, ip_history, pkg_history):
-        """更新历史记录 UI"""
-        self.ip_history = ip_history
-        self.pkg_history = pkg_history
+        """更新历史记录 UI（优化版 - 避免不必要的刷新）"""
+        # 只在数据真正变化时才更新
+        if self.ip_history != ip_history:
+            self.ip_history = ip_history
+            if hasattr(self, 'ip_combobox'):
+                # 使用 after_idle 延迟更新，避免阻塞 Tab 切换
+                self.root.after_idle(lambda: self._safe_update_combobox('ip', self.ip_history))
         
-        if hasattr(self, 'ip_combobox'):
-            self.ip_combobox['values'] = self.ip_history
-        if hasattr(self, 'pkg_combobox'):
-            self.pkg_combobox['values'] = self.pkg_history
+        if self.pkg_history != pkg_history:
+            self.pkg_history = pkg_history
+            if hasattr(self, 'pkg_combobox'):
+                # 使用 after_idle 延迟更新，避免阻塞 Tab 切换
+                self.root.after_idle(lambda: self._safe_update_combobox('pkg', self.pkg_history))
+    
+    def _safe_update_combobox(self, combo_type: str, values):
+        """安全更新 Combobox（带异常处理）"""
+        try:
+            if combo_type == 'ip' and hasattr(self, 'ip_combobox'):
+                self.ip_combobox['values'] = values
+            elif combo_type == 'pkg' and hasattr(self, 'pkg_combobox'):
+                self.pkg_combobox['values'] = values
+            elif combo_type == 'apk' and hasattr(self, 'apk_combobox'):
+                self.apk_combobox['values'] = values
+            elif combo_type == 'quick_cmd' and hasattr(self, 'quick_cmd_combobox'):
+                self.quick_cmd_combobox['values'] = values
+        except Exception as e:
+            import logging
+            logging.error(f"更新 Combobox 失败: {e}")
     
     def _ensure_directories_async(self):
         """异步创建必要目录"""
@@ -327,7 +347,8 @@ class ADBToolApp:
                             
                 # 更新下拉框
                 if hasattr(self, 'ip_combobox'):
-                    self.ip_combobox['values'] = self.ip_history
+                    # 延迟更新，避免阻塞启动流程
+                    self.root.after_idle(lambda: self._safe_update_combobox('ip', self.ip_history))
                     # 如果输入框为空或只有默认值，设置第一个检测到的设备
                     current_value = self.ip_combobox.get().strip()
                     if not current_value or current_value == "192.168." and self.ip_history:
@@ -369,32 +390,34 @@ class ADBToolApp:
             self.pkg_history = self.pkg_history[:Config.MAX_PKG_HISTORY]
             # 调度保存到文件（防抖）
             self._schedule_history_save()
-            # 更新下拉框
+            # 延迟更新下拉框，避免阻塞主线程
             if hasattr(self, 'pkg_combobox'):
-                self.pkg_combobox['values'] = self.pkg_history
+                self.root.after_idle(lambda: self._safe_update_combobox('pkg', self.pkg_history))
     
     def _save_apk_to_history(self, apk_path: str) -> None:
         """保存 APK 路径到历史记录（增强版 - 同时更新下拉框）"""
         try:
-            # 获取当前历史记录
-            if hasattr(self, 'apk_combobox'):
-                current_values = list(self.apk_combobox['values'])
+            if not hasattr(self, 'apk_combobox'):
+                return
                 
-                # 如果路径已存在，先移除
-                if apk_path in current_values:
-                    current_values.remove(apk_path)
-                
-                # 添加到最前面
-                current_values.insert(0, apk_path)
-                
-                # 限制历史记录数量（最多 20 条）
-                if len(current_values) > 20:
-                    current_values = current_values[:20]
-                
-                # 更新下拉框
-                self.apk_combobox['values'] = tuple(current_values)
-        except:
-            pass  # 失败不提示
+            current_values = list(self.apk_combobox['values'])
+            
+            # 如果路径已存在，先移除
+            if apk_path in current_values:
+                current_values.remove(apk_path)
+            
+            # 添加到最前面
+            current_values.insert(0, apk_path)
+            
+            # 限制历史记录数量（最多 20 条）
+            if len(current_values) > 20:
+                current_values = current_values[:20]
+            
+            # 延迟更新下拉框，避免阻塞主线程
+            self.root.after_idle(lambda vals=tuple(current_values): self._safe_update_combobox('apk', vals))
+        except Exception as e:
+            import logging
+            logging.error(f"保存 APK 历史失败: {e}")
                     
     def update_version_display(self, version: str = "") -> None:
         """更新版本展示框"""
@@ -581,7 +604,7 @@ class ADBToolApp:
             self.update_status(f"获取设备信息失败：{str(e)}", False)
     
     def _sync_device_to_ip_input(self, device: str):
-        """同步设备到 IP 输入框"""
+        """同步设备到 IP 输入框（优化版）"""
         import logging
         logging.info(f"[同步操作] 开始同步设备到 IP 输入框：{device}")
         
@@ -592,7 +615,8 @@ class ADBToolApp:
                 self.ip_history = self.ip_history[:Config.MAX_IP_HISTORY]
                 # 调度保存（防抖）
                 self._schedule_history_save()
-                self.ip_combobox['values'] = self.ip_history
+                # 延迟更新，避免阻塞
+                self.root.after_idle(lambda: self._safe_update_combobox('ip', self.ip_history))
                 logging.info(f"[同步操作] 已更新下拉框历史记录：{self.ip_history}")
             
             # 设置当前选中的设备
@@ -1923,8 +1947,9 @@ class ADBToolApp:
         if cached_info and 'version' in cached_info:
             return cached_info['version']
             
-        # 使用新的精确版本获取方法
-        version = get_accurate_package_version(package_name)
+        # 使用新的精确版本获取方法，传递目标设备
+        target_ip = self.get_ip_address()
+        version = get_accurate_package_version(package_name, target_device=target_ip)
         
         if version:
             # 更新缓存
@@ -3758,27 +3783,29 @@ class ADBToolApp:
             self.root.after(0, lambda: self.update_status(f"❌ 执行出错：{str(e)}", False))
     
     def _save_command_to_history(self, cmd: str):
-        """保存命令到历史记录"""
+        """保存命令到历史记录（优化版）"""
         try:
-            # 获取当前历史记录
-            if hasattr(self, 'quick_cmd_combobox'):
-                current_values = list(self.quick_cmd_combobox['values'])
+            if not hasattr(self, 'quick_cmd_combobox'):
+                return
                 
-                # 如果命令已存在，先移除
-                if cmd in current_values:
-                    current_values.remove(cmd)
-                
-                # 添加到最前面
-                current_values.insert(0, cmd)
-                
-                # 限制历史记录数量（最多 20 条）
-                if len(current_values) > 20:
-                    current_values = current_values[:20]
-                
-                # 更新下拉框
-                self.quick_cmd_combobox['values'] = tuple(current_values)
-        except:
-            pass  # 失败不提示
+            current_values = list(self.quick_cmd_combobox['values'])
+            
+            # 如果命令已存在，先移除
+            if cmd in current_values:
+                current_values.remove(cmd)
+            
+            # 添加到最前面
+            current_values.insert(0, cmd)
+            
+            # 限制历史记录数量（最多 20 条）
+            if len(current_values) > 20:
+                current_values = current_values[:20]
+            
+            # 延迟更新下拉框，避免阻塞主线程
+            self.root.after_idle(lambda vals=tuple(current_values): self._safe_update_combobox('quick_cmd', vals))
+        except Exception as e:
+            import logging
+            logging.error(f"保存命令历史失败: {e}")
     
     def refresh_device_list(self):
         """刷新设备列表（增强版 - 显示设备信息）"""
@@ -3819,7 +3846,8 @@ class ADBToolApp:
                 # 更新 IP 下拉框
                 if hasattr(self, 'ip_combobox'):
                     current_ip = self.ip_combobox.get()
-                    self.ip_combobox['values'] = tuple(devices)
+                    # 延迟更新，避免阻塞
+                    self.root.after_idle(lambda devs=tuple(devices): self._safe_update_combobox('ip', devs))
                     
                     # 尝试恢复当前选择
                     if current_ip:

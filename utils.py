@@ -258,7 +258,8 @@ def build_adb_command_with_device(command: str, target_ip: Optional[str] = None)
         target_ip = target_ip.strip().strip('"').strip("'")
         
         # 标准化IP地址格式（确保包含端口号）
-        if ':' not in target_ip:
+        if ':' not in target_ip and '.' in target_ip:
+            # IP地址但没有端口号，添加默认端口
             target_ip_with_port = f"{target_ip}:5555"
         else:
             target_ip_with_port = target_ip
@@ -271,7 +272,11 @@ def build_adb_command_with_device(command: str, target_ip: Optional[str] = None)
                 matched_device = device
                 break
             # IP前缀匹配（确保是完整IP段匹配，而非部分匹配）
-            elif device.startswith(target_ip + ':'):
+            elif '.' in target_ip and device.startswith(target_ip + ':'):
+                matched_device = device
+                break
+            # USB设备序列号匹配
+            elif ':' not in target_ip and '.' not in target_ip and device == target_ip:
                 matched_device = device
                 break
         
@@ -737,26 +742,47 @@ def safe_decode(data: bytes, encoding: str = 'utf-8') -> str:
             return data.decode('utf-8', errors='ignore')
 
 
-def get_accurate_package_version(package_name: str) -> Optional[str]:
+def get_accurate_package_version(package_name: str, target_device: Optional[str] = None) -> Optional[str]:
     """获取应用的精确版本号（优先获取当前用户安装的最新版本）
     
     Args:
         package_name: 应用包名
+        target_device: 目标设备IP地址（可选）
         
     Returns:
         Optional[str]: 版本号，如果获取失败则返回None
     """
-    # 获取第一个连接的设备
+    # 获取连接的设备列表
     devices_output, devices_success = run_adb_command("adb devices")
     if not devices_success:
         return None
     
     device_id = None
     lines = devices_output.split('\n')[1:]  # 跳过标题行
-    for line in lines:
-        if '\t' in line and 'device' in line:
-            device_id = line.split('\t')[0].strip()
-            break
+    
+    # 如果指定了目标设备，优先匹配目标设备
+    if target_device:
+        target_device = target_device.strip().strip('"').strip("'")
+        # 标准化IP地址格式
+        if ':' not in target_device and '.' in target_device:
+            target_with_port = f"{target_device}:5555"
+        else:
+            target_with_port = target_device
+        
+        # 查找匹配的设备
+        for line in lines:
+            if '\t' in line and 'device' in line:
+                dev = line.split('\t')[0].strip()
+                if dev == target_with_port or dev == target_device or dev.startswith(target_device + ':'):
+                    device_id = dev
+                    break
+    
+    # 如果没有指定目标设备或未找到匹配的设备，使用第一个设备
+    if not device_id:
+        for line in lines:
+            if '\t' in line and 'device' in line:
+                device_id = line.split('\t')[0].strip()
+                break
     
     if not device_id:
         return None
