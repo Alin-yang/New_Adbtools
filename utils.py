@@ -245,14 +245,8 @@ def build_adb_command_with_device(command: str, target_ip: Optional[str] = None)
     if ' -s ' in command:
         return command
     
-    # 获取当前连接的设备列表
-    devices = get_connected_devices()
-    
-    # 只有一台设备时，不需要指定设备
-    if len(devices) <= 1:
-        return command
-    
-    # 多台设备时，需要指定目标设备
+    # 如果指定了目标设备，始终添加 -s 参数（关键修复！）
+    # 这样可以避免 "more than one device/emulator" 错误
     if target_ip:
         # 清理目标IP（去除空格和引号）
         target_ip = target_ip.strip().strip('"').strip("'")
@@ -264,30 +258,25 @@ def build_adb_command_with_device(command: str, target_ip: Optional[str] = None)
         else:
             target_ip_with_port = target_ip
         
-        # 检查目标设备是否在已连接列表中
-        matched_device = None
-        for device in devices:
-            # 精确匹配（包括端口号）
-            if device == target_ip_with_port or device == target_ip:
-                matched_device = device
-                break
-            # IP前缀匹配（确保是完整IP段匹配，而非部分匹配）
-            elif '.' in target_ip and device.startswith(target_ip + ':'):
-                matched_device = device
-                break
-            # USB设备序列号匹配
-            elif ':' not in target_ip and '.' not in target_ip and device == target_ip:
-                matched_device = device
-                break
-        
-        if matched_device:
-            # 在 adb 命令后立即插入 -s 参数
-            if command.startswith('adb '):
-                return command.replace('adb ', f'adb -s {matched_device} ', 1)
-            elif command.startswith('adb'):
-                return f'adb -s {matched_device} {command[3:]}'
+        # 直接添加 -s 参数，不依赖设备数量检测
+        # 这样可以确保即使有隐藏设备也不会报错
+        if command.startswith('adb '):
+            return command.replace('adb ', f'adb -s {target_ip_with_port} ', 1)
+        elif command.startswith('adb'):
+            return f'adb -s {target_ip_with_port} {command[3:]}'
     
-    # 如果没有指定目标IP或目标设备未连接，返回原命令（会操作第一台设备）
+    # 如果没有指定目标IP，才检测设备数量
+    devices = get_connected_devices()
+    
+    # 只有检测到多台设备时才需要指定（使用第一台）
+    if len(devices) > 1:
+        if devices:
+            if command.startswith('adb '):
+                return command.replace('adb ', f'adb -s {devices[0]} ', 1)
+            elif command.startswith('adb'):
+                return f'adb -s {devices[0]} {command[3:]}'
+    
+    # 只有一台或没有设备时，不需要指定设备
     return command
 
 
