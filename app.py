@@ -24,13 +24,29 @@ from cache_manager import cache_manager
 import concurrent.futures
 from device_monitor import DeviceStatusManager
 
-# 配置日志输出
+# 配置日志输出（使用轮转日志处理器）
+from logging.handlers import RotatingFileHandler
+import os
+
+# 获取用户定义的日志路径
+log_dir = Config.get_actual_path(Config.DEFAULT_LOG_PATH)
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'adb_tool_debug.log')
+
+# 创建轮转日志处理器（最大10MB，保留5个备份）
+file_handler = RotatingFileHandler(
+    log_file, 
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=5,
+    encoding='utf-8'
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout),  # 输出到控制台
-        logging.FileHandler('adb_tool_debug.log', encoding='utf-8')  # 输出到文件
+        logging.StreamHandler(sys.stdout),
+        file_handler
     ]
 )
 
@@ -82,7 +98,53 @@ class ADBToolApp:
                 
         self._init_variables()
         self._setup_gui()
+        self._setup_window_close_handler()  # 设置窗口关闭清理逻辑
         # 注意：_delayed_initialization 已经在_setup_gui 中调用，不需要在此重复调用
+
+    def _setup_window_close_handler(self):
+        """设置窗口关闭时的清理逻辑"""
+        def on_closing():
+            import logging
+            logging.info("[窗口关闭] 开始清理资源...")
+            
+            # 停止设备监控
+            if self.device_monitor_manager:
+                try:
+                    self.device_monitor_manager.stop_auto_monitor()
+                    logging.info("[窗口关闭] 设备监控已停止")
+                except Exception as e:
+                    logging.error(f"[窗口关闭] 停止设备监控失败: {e}")
+            
+            # 停止日志捕获
+            if self.logging_active:
+                try:
+                    self.stop_logcat()
+                    logging.info("[窗口关闭] 日志捕获已停止")
+                except Exception as e:
+                    logging.error(f"[窗口关闭] 停止日志捕获失败: {e}")
+            
+            # 停止录屏
+            if self.recording_active:
+                try:
+                    self.stop_recording()
+                    logging.info("[窗口关闭] 录屏已停止")
+                except Exception as e:
+                    logging.error(f"[窗口关闭] 停止录屏失败: {e}")
+            
+            # 关闭线程池（不等待任务完成，快速退出）
+            if hasattr(self, '_executor'):
+                try:
+                    self._executor.shutdown(wait=False)
+                    logging.info("[窗口关闭] 线程池已关闭")
+                except Exception as e:
+                    logging.error(f"[窗口关闭] 关闭线程池失败: {e}")
+            
+            logging.info("[窗口关闭] 清理完成，准备退出")
+            # 销毁窗口
+            self.root.destroy()
+        
+        # 注册窗口关闭事件
+        self.root.protocol("WM_DELETE_WINDOW", on_closing)
 
     def _delayed_initialization(self):
         """延迟初始化非关键组件（极致优化版）"""
@@ -170,6 +232,10 @@ class ADBToolApp:
         self.last_device_status_time = 0
         self.device_status_cooldown = 0.5  # 缩短冷却时间到0.5秒，提高响应性
         self._last_displayed_ip = ""  # 记录上次显示的IP地址
+        
+        # 历史记录防抖保存
+        self._history_save_timer = None
+        self._pending_history_save = False
 
     def _load_all_history_async(self):
         """异步加载所有历史记录（合并 IP 和 pkg 历史）"""
@@ -177,7 +243,7 @@ class ADBToolApp:
         def load_history():
             try:
                 # 加载 IP 历史
-                file_history = load_ip_history()
+                file_history = load_ip_history(self)
                 merged_history = []
                 for device in self.ip_history:
                     if device not in merged_history:
@@ -188,7 +254,7 @@ class ADBToolApp:
                 merged_history = merged_history[:Config.MAX_IP_HISTORY]
                 
                 # 加载 pkg 历史
-                pkg_history = load_pkg_history()
+                pkg_history = load_pkg_history(self)
                 
                 # 在主线程中更新 UI
                 self.root.after(0, lambda: self._update_history_ui(merged_history, pkg_history))
@@ -199,6 +265,24 @@ class ADBToolApp:
         # 启动后台线程
         thread = threading.Thread(target=load_history, daemon=True)
         thread.start()
+    
+    def _schedule_history_save(self):
+        """调度历史记录保存（防抖）"""
+        if self._history_save_timer:
+            self.root.after_cancel(self._history_save_timer)
+        
+        # 2秒后保存
+        self._history_save_timer = self.root.after(2000, self._save_all_history)
+    
+    def _save_all_history(self):
+        """保存所有历史记录"""
+        try:
+            save_ip_history(self.ip_history, self)
+            save_pkg_history(self.pkg_history, self)
+        except Exception as e:
+            logging.error(f"保存历史记录失败: {e}")
+        finally:
+            self._history_save_timer = None
     
     def _update_history_ui(self, ip_history, pkg_history):
         """更新历史记录 UI"""
@@ -213,7 +297,7 @@ class ADBToolApp:
     def _ensure_directories_async(self):
         """异步创建必要目录"""
         try:
-            Config.ensure_directories()
+            Config.ensure_directories(self)
         except Exception as e:
             self.update_status(f"创建目录失败：{str(e)}", False)
     
@@ -238,8 +322,8 @@ class ADBToolApp:
                 # 限制历史记录数量
                 self.ip_history = self.ip_history[:Config.MAX_IP_HISTORY]
                             
-                # 保存到文件
-                save_ip_history(self.ip_history)
+                # 调度保存到文件（防抖）
+                self._schedule_history_save()
                             
                 # 更新下拉框
                 if hasattr(self, 'ip_combobox'):
@@ -283,8 +367,8 @@ class ADBToolApp:
             self.pkg_history.insert(0, pkg_name)
             # 只保留最近10个包名
             self.pkg_history = self.pkg_history[:Config.MAX_PKG_HISTORY]
-            # 保存到文件
-            save_pkg_history(self.pkg_history)
+            # 调度保存到文件（防抖）
+            self._schedule_history_save()
             # 更新下拉框
             if hasattr(self, 'pkg_combobox'):
                 self.pkg_combobox['values'] = self.pkg_history
@@ -506,8 +590,8 @@ class ADBToolApp:
             if device not in self.ip_history:
                 self.ip_history.insert(0, device)
                 self.ip_history = self.ip_history[:Config.MAX_IP_HISTORY]
-                from utils import save_ip_history
-                save_ip_history(self.ip_history)
+                # 调度保存（防抖）
+                self._schedule_history_save()
                 self.ip_combobox['values'] = self.ip_history
                 logging.info(f"[同步操作] 已更新下拉框历史记录：{self.ip_history}")
             
@@ -1402,7 +1486,8 @@ class ADBToolApp:
                 # 保存新的 IP 到历史记录
                 if ip_address not in self.ip_history:
                     self.ip_history.insert(0, ip_address)
-                    save_ip_history(self.ip_history)
+                    # 调度保存（防抖）
+                    self._schedule_history_save()
                     # ✅ 直接更新，不使用 after
                     if hasattr(self, 'ip_combobox'):
                         logging.info("[后台线程] 更新 IP 下拉框")

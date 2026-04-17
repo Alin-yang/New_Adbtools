@@ -49,6 +49,7 @@ adb_tool_debug.log
 ip_history.txt
 pkg_history.txt
 apk_history.txt
+history/
 
 # Testing
 .pytest_cache/

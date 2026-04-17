@@ -84,28 +84,47 @@ class Config:
         return config_dict
     
     @classmethod
-    def get_history_file_path(cls) -> str:
-        """获取IP历史记录文件的完整路径（存储到 D:\\adbtool_log 目录）"""
-        # 使用统一的数据存储路径
-        base_dir = cls.get_actual_path("D:\\adbtool_log")
-        return os.path.join(base_dir, cls.IP_HISTORY_FILE)
+    def get_history_file_path(cls, app_instance=None) -> str:
+        """获取IP历史记录文件的完整路径（存储到日志路径下的history目录）
+        
+        Args:
+            app_instance: 应用实例，用于获取用户定义的日志路径
+        """
+        from utils import get_user_defined_log_path
+        log_path = get_user_defined_log_path(app_instance)
+        history_dir = os.path.join(log_path, "history")
+        return os.path.join(history_dir, cls.IP_HISTORY_FILE)
     
     @classmethod
-    def get_pkg_history_file_path(cls) -> str:
-        """获取包名历史记录文件的完整路径（存储到 D:\\adbtool_log 目录）"""
-        # 使用统一的数据存储路径
-        base_dir = cls.get_actual_path("D:\\adbtool_log")
-        return os.path.join(base_dir, cls.PKG_HISTORY_FILE)
+    def get_pkg_history_file_path(cls, app_instance=None) -> str:
+        """获取包名历史记录文件的完整路径（存储到日志路径下的history目录）
+        
+        Args:
+            app_instance: 应用实例，用于获取用户定义的日志路径
+        """
+        from utils import get_user_defined_log_path
+        log_path = get_user_defined_log_path(app_instance)
+        history_dir = os.path.join(log_path, "history")
+        return os.path.join(history_dir, cls.PKG_HISTORY_FILE)
     
     @classmethod
-    def ensure_directories(cls) -> None:
-        """确保所有必要的目录都存在"""
+    def ensure_directories(cls, app_instance=None) -> None:
+        """确保所有必要的目录都存在
+        
+        Args:
+            app_instance: 应用实例，用于获取用户定义的日志路径
+        """
+        from utils import get_user_defined_log_path
+        log_path = get_user_defined_log_path(app_instance)
+        history_dir = os.path.join(log_path, "history")  # 历史数据专用目录
+        
         directories = [
             cls.get_actual_path(cls.DEFAULT_LOG_PATH),
             cls.get_actual_path(cls.DEFAULT_ANR_PATH),
             cls.get_actual_path(cls.DEFAULT_SCREENSHOT_PATH),
             cls.get_actual_path(cls.DEFAULT_RECORD_PATH),
-            cls.get_actual_path("D:\\adbtool_log")  # 历史记录文件根目录
+            log_path,  # 用户定义的日志路径
+            history_dir  # 历史数据目录（存放IP和包名历史文件）
         ]
         for directory in directories:
             os.makedirs(directory, exist_ok=True)

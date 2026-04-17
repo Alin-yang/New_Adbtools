@@ -6,8 +6,37 @@ import time
 from typing import Tuple, Optional, List
 from config import Config
 
-def get_connected_devices() -> List[str]:
-    """获取当前连接的所有设备列表（标准版本，带验证）
+def get_connected_devices(mode: str = "auto") -> List[str]:
+    """
+    获取当前连接的所有设备列表（智能版本）
+    
+    Args:
+        mode: 检测模式
+            - "auto": 自动选择（单设备用simple，多设备用parallel）
+            - "simple": 快速检测，不验证
+            - "parallel": 并行验证
+            - "full": 完整验证（带深度检查）
+    
+    Returns:
+        List[str]: 已连接设备的序列号/IP 地址列表
+    """
+    if mode == "auto":
+        # 先快速获取设备列表
+        devices = get_connected_devices_simple()
+        # 如果有多台设备，使用并行验证
+        if len(devices) > 1:
+            return get_connected_devices_parallel()
+        return devices
+    elif mode == "simple":
+        return get_connected_devices_simple()
+    elif mode == "parallel":
+        return get_connected_devices_parallel()
+    else:  # mode == "full"
+        return _get_connected_devices_full()
+
+
+def _get_connected_devices_full() -> List[str]:
+    """获取当前连接的所有设备列表（完整版本，带深度验证）
     
     Returns:
         List[str]: 已连接设备的序列号/IP 地址列表
@@ -587,13 +616,16 @@ def get_next_filename(pattern: str, ext: str) -> str:
         # 如果出错，使用时间戳作为后缀
         return f"{pattern}_{timestamp_time()}{ext}"
 
-def load_ip_history() -> List[str]:
+def load_ip_history(app_instance=None) -> List[str]:
     """加载IP历史记录
+    
+    Args:
+        app_instance: 应用实例，用于获取用户定义的日志路径
     
     Returns:
         List[str]: IP地址历史记录列表
     """
-    history_file = Config.get_history_file_path()
+    history_file = Config.get_history_file_path(app_instance)
     try:
         if os.path.exists(history_file):
             with open(history_file, 'r', encoding='utf-8') as f:
@@ -608,13 +640,14 @@ def load_ip_history() -> List[str]:
         print(f"加载IP历史记录失败: {e}")
     return []
 
-def save_ip_history(ip_list: List[str]) -> None:
+def save_ip_history(ip_list: List[str], app_instance=None) -> None:
     """保存IP历史记录
     
     Args:
         ip_list: IP地址列表
+        app_instance: 应用实例，用于获取用户定义的日志路径
     """
-    history_file = Config.get_history_file_path()
+    history_file = Config.get_history_file_path(app_instance)
     try:
         # 确保列表中没有重复项，且最新的IP在最前面
         unique_ips = []
@@ -797,13 +830,16 @@ def is_valid_package_name(pkg_name: str) -> bool:
     return bool(re.match(pkg_pattern, pkg_name.strip()))
 
 
-def load_pkg_history() -> List[str]:
+def load_pkg_history(app_instance=None) -> List[str]:
     """加载包名历史记录
+    
+    Args:
+        app_instance: 应用实例，用于获取用户定义的日志路径
     
     Returns:
         List[str]: 包名历史记录列表
     """
-    history_file = Config.get_pkg_history_file_path()
+    history_file = Config.get_pkg_history_file_path(app_instance)
     try:
         if os.path.exists(history_file):
             with open(history_file, 'r', encoding='utf-8') as f:
@@ -819,13 +855,14 @@ def load_pkg_history() -> List[str]:
     return []
 
 
-def save_pkg_history(pkg_list: List[str]) -> None:
+def save_pkg_history(pkg_list: List[str], app_instance=None) -> None:
     """保存包名历史记录
     
     Args:
         pkg_list: 包名列表
+        app_instance: 应用实例，用于获取用户定义的日志路径
     """
-    history_file = Config.get_pkg_history_file_path()
+    history_file = Config.get_pkg_history_file_path(app_instance)
     try:
         # 确保列表中没有重复项，且最新的包名在最前面
         unique_packages = []
