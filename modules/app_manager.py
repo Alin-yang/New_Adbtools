@@ -273,8 +273,9 @@ class AppManager:
         if cached_info and 'version' in cached_info:
             return cached_info['version']
             
-        # 使用新的精确版本获取方法
-        version = get_accurate_package_version(package_name)
+        # 使用新的精确版本获取方法，传递目标设备
+        target_ip = self.app.get_ip_address()
+        version = get_accurate_package_version(package_name, target_device=target_ip)
         
         if version:
             # 更新缓存

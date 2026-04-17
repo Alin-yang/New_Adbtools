@@ -86,7 +86,6 @@ class SystemManager:
             self.app.update_status("无法获取设备序列号，请检查设备连接和权限。", False)
             return None
     
-    @require_device_connected
     def screencap(self) -> bool:
         """
         屏幕截图(优化版 - 异步执行避免阻塞)

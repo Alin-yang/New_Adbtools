@@ -49,19 +49,25 @@ class DeviceManager:
         
         output, success = run_adb_command(f"adb connect {ip_address}")
         if "connected" in output.lower():
-            # 保存新的IP到历史记录
-            if ip_address not in self.app.ip_history:
-                self.app.ip_history.insert(0, ip_address)
+            # 保存新的IP到历史记录（统一格式不带端口）
+            normalized_ip = ip_address
+            if ':' in ip_address:
+                normalized_ip = ip_address.split(':')[0]  # 只保留IP部分
+            
+            if normalized_ip not in self.app.ip_history:
+                self.app.ip_history.insert(0, normalized_ip)
                 save_ip_history(self.app.ip_history)
                 if hasattr(self.app, 'ip_combobox'):
                     self.app.ip_combobox['values'] = self.app.ip_history
             
-            # 更新设备连接状态缓存
-            cache_manager.set_device_status(ip_address, True)
+            # 更新设备连接状态缓存（使用标准化IP）
+            cache_manager.set_device_status(normalized_ip, True)
             self.app.update_status(output, True)
             return True
         else:
-            cache_manager.set_device_status(ip_address, False)
+            # 更新缓存
+            normalized_ip = ip_address.split(':')[0] if ':' in ip_address else ip_address
+            cache_manager.set_device_status(normalized_ip, False)
             self.app.update_status(output, False)
             return False
     
@@ -98,20 +104,30 @@ class DeviceManager:
             
         if not ip_address:
             return False
+        
+        # 标准化IP格式（去除端口号）
+        normalized_ip = ip_address.split(':')[0] if ':' in ip_address else ip_address
             
         # 检查缓存
-        cached_status = cache_manager.get_device_status(ip_address)
+        cached_status = cache_manager.get_device_status(normalized_ip)
         if cached_status is not None:
             return cached_status
             
         output, success = run_adb_command("adb devices")
         if success:
             devices = [line.split("\t")[0] for line in output.splitlines()[1:] if "device" in line]
-            ip_with_port = f"{ip_address}:5555" if ip_address else None
-            is_connected = ip_address in devices or ip_with_port in devices
+            # 支持多种匹配方式：精确匹配、IP前缀匹配、带端口匹配
+            is_connected = False
+            for device in devices:
+                if (device == ip_address or  # 精确匹配
+                    device == f"{normalized_ip}:5555" or  # 默认端口匹配
+                    device == normalized_ip or  # 无端口匹配
+                    device.startswith(f"{normalized_ip}:")):  # IP前缀匹配
+                    is_connected = True
+                    break
             
-            # 更新缓存
-            cache_manager.set_device_status(ip_address, is_connected)
+            # 更新缓存（使用标准化IP）
+            cache_manager.set_device_status(normalized_ip, is_connected)
             return is_connected
         return False
     
