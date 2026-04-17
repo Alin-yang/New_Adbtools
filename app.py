@@ -334,10 +334,15 @@ class ADBToolApp:
                     if device not in detected_devices:
                         detected_devices.append(device)
                             
-                # 将所有设备添加到历史记录中（保持原有顺序，新设备放在前面）
+                # 将所有设备添加到历史记录中（保持原有顺序，新设备放在前面，统一格式不带端口）
                 for device in detected_devices:
-                    if device not in self.ip_history:
-                        self.ip_history.insert(0, device)
+                    # 统一格式：去除端口号（如果有），只保留IP地址
+                    normalized_device = device
+                    if ':' in device:
+                        normalized_device = device.split(':')[0]  # 只保留IP部分
+                    
+                    if normalized_device not in self.ip_history:
+                        self.ip_history.insert(0, normalized_device)
                                 
                 # 限制历史记录数量
                 self.ip_history = self.ip_history[:Config.MAX_IP_HISTORY]
@@ -604,14 +609,19 @@ class ADBToolApp:
             self.update_status(f"获取设备信息失败：{str(e)}", False)
     
     def _sync_device_to_ip_input(self, device: str):
-        """同步设备到 IP 输入框（优化版）"""
+        """同步设备到 IP 输入框（优化版 - 统一IP格式，不重复记录端口）"""
         import logging
         logging.info(f"[同步操作] 开始同步设备到 IP 输入框：{device}")
         
+        # 统一格式：去除端口号（如果有），只保留IP地址
+        normalized_device = device
+        if ':' in device:
+            normalized_device = device.split(':')[0]  # 只保留IP部分
+        
         if hasattr(self, 'ip_combobox'):
-            # 将设备添加到下拉框历史记录
-            if device not in self.ip_history:
-                self.ip_history.insert(0, device)
+            # 将设备添加到下拉框历史记录（使用统一格式）
+            if normalized_device not in self.ip_history:
+                self.ip_history.insert(0, normalized_device)
                 self.ip_history = self.ip_history[:Config.MAX_IP_HISTORY]
                 # 调度保存（防抖）
                 self._schedule_history_save()
@@ -619,10 +629,10 @@ class ADBToolApp:
                 self.root.after_idle(lambda: self._safe_update_combobox('ip', self.ip_history))
                 logging.info(f"[同步操作] 已更新下拉框历史记录：{self.ip_history}")
             
-            # 设置当前选中的设备
+            # 设置当前选中的设备（使用统一格式）
             self.ip_combobox.delete(0, tk.END)
-            self.ip_combobox.insert(0, device)
-            logging.info(f"[同步操作] 已设置 IP 输入框值为：{device}")
+            self.ip_combobox.insert(0, normalized_device)
+            logging.info(f"[同步操作] 已设置 IP 输入框值为：{normalized_device}")
             
             # 触发 IP 变更事件
             self.on_ip_changed()
@@ -1507,9 +1517,14 @@ class ADBToolApp:
             # 在 UI 线程中更新结果
             if "connected" in output.lower():
                 logging.info("[后台线程] 连接成功，准备更新 UI")
-                # 保存新的 IP 到历史记录
-                if ip_address not in self.ip_history:
-                    self.ip_history.insert(0, ip_address)
+                # 保存新的 IP 到历史记录（统一格式不带端口）
+                # 统一格式：去除端口号（如果有），只保留IP地址
+                normalized_ip = ip_address
+                if ':' in ip_address:
+                    normalized_ip = ip_address.split(':')[0]  # 只保留IP部分
+                
+                if normalized_ip not in self.ip_history:
+                    self.ip_history.insert(0, normalized_ip)
                     # 调度保存（防抖）
                     self._schedule_history_save()
                     # ✅ 直接更新，不使用 after
