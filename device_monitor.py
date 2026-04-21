@@ -151,10 +151,16 @@ class DeviceStatusManager:
         # 更新 IP 历史记录
         current_history = list(self.app.ip_history)
         
-        # 添加新设备到历史记录
+        # 添加新设备到历史记录（标准化格式：IP去端口，USB设备直接保存）
         for device in devices:
-            if device not in current_history:
-                current_history.insert(0, device)
+            # 标准化设备标识：如果是IP地址带端口，去除端口号
+            normalized_device = device
+            if ':' in device and '.' in device:  # IP地址格式（包含冒号和点号）
+                normalized_device = device.split(':')[0]  # 只保留IP部分
+            
+            # 如果设备不在历史记录中，添加到最前面
+            if normalized_device not in current_history:
+                current_history.insert(0, normalized_device)
         
         # 限制历史记录数量
         current_history = current_history[:15]  # 最多保留 15 条
@@ -162,6 +168,10 @@ class DeviceStatusManager:
         # 更新 UI
         self.app.ip_history = current_history
         self.app.ip_combobox['values'] = current_history
+        
+        # 调度保存到文件（防抖）
+        if hasattr(self.app, '_schedule_history_save'):
+            self.app._schedule_history_save()
         
         # 通知其他组件
         for callback in self._device_change_callbacks:

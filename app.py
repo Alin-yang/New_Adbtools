@@ -336,9 +336,9 @@ class ADBToolApp:
                             
                 # 将所有设备添加到历史记录中（保持原有顺序，新设备放在前面，统一格式不带端口）
                 for device in detected_devices:
-                    # 统一格式：去除端口号（如果有），只保留IP地址
+                    # 统一格式：如果是IP地址则去除端口号，USB设备序列号直接保存
                     normalized_device = device
-                    if ':' in device:
+                    if ':' in device and '.' in device:  # IP地址格式（包含冒号和点号）
                         normalized_device = device.split(':')[0]  # 只保留IP部分
                     
                     if normalized_device not in self.ip_history:
@@ -613,9 +613,9 @@ class ADBToolApp:
         import logging
         logging.info(f"[同步操作] 开始同步设备到 IP 输入框：{device}")
         
-        # 统一格式：去除端口号（如果有），只保留IP地址
+        # 统一格式：如果是IP地址则去除端口号，USB设备序列号直接保存
         normalized_device = device
-        if ':' in device:
+        if ':' in device and '.' in device:  # IP地址格式（包含冒号和点号）
             normalized_device = device.split(':')[0]  # 只保留IP部分
         
         if hasattr(self, 'ip_combobox'):
@@ -1518,9 +1518,9 @@ class ADBToolApp:
             if "connected" in output.lower():
                 logging.info("[后台线程] 连接成功，准备更新 UI")
                 # 保存新的 IP 到历史记录（统一格式不带端口）
-                # 统一格式：去除端口号（如果有），只保留IP地址
+                # 统一格式：如果是IP地址则去除端口号，USB设备序列号直接保存
                 normalized_ip = ip_address
-                if ':' in ip_address:
+                if ':' in ip_address and '.' in ip_address:  # IP地址格式（包含冒号和点号）
                     normalized_ip = ip_address.split(':')[0]  # 只保留IP部分
                 
                 if normalized_ip not in self.ip_history:

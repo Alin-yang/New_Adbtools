@@ -51,7 +51,7 @@ class DeviceManager:
         if "connected" in output.lower():
             # 保存新的IP到历史记录（统一格式不带端口）
             normalized_ip = ip_address
-            if ':' in ip_address:
+            if ':' in ip_address and '.' in ip_address:  # IP地址格式（包含冒号和点号）
                 normalized_ip = ip_address.split(':')[0]  # 只保留IP部分
             
             if normalized_ip not in self.app.ip_history:
@@ -66,7 +66,7 @@ class DeviceManager:
             return True
         else:
             # 更新缓存
-            normalized_ip = ip_address.split(':')[0] if ':' in ip_address else ip_address
+            normalized_ip = ip_address.split(':')[0] if (':' in ip_address and '.' in ip_address) else ip_address
             cache_manager.set_device_status(normalized_ip, False)
             self.app.update_status(output, False)
             return False
@@ -105,8 +105,8 @@ class DeviceManager:
         if not ip_address:
             return False
         
-        # 标准化IP格式（去除端口号）
-        normalized_ip = ip_address.split(':')[0] if ':' in ip_address else ip_address
+        # 标准化IP格式（如果是IP地址则去除端口号，USB设备序列号直接保存）
+        normalized_ip = ip_address.split(':')[0] if (':' in ip_address and '.' in ip_address) else ip_address
             
         # 检查缓存
         cached_status = cache_manager.get_device_status(normalized_ip)

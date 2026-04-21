@@ -659,18 +659,28 @@ def save_ip_history(ip_list: List[str], app_instance=None) -> None:
 
 
 def is_valid_ip(ip: str) -> bool:
-    """验证IP地址格式是否正确
+    """验证IP地址或设备标识格式是否正确（支持IP地址和USB设备序列号）
     
     Args:
-        ip: IP地址字符串
+        ip: IP地址字符串或设备序列号
         
     Returns:
-        bool: 是否为有效的IP地址
+        bool: 是否为有效的IP地址或设备序列号
     """
     import re
     # 支持IPv4和带端口的格式
     ipv4_pattern = r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(?::\d+)?$'
-    return bool(re.match(ipv4_pattern, ip.strip()))
+    # USB设备序列号通常由字母、数字、下划线、连字符组成，长度在5-50之间
+    usb_serial_pattern = r'^[A-Za-z0-9_-]{5,50}$'
+    
+    ip_stripped = ip.strip()
+    # 检查是否为有效的IPv4地址（可选端口）
+    if re.match(ipv4_pattern, ip_stripped):
+        return True
+    # 检查是否为有效的USB设备序列号
+    if re.match(usb_serial_pattern, ip_stripped):
+        return True
+    return False
 
 
 def calculate_optimal_workers(task_count: int) -> int:
