@@ -352,15 +352,50 @@ class ADBToolApp:
                             
                 # 更新下拉框
                 if hasattr(self, 'ip_combobox'):
-                    # 延迟更新，避免阻塞启动流程
-                    self.root.after_idle(lambda: self._safe_update_combobox('ip', self.ip_history))
-                    # 如果输入框为空或只有默认值，设置第一个检测到的设备
-                    current_value = self.ip_combobox.get().strip()
-                    if not current_value or current_value == "192.168." and self.ip_history:
-                        self.ip_combobox.delete(0, tk.END)
-                        self.ip_combobox.insert(0, self.ip_history[0])
-                        # 触发 IP 变更事件以更新连接状态
-                        self.on_ip_changed()
+                    import logging
+                    logging.info(f"[启动检测] ip_combobox 存在，准备调度 update_ip_ui")
+                    self.update_status("[DEBUG] ip_combobox 存在，准备更新IP", True)
+                    # 【新增】使用 after 而不是 after_idle，确保在主线程中正确执行
+                    first_device = self.ip_history[0] if self.ip_history else None
+                    logging.info(f"[启动检测] first_device={first_device}")
+                    
+                    def update_ip_ui():
+                        """在主线程中更新 IP UI"""
+                        try:
+                            import logging
+                            logging.info(f"[启动检测] 开始更新 IP UI, first_device={first_device}")
+                            # 延迟更新，避免阻塞启动流程
+                            self._safe_update_combobox('ip', self.ip_history)
+                            # 如果输入框为空、只有默认值或没有检测到设备时手动输入的IP，设置第一个检测到的设备
+                            current_value = self.ip_combobox.get().strip()
+                            logging.info(f"[启动检测] 当前 IP 输入框值: '{current_value}', 长度: {len(current_value)}")
+                            
+                            should_update = False
+                            if not current_value:
+                                should_update = True
+                                logging.info("[启动检测] 条件匹配: 输入框为空")
+                            elif current_value == "192.168.":
+                                should_update = True
+                                logging.info("[启动检测] 条件匹配: 默认值 '192.168.'")
+                            elif current_value.startswith("192.168") and len(current_value) < 8:
+                                should_update = True
+                                logging.info(f"[启动检测] 条件匹配: 不完整的IP '{current_value}'")
+                            
+                            if first_device and should_update:
+                                logging.info(f"[启动检测] 正在更新 IP 输入框为: {first_device}")
+                                self.ip_combobox.delete(0, tk.END)
+                                self.ip_combobox.insert(0, first_device)
+                                logging.info(f"[启动检测] IP 输入框已更新，当前值: {self.ip_combobox.get()}")
+                                # 延迟调用 update_connection_status 确保 UI 已更新
+                                self.root.after(100, lambda: self.update_connection_status(first_device))
+                                logging.info(f"[启动检测] 已调度 update_connection_status")
+                            else:
+                                logging.info(f"[启动检测] 跳过更新 (first_device={first_device}, should_update={should_update})")
+                        except Exception as e:
+                            import logging
+                            logging.error(f"[启动检测] 更新 IP UI 失败: {e}", exc_info=True)
+                    
+                    self.root.after(50, update_ip_ui)
                             
                 # 显示检测结果（显示所有设备）
                 self.update_status(f"启动时检测到 {len(detected_devices)} 台设备：{', '.join(detected_devices)}", True)
@@ -372,9 +407,99 @@ class ADBToolApp:
             self.update_status(f"启动时设备检测失败: {str(e)}", False)
     
     def _handle_detected_devices(self, devices):
-        """处理检测到的设备"""
+        """处理检测到的设备（增强版 - 同步 IP 输入框）"""
+        import logging
+        
         if devices:
             self.update_status(f"启动时检测到 {len(devices)} 台已连接设备", True)
+            
+            # 【新增】将设备添加到历史记录并更新 IP 输入框
+            try:
+                detected_devices = []
+                for device in devices:
+                    if device not in detected_devices:
+                        detected_devices.append(device)
+                
+                # 将所有设备添加到历史记录中
+                for device in detected_devices:
+                    normalized_device = device
+                    if ':' in device and '.' in device:  # IP地址格式
+                        normalized_device = device.split(':')[0]
+                    
+                    if normalized_device not in self.ip_history:
+                        self.ip_history.insert(0, normalized_device)
+                
+                # 限制历史记录数量
+                self.ip_history = self.ip_history[:Config.MAX_IP_HISTORY]
+                
+                # 调度保存到文件
+                self._schedule_history_save()
+                
+                # 更新下拉框和 IP 输入框
+                if hasattr(self, 'ip_combobox'):
+                    logging.info(f"[启动检测] ip_combobox 存在，准备更新IP")
+                    
+                    # 【关键修复】优先选择 USB 设备，其次才是网络 IP
+                    first_device = None
+                    usb_device = None
+                    network_device = None
+                    
+                    for device in self.ip_history:
+                        # 判断是否为 USB 设备（不包含点号和冒号）
+                        if '.' not in device and ':' not in device:
+                            usb_device = device
+                            break
+                        # 记录第一个网络 IP
+                        elif network_device is None and ('.' in device or ':' in device):
+                            network_device = device
+                    
+                    # 优先使用 USB 设备，如果没有则使用网络 IP
+                    first_device = usb_device if usb_device else network_device
+                    
+                    logging.info(f"[启动检测] USB设备={usb_device}, 网络IP={network_device}, 最终选择={first_device}")
+                    
+                    if first_device:
+                        def update_ip_ui():
+                            """在主线程中更新 IP UI"""
+                            try:
+                                logging.info(f"[启动检测] 开始更新 IP UI, first_device={first_device}")
+                                # 更新下拉框
+                                self._safe_update_combobox('ip', self.ip_history)
+                                # 如果输入框为空或只有默认值，设置第一个检测到的设备
+                                current_value = self.ip_combobox.get().strip()
+                                logging.info(f"[启动检测] 当前 IP 输入框值: '{current_value}', 长度: {len(current_value)}")
+                                
+                                should_update = False
+                                if not current_value:
+                                    should_update = True
+                                    logging.info("[启动检测] 条件匹配: 输入框为空")
+                                elif current_value == "192.168.":
+                                    should_update = True
+                                    logging.info("[启动检测] 条件匹配: 默认值 '192.168.'")
+                                elif current_value.startswith("192.168") and len(current_value) < 8:
+                                    should_update = True
+                                    logging.info(f"[启动检测] 条件匹配: 不完整的IP '{current_value}'")
+                                
+                                if first_device and should_update:
+                                    logging.info(f"[启动检测] 正在更新 IP 输入框为: {first_device}")
+                                    self.ip_combobox.delete(0, tk.END)
+                                    self.ip_combobox.insert(0, first_device)
+                                    logging.info(f"[启动检测] IP 输入框已更新，当前值: {self.ip_combobox.get()}")
+                                    # 延迟调用 update_connection_status 确保 UI 已更新
+                                    self.root.after(100, lambda: self.update_connection_status(first_device))
+                                    logging.info(f"[启动检测] 已调度 update_connection_status")
+                                else:
+                                    logging.info(f"[启动检测] 跳过更新 (first_device={first_device}, should_update={should_update})")
+                            except Exception as e:
+                                logging.error(f"[启动检测] 更新 IP UI 失败: {e}", exc_info=True)
+                        
+                        self.root.after(50, update_ip_ui)
+                    else:
+                        logging.warning("[启动检测] 没有找到合适的设备")
+                else:
+                    logging.warning("[启动检测] ip_combobox 不存在，无法更新IP")
+            except Exception as e:
+                logging.error(f"[启动检测] 处理设备失败: {e}", exc_info=True)
         else:
             self.update_status("启动时未检测到已连接的设备", True)
 
@@ -490,6 +615,11 @@ class ADBToolApp:
             
         # 获取所有已连接设备
         devices = get_connected_devices()
+        
+        # 【新增】更新设备数量标签
+        if hasattr(self, 'device_count_label'):
+            device_count = len(devices)
+            self.device_count_label.config(text=f"已连接: {device_count} 台")
             
         if not devices:
             self.connection_status_label.config(text="未连接", foreground="gray")
