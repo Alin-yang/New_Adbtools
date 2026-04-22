@@ -43,7 +43,7 @@ class LayoutModern:
         self.tab_buttons = {}
         
     def setup_gui(self):
-        """构建完整的现代化布局"""
+        """构建完整的现代化布局（左右分栏）"""
         # 设置主容器
         self.setup_main_container()
         
@@ -53,17 +53,17 @@ class LayoutModern:
         # 创建Tab导航
         self.create_tab_navigation()
         
-        # 创建内容区域
+        # 创建内容区域（左右分栏）
         self.create_content_area()
         
-        # 创建各个Tab页
+        # 创建各个Tab页（只包含功能按钮）
         self.create_device_tab()
         self.create_app_tab()
         self.create_log_screen_tab()
         self.create_advanced_tab()
         
-        # 创建日志输出区域
-        self.create_log_output()
+        # 创建右侧输出区域
+        self.create_right_output_area()
         
         # 设置快捷键
         self.setup_keyboard_shortcuts()
@@ -81,12 +81,11 @@ class LayoutModern:
         self.app.root.geometry("1050x620")
         self.app.root.minsize(900, 520)
         
-        # 使用grid布局，让输出栏可以弹性扩展
+        # 使用grid布局，左右分栏
         self.main_frame.grid_rowconfigure(0, weight=0)  # 顶部栏
         self.main_frame.grid_rowconfigure(1, weight=0)  # Tab导航
         self.main_frame.grid_rowconfigure(2, weight=0)  # 底部边框
-        self.main_frame.grid_rowconfigure(3, weight=0)  # 内容区域
-        self.main_frame.grid_rowconfigure(4, weight=1)  # 输出栏（弹性扩展）
+        self.main_frame.grid_rowconfigure(3, weight=1)  # 内容区域（左右分栏）
         self.main_frame.grid_columnconfigure(0, weight=1)
         
         # 配置样式
@@ -332,72 +331,97 @@ class LayoutModern:
         self.current_tab = selected_tab
     
     def create_content_area(self) -> None:
-        """创建内容区域"""
-        self.content_area = ttk.Frame(self.main_frame, style='Modern.TFrame')
-        self.content_area.grid(row=3, column=0, sticky=tk.NSEW, padx=10, pady=8)
+        """创建内容区域（左右分栏）"""
+        # 创建主内容容器
+        content_frame = ttk.Frame(self.main_frame, style='Modern.TFrame')
+        content_frame.grid(row=3, column=0, sticky=tk.NSEW, padx=10, pady=8)
         
-        # 配置grid，让内容区域扩展
-        self.content_area.grid_rowconfigure(0, weight=1)
-        self.content_area.grid_columnconfigure(0, weight=1)
+        # 配置主容器的grid
+        content_frame.grid_rowconfigure(0, weight=1)
+        content_frame.grid_columnconfigure(0, weight=0, minsize=350)  # 左侧功能按钮区（固定宽度）
+        content_frame.grid_columnconfigure(1, weight=1)  # 右侧输出框区（弹性扩展）
+        
+        # === 左侧：功能按钮区域 ===
+        left_panel = ttk.Frame(content_frame, style='Card.TFrame')
+        left_panel.grid(row=0, column=0, sticky=tk.NSEW, padx=(0, 5))
+        
+        # 配置左侧面板
+        left_panel.grid_rowconfigure(0, weight=1)
+        left_panel.grid_columnconfigure(0, weight=1)
+        
+        self.content_area = left_panel  # Tab内容放在左侧
+        
+        # === 右侧：输出框区域 ===
+        right_panel = ttk.Frame(content_frame, style='Card.TFrame')
+        right_panel.grid(row=0, column=1, sticky=tk.NSEW, padx=(5, 0))
+        
+        # 配置右侧面板
+        right_panel.grid_rowconfigure(0, weight=0)  # 标题行
+        right_panel.grid_rowconfigure(1, weight=1)  # 输出框（弹性扩展）
+        right_panel.grid_rowconfigure(2, weight=0)  # 进度条
+        right_panel.grid_columnconfigure(0, weight=1)
+        
+        self.output_area = right_panel
     
     def create_device_tab(self) -> None:
-        """创建设备管理Tab"""
+        """创建设备管理Tab（左侧功能按钮）"""
         tab = ttk.Frame(self.content_area, style='Card.TFrame')
         self.tabs['device'] = tab
         
-        # 使用网格布局组织卡片
-        tab.columnconfigure(0, weight=1)
-        tab.columnconfigure(1, weight=1)
+        # 让tab填满整个区域
         tab.grid(row=0, column=0, sticky=tk.NSEW)
+        tab.grid_columnconfigure(0, weight=1)
+        tab.grid_rowconfigure(0, weight=1)
         
-        # === 第一行 ===
-        self._create_card(
-            tab,
-            "ADB 服务管理",
-            [
-                ("🔌连接ADB", "connect_adb", "primary"),
-                ("❌断开所有", "disconnect_adb", "danger"),
-                ("🔄重启服务", "restart_adb_server", "secondary"),
-            ],
-            row=0, col=0
-        )
+        # 创建主容器，分为上下两部分
+        main_container = ttk.Frame(tab, style='Card.TFrame')
+        main_container.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        main_container.grid_columnconfigure(0, weight=1)
+        main_container.grid_rowconfigure(0, weight=0)  # 按钮区域
+        main_container.grid_rowconfigure(1, weight=1)  # 弹性空白区域
         
-        self._create_card(
-            tab,
-            "设备信息",
-            [
-                ("📱查看设备", "show_device_info", "primary"),
-                ("📋详细信息", "get_device_info_fast", "secondary"),
-                ("🔍获取串号", "get_serial_number", "secondary"),
-            ],
-            row=0, col=1
-        )
+        # 按钮容器（顶部）
+        button_frame = ttk.Frame(main_container, style='Card.TFrame')
+        button_frame.grid(row=0, column=0, sticky=tk.NW)
+        button_frame.columnconfigure(0, weight=1)
         
-        # === 第二行 ===
-        self._create_card(
-            tab,
-            "设备控制",
-            [
-                ("🔁重启设备", "reboot", "primary"),
-                ("🔑Root权限", "root_device", "secondary"),
-                ("📀重新挂载", "remount", "secondary"),
-            ],
-            row=1, col=0
-        )
+        # 使用垂直排列的功能卡片
+        row = 0
         
-        self._create_card(
-            tab,
-            "系统工具",
-            [
-                ("🖥️打开CMD", "open_cmd_window", "secondary"),
-                ("📝常用命令", "show_common_adb_commands", "secondary"),
-                ("🔍Android版本", "get_android_version", "secondary"),
-            ],
-            row=1, col=1
-        )
+        # ADB 服务管理
+        self._create_card(button_frame, "ADB 服务管理", [
+            ("🔌连接ADB", "connect_adb", "primary"),
+            ("❌断开所有", "disconnect_adb", "danger"),
+            ("🔄重启服务", "restart_adb_server", "secondary"),
+        ], row=row, col=0)
+        row += 1
         
-        # === 第三行：文本输入 ===
-        self._create_text_input_card(tab, row=2, col=0, colspan=2)
+        # 设备信息
+        self._create_card(button_frame, "设备信息", [
+            ("📱查看设备", "show_device_info", "primary"),
+            ("📋详细信息", "get_device_info_fast", "secondary"),
+            ("🔍获取串号", "get_serial_number", "secondary"),
+        ], row=row, col=0)
+        row += 1
+        
+        # 设备控制
+        self._create_card(button_frame, "设备控制", [
+            ("🔁重启设备", "reboot", "primary"),
+            ("🔑Root权限", "root_device", "secondary"),
+            ("📀重新挂载", "remount", "secondary"),
+        ], row=row, col=0)
+        row += 1
+        
+        # 系统工具
+        self._create_card(button_frame, "系统工具", [
+            ("🖥️打开CMD", "open_cmd_window", "secondary"),
+            ("📝常用命令", "show_common_adb_commands", "secondary"),
+            ("🔍Android版本", "get_android_version", "secondary"),
+        ], row=row, col=0)
+        row += 1
+        
+        # 文本输入
+        self._create_text_input_card(button_frame, row=row, col=0)
     
     def create_app_tab(self) -> None:
         """创建应用管理Tab"""
@@ -708,18 +732,11 @@ class LayoutModern:
         )
         browse_btn.pack(side=tk.LEFT)
     
-    def create_log_output(self) -> None:
-        """创建日志输出区域"""
-        log_container = ttk.Frame(self.main_frame, style='Card.TFrame')
-        log_container.grid(row=4, column=0, sticky=tk.NSEW, padx=10, pady=(0, 10))
-        
-        # 配置grid权重，让输出框扩展
-        log_container.grid_rowconfigure(1, weight=1)
-        log_container.grid_columnconfigure(0, weight=1)
-        
+    def create_right_output_area(self) -> None:
+        """创建右侧输出区域"""
         # 日志标题栏
-        header = ttk.Frame(log_container, style='Card.TFrame')
-        header.grid(row=0, column=0, sticky=tk.EW, pady=(0, 5))
+        header = ttk.Frame(self.output_area, style='Card.TFrame')
+        header.grid(row=0, column=0, sticky=tk.EW, pady=(5, 5))
         
         ttk.Label(
             header,
@@ -749,9 +766,9 @@ class LayoutModern:
         )
         auto_scroll_cb.pack(side=tk.RIGHT, padx=10)
         
-        # 日志文本框
-        log_frame = ttk.Frame(log_container, style='Card.TFrame')
-        log_frame.grid(row=1, column=0, sticky=tk.NSEW, pady=(0, 5))
+        # 日志文本框容器
+        log_frame = ttk.Frame(self.output_area, style='Card.TFrame')
+        log_frame.grid(row=1, column=0, sticky=tk.NSEW)
         
         self.app.status_text = tk.Text(
             log_frame,
@@ -760,8 +777,7 @@ class LayoutModern:
             bg='#F8F8F8',
             fg=self.COLORS["text_primary"],
             relief='solid',
-            borderwidth=1,
-            height=14
+            borderwidth=1
         )
         self.app.status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
@@ -779,8 +795,8 @@ class LayoutModern:
         self.app.status_text.tag_configure("command", foreground='#6B69D6', font=('Consolas', 9, 'italic'))
         
         # 进度条
-        progress_frame = ttk.Frame(log_container, style='Card.TFrame')
-        progress_frame.grid(row=2, column=0, sticky=tk.EW)
+        progress_frame = ttk.Frame(self.output_area, style='Card.TFrame')
+        progress_frame.grid(row=2, column=0, sticky=tk.EW, pady=(5, 0))
         
         self.app.progress = ttk.Progressbar(
             progress_frame,
