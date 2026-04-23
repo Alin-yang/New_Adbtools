@@ -27,6 +27,10 @@ a = Analysis(
         ('decorators.py', '.'),
         ('utils.py', '.'),
         ('cache_manager.py', '.'),
+        ('device_monitor.py', '.'),
+        ('adaptive_cache.py', '.'),
+        # 集成 scrcpy 投屏工具
+        ('tools/scrcpy', 'tools/scrcpy'),
     ],
     hiddenimports=[
         'tkinterdnd2',

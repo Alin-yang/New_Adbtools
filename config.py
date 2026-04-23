@@ -107,6 +107,12 @@ class Config:
         history_dir = os.path.join(log_path, "history")
         return os.path.join(history_dir, cls.PKG_HISTORY_FILE)
     
+    # 投屏配置
+    SCRCPY_PATH = "tools\\scrcpy\\scrcpy.exe"  # scrcpy 可执行文件路径
+    SCRCPY_BITRATE = "8M"  # 默认码率
+    SCRCPY_MAX_SIZE = "1920"  # 最大尺寸
+    SCRCPY_MAX_FPS = "30"  # 最大帧率
+    
     @classmethod
     def ensure_directories(cls, app_instance=None) -> None:
         """确保所有必要的目录都存在
@@ -124,7 +130,8 @@ class Config:
             cls.get_actual_path(cls.DEFAULT_SCREENSHOT_PATH),
             cls.get_actual_path(cls.DEFAULT_RECORD_PATH),
             log_path,  # 用户定义的日志路径
-            history_dir  # 历史数据目录（存放IP和包名历史文件）
+            history_dir,  # 历史数据目录（存放IP和包名历史文件）
+            "tools\\scrcpy"  # scrcpy 工具目录
         ]
         for directory in directories:
             os.makedirs(directory, exist_ok=True)

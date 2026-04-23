@@ -60,6 +60,7 @@ class LayoutModern:
         self.create_device_tab()
         self.create_app_tab()
         self.create_log_screen_tab()
+        self.create_mirror_tab()      # 投屏
         self.create_advanced_tab()
         
         # 创建右侧输出区域
@@ -78,7 +79,7 @@ class LayoutModern:
         
         # 配置窗口
         self.app.root.title("ADB Tool v2.0")
-        self.app.root.geometry("1050x620")
+        self.app.root.geometry("1200x620")  # 增加宽度，给右侧输出框更多空间
         self.app.root.minsize(900, 520)
         
         # 使用grid布局，左右分栏
@@ -292,6 +293,7 @@ class LayoutModern:
             ("📱 设备管理", "device"),
             ("📦 应用管理", "app"),
             ("📋 日志录屏", "log_screen"),
+            ("🖥️ 投屏", "mirror"),  # 新增投屏 Tab
             ("⚙️ 高级工具", "advanced"),
         ]
         
@@ -344,7 +346,7 @@ class LayoutModern:
         
         # 配置主容器的grid
         content_frame.grid_rowconfigure(0, weight=1)
-        content_frame.grid_columnconfigure(0, weight=0, minsize=350)  # 左侧功能按钮区（固定宽度）
+        content_frame.grid_columnconfigure(0, weight=0, minsize=300)  # 左侧功能按钮区（进一步缩小）
         content_frame.grid_columnconfigure(1, weight=1)  # 右侧输出框区（弹性扩展）
         
         # === 左侧：功能按钮区域 ===
@@ -537,6 +539,93 @@ class LayoutModern:
                 ("📂打开存储文件夹", "open_storage_folder", "primary"),
             ],
             row=2, col=1
+        )
+    
+    def create_mirror_tab(self) -> None:
+        """创建投屏Tab"""
+        tab = ttk.Frame(self.content_area, style='Card.TFrame')
+        self.tabs['mirror'] = tab
+        
+        tab.columnconfigure(0, weight=1)
+        tab.grid(row=0, column=0, sticky=tk.NSEW)
+        
+        # 使用说明卡片
+        info_card = ttk.LabelFrame(
+            tab,
+            text="💡 使用说明",
+            style='Card.TLabelframe',
+            padding=(12, 10)
+        )
+        info_card.grid(row=0, column=0, sticky=tk.EW, padx=6, pady=6)
+        
+        info_text = (
+            "🔹 scrcpy 投屏工具已集成，无需额外下载\n"
+            "🔹 支持鼠标点击、滑动等完整交互操作\n"
+            "🔹 低延迟（<100ms），高帧率（30-60fps）\n"
+            "🔹 点击“启动投屏”即可开始镜像手机、TV屏幕\n"
+            "🔹 可使用下方按键模拟功能控制设备"
+        )
+        info_label = ttk.Label(
+            info_card,
+            text=info_text,
+            font=('Microsoft YaHei UI', 9),
+            background=self.COLORS["bg_card"],
+            foreground=self.COLORS["primary"],
+            justify=tk.LEFT,
+            wraplength=400
+        )
+        info_label.pack(anchor=tk.W, padx=5, pady=5)
+        
+        # 投屏控制卡片
+        self._create_card(
+            tab,
+            "投屏控制",
+            [
+                ("🖥️ 启动投屏", "start_screen_mirror", "primary"),
+                ("⏹️ 停止投屏", "stop_screen_mirror", "danger"),
+            ],
+            row=1, col=0
+        )
+        
+        # 按键模拟卡片
+        self._create_card(
+            tab,
+            "按键模拟",
+            [
+                ("⬆️ 上", "key_up", "secondary"),
+                ("⬇️ 下", "key_down", "secondary"),
+                ("⬅️ 左", "key_left", "secondary"),
+                ("➡️ 右", "key_right", "secondary"),
+                ("✅ 确认", "key_enter", "primary"),
+            ],
+            row=2, col=0
+        )
+        
+        # 系统按键卡片（分两行）
+        # 第一行：返回、主页、菜单、音量
+        self._create_card(
+            tab,
+            "系统按键",
+            [
+                ("⏪ 返回", "key_back", "secondary"),
+                ("🏠 主页", "key_home", "secondary"),
+                ("📋 菜单", "key_menu", "secondary"),
+            ],
+            row=3, col=0
+        )
+        
+        # 第二行：音量、电源、锁屏
+        self._create_card(
+            tab,
+            "系统控制",
+            [
+                ("🔊 音量+", "key_volume_up", "secondary"),
+                ("🔉 音量-", "key_volume_down", "secondary"),
+                ("🔇 静音", "key_mute", "secondary"),
+                ("⏻ 电源", "key_power", "danger"),
+                ("🔒 锁屏", "key_lock", "secondary"),
+            ],
+            row=4, col=0
         )
     
     def create_advanced_tab(self) -> None:

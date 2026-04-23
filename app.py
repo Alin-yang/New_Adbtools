@@ -4379,4 +4379,126 @@ class ADBToolApp:
                 
         except Exception as e:
             self.update_status(f"打开 CMD 窗口失败：{str(e)}", False)
+    
+    def start_screen_mirror(self):
+        """启动投屏（使用 scrcpy）"""
+        try:
+            # 获取设备 IP
+            device_ip = self.get_ip_address()
+            
+            # 初始化投屏管理器（如果尚未初始化）
+            if not hasattr(self, 'screen_mirror_manager'):
+                from modules.screen_mirror import ScreenMirrorManager
+                self.screen_mirror_manager = ScreenMirrorManager(self)
+            
+            # 启动投屏
+            self.screen_mirror_manager.start_mirroring(device_ip)
+            
+        except Exception as e:
+            error_msg = f"启动投屏失败: {str(e)}"
+            logging.error(f"[投屏] {error_msg}", exc_info=True)
+            self.update_status(f"✗ {error_msg}", False)
+    
+    def stop_screen_mirror(self):
+        """停止投屏"""
+        try:
+            if hasattr(self, 'screen_mirror_manager'):
+                self.screen_mirror_manager.stop_mirroring()
+            else:
+                self.update_status("⚠ 投屏未在运行", False)
+        except Exception as e:
+            error_msg = f"停止投屏失败: {str(e)}"
+            logging.error(f"[投屏] {error_msg}", exc_info=True)
+            self.update_status(f"✗ {error_msg}", False)
+    
+    # ========== 投屏按键模拟功能 ==========
+    
+    def key_up(self):
+        """模拟上方向键"""
+        self._send_key_event(19, "上")
+    
+    def key_down(self):
+        """模拟下方向键"""
+        self._send_key_event(20, "下")
+    
+    def key_left(self):
+        """模拟左方向键"""
+        self._send_key_event(21, "左")
+    
+    def key_right(self):
+        """模拟右方向键"""
+        self._send_key_event(22, "右")
+    
+    def key_enter(self):
+        """模拟确认键（Enter）"""
+        self._send_key_event(66, "确认")
+    
+    def key_back(self):
+        """模拟返回键"""
+        self._send_key_event(4, "返回")
+    
+    def key_home(self):
+        """模拟主页键"""
+        self._send_key_event(3, "主页")
+    
+    def key_menu(self):
+        """模拟菜单键"""
+        self._send_key_event(82, "菜单")
+    
+    def key_volume_up(self):
+        """模拟音量+"""
+        self._send_key_event(24, "音量+")
+    
+    def key_volume_down(self):
+        """模拟音量-"""
+        self._send_key_event(25, "音量-")
+    
+    def key_mute(self):
+        """模拟静音键"""
+        self._send_key_event(164, "静音")
+    
+    def key_power(self):
+        """模拟电源键"""
+        self._send_key_event(26, "电源")
+    
+    def key_lock(self):
+        """模拟锁屏键"""
+        self._send_key_event(276, "锁屏")
+    
+    def key_media_prev(self):
+        """模拟上一曲"""
+        self._send_key_event(88, "上一曲")
+    
+    def key_media_play(self):
+        """模拟播放/暂停"""
+        self._send_key_event(85, "播放/暂停")
+    
+    def key_media_next(self):
+        """模拟下一曲"""
+        self._send_key_event(87, "下一曲")
+    
+    def key_media_stop(self):
+        """模拟停止"""
+        self._send_key_event(86, "停止")
+    
+    def _send_key_event(self, keycode: int, key_name: str):
+        """
+        发送按键事件
+        
+        Args:
+            keycode: Android 按键码
+            key_name: 按键名称（用于日志显示）
+        """
+        try:
+            command = f"adb shell input keyevent {keycode}"
+            output, success = self.run_adb_with_target(command)
+            
+            if success:
+                self.update_status(f"✅ 已模拟按键: {key_name}", True)
+            else:
+                self.update_status(f"❌ 按键模拟失败: {output}", False)
+        except Exception as e:
+            error_msg = f"模拟按键 {key_name} 失败: {str(e)}"
+            logging.error(f"[按键模拟] {error_msg}", exc_info=True)
+            self.update_status(f"✗ {error_msg}", False)
 
