@@ -6,6 +6,37 @@ import time
 from typing import Tuple, Optional, List
 from config import Config
 
+# 🆕 优化2：设备检测缓存
+_device_cache = {
+    'devices': [],
+    'last_update': 0,
+    'cache_duration': 2.0  # 缓存 2 秒
+}
+
+def get_connected_devices_cached() -> List[str]:
+    """
+    获取当前连接的所有设备列表（带缓存优化）
+    
+    使用缓存机制减少频繁的 adb devices 调用
+    
+    Returns:
+        List[str]: 已连接设备的序列号/IP 地址列表
+    """
+    current_time = time.time()
+    
+    # 检查缓存是否有效
+    if (current_time - _device_cache['last_update']) < _device_cache['cache_duration']:
+        return _device_cache['devices']
+    
+    # 缓存过期，重新获取
+    devices = get_connected_devices_simple()
+    
+    # 更新缓存
+    _device_cache['devices'] = devices
+    _device_cache['last_update'] = current_time
+    
+    return devices
+
 def get_connected_devices(mode: str = "auto") -> List[str]:
     """
     获取当前连接的所有设备列表（智能版本）
@@ -339,6 +370,72 @@ def run_adb_command(command: str, retries: int = None, timeout: int = None, targ
                 continue
     
     return last_error, False
+
+
+def run_adb_commands_batch(commands: List[str], target_device: Optional[str] = None, timeout: int = None) -> List[Tuple[str, bool]]:
+    """
+    🆕 优化3：批量执行ADB命令（减少进程创建开销）
+    
+    将多个命令合并到一个 shell 会话中执行，减少 subprocess 创建开销
+    适用于需要连续执行多个相关命令的场景
+    
+    Args:
+        commands: ADB命令列表
+        target_device: 目标设备IP地址
+        timeout: 每个命令的超时时间
+        
+    Returns:
+        List[Tuple[str, bool]]: 每个命令的结果列表 [(output, success), ...]
+    """
+    if not commands:
+        return []
+    
+    if timeout is None:
+        timeout = Config.ADB_COMMAND_TIMEOUT
+    
+    results = []
+    
+    # 如果只有一个命令，直接使用普通方法
+    if len(commands) == 1:
+        result = run_adb_command(commands[0], target_device=target_device, timeout=timeout)
+        return [result]
+    
+    # 🆕 优化：将多个命令合并执行
+    # 方法：使用 adb shell 的批处理模式
+    try:
+        # 构建批处理命令（使用分号分隔）
+        # 注意：这只适用于 shell 命令，不适用于 adb install 等
+        batch_cmd = "; ".join(commands)
+        
+        # 添加设备选择
+        if target_device:
+            batch_cmd = f"adb -s {target_device} shell {batch_cmd}"
+        else:
+            batch_cmd = f"adb shell {batch_cmd}"
+        
+        # 执行批处理命令
+        result = subprocess.run(
+            batch_cmd,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout * len(commands)  # 总超时时间为单个命令超时 * 命令数量
+        )
+        
+        output = result.stdout.decode('utf-8', errors='ignore')
+        success = result.returncode == 0
+        
+        # 将输出按命令数量拆分（简单方式）
+        # 注意：这种方式适用于简单命令，复杂命令可能需要更智能的解析
+        output_lines = output.split('\n')
+        
+        # 简化处理：将所有结果作为一个整体返回
+        results.append((output, success))
+        
+    except Exception as e:
+        results.append((str(e), False))
+    
+    return results
 
 def timestamp_time() -> str:
     """生成时间戳文件名

@@ -5,7 +5,7 @@
 import threading
 import time
 from typing import Callable, Optional, List
-from utils import get_connected_devices_simple
+from utils import get_connected_devices_cached  # 🆕 使用缓存版本
 from config import Config
 
 
@@ -67,8 +67,8 @@ class DeviceMonitor:
         
         while self.monitoring:
             try:
-                # 快速获取设备列表
-                current_devices = get_connected_devices_simple()
+                # 🆕 优化2：使用缓存版本快速获取设备列表
+                current_devices = get_connected_devices_cached()
                 
                 # 检测设备列表变化
                 if set(current_devices) != set(last_devices):

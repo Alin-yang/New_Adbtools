@@ -17,7 +17,9 @@ from utils import (
     load_pkg_history, save_pkg_history, is_valid_package_name,
     get_accurate_package_version, calculate_optimal_workers, format_file_size,
     get_connected_devices, get_connected_devices_simple,
-    extract_package_name_from_apk, get_connected_devices_parallel
+    extract_package_name_from_apk, get_connected_devices_parallel,
+    get_connected_devices_cached,  # 🆕 新增缓存版本
+    run_adb_commands_batch  # 🆕 新增批量执行
 )
 from config import Config
 from cache_manager import cache_manager
@@ -622,7 +624,7 @@ class ADBToolApp:
             self.device_count_label.config(text=f"已连接: {device_count} 台")
             
         if not devices:
-            self.connection_status_label.config(text="未连接", foreground="gray")
+            self.connection_status_label.config(text="● 未连接", foreground="white", background="#C8C6C4")
             return
             
         # 如果没有输入 IP 地址，检查是否有 USB 设备
@@ -636,9 +638,9 @@ class ADBToolApp:
                     break
                 
             if usb_device:
-                self.connection_status_label.config(text=f"✓ USB 设备", foreground="green")
+                self.connection_status_label.config(text="✓ USB 设备", foreground="white", background="#107C10")
             else:
-                self.connection_status_label.config(text="未连接", foreground="gray")
+                self.connection_status_label.config(text="● 未连接", foreground="white", background="#C8C6C4")
             return
             
         # 有 IP 地址时，检查是否匹配任何已连接设备
@@ -649,9 +651,9 @@ class ADBToolApp:
                 break
             
         if is_connected:
-            self.connection_status_label.config(text="✓ 已连接", foreground="green")
+            self.connection_status_label.config(text="✓ 已连接", foreground="white", background="#107C10")
         else:
-            self.connection_status_label.config(text="✗ 未连接", foreground="red")
+            self.connection_status_label.config(text="✗ 未连接", foreground="white", background="#E81123")
 
     def show_device_info(self):
         """显示当前连接的设备详细信息（异步优化版）"""
@@ -1359,6 +1361,70 @@ class ADBToolApp:
             logging.error(f"[_extract_and_update_package_name] 异常：{str(error)}")
             # 静默失败，不影响其他功能
             pass
+    
+    def _extract_and_update_package_name_async(self, apk_path: str):
+        """异步提取包名和版本号（后台线程执行，不阻塞UI）"""
+        import logging
+        try:
+            logging.info(f"[_extract_and_update_package_name_async] 开始后台处理：{apk_path}")
+            
+            # 使用新函数提取包名和版本信息
+            from utils import extract_package_name_from_apk
+            package_name = extract_package_name_from_apk(apk_path)
+            logging.info(f"[_extract_and_update_package_name_async] 提取结果：{package_name}")
+            
+            if package_name:
+                pkg_name = package_name
+                version = ""
+                logging.info(f"[_extract_and_update_package_name_async] 包名：{pkg_name}")
+                
+                # 尝试从设备获取该包名的版本号（如果设备已连接）
+                try:
+                    if self.check_device_connected():
+                        logging.info(f"[_extract_and_update_package_name_async] 设备已连接，尝试获取版本号")
+                        output, success = self.run_adb_with_target(f"adb shell pm dump {pkg_name}")
+                        if success:
+                            from utils import extract_version_info
+                            version = extract_version_info(output)
+                            if version:
+                                logging.info(f"[_extract_and_update_package_name_async] 获取到版本号：{version}")
+                except Exception as e:
+                    logging.warning(f"[_extract_and_update_package_name_async] 获取版本号失败：{str(e)}")
+                
+                # 在主线程中更新UI
+                self.root.after(0, lambda: self._update_package_info_ui(pkg_name, version, apk_path))
+            else:
+                logging.warning(f"[_extract_and_update_package_name_async] 未找到包名信息")
+        except Exception as error:
+            logging.error(f"[_extract_and_update_package_name_async] 异常：{str(error)}")
+    
+    def _update_package_info_ui(self, pkg_name: str, version: str, apk_path: str):
+        """在主线程中更新包名信息UI"""
+        try:
+            # 更新包名输入框
+            if hasattr(self, 'pkg_combobox'):
+                self.pkg_combobox.delete(0, tk.END)
+                self.pkg_combobox.insert(0, pkg_name)
+            elif hasattr(self, 'pkg_entry'):
+                self.pkg_entry.delete(0, tk.END)
+                self.pkg_entry.insert(0, pkg_name)
+            
+            # 更新版本展示框
+            if version:
+                self.update_version_display(version)
+            
+            # 在输出框显示包名信息
+            file_name = os.path.basename(apk_path)
+            if version:
+                self.update_status(f"✅ 自动识别到应用包名：{pkg_name} (版本：{version})\n📦 来源文件：{file_name}", True)
+            else:
+                self.update_status(f"✅ 自动识别到应用包名：{pkg_name}\n📦 来源文件：{file_name}\n💡 点击'获取包名版本号'查看版本", True)
+            
+            # 保存包名到历史记录
+            self._save_pkg_to_history(pkg_name)
+        except Exception as e:
+            import logging
+            logging.error(f"[_update_package_info_ui] 更新UI失败：{str(e)}")
         
     def execute_task_async(self, task_name: str, method_name: str):
         """异步执行任务（底层优化版 - 零阻塞）"""
@@ -1438,13 +1504,22 @@ class ADBToolApp:
     # 状态更新方法
     def update_status(self, message: str, success: bool, msg_type: str = "normal") -> None:
         """
-        更新状态文本框（极致优化版 - 零阻塞）
+        更新状态文本框（极致优化版 - 零阻塞 + 行数限制）
             
         Args:
             message: 要显示的消息
             success: 是否为成功状态
             msg_type: 消息类型 (normal/success/error/warning/info/system)
         """
+        # 🆕 优化4：限制日志行数，防止内存泄漏
+        try:
+            lines = self.status_text.index('end-1c').split('.')[0]
+            if int(lines) > 1000:  # 限制最多 1000 行
+                # 删除最早的 200 行，保留最近 800 行
+                self.status_text.delete(1.0, f"{int(lines)-800}.0")
+        except:
+            pass
+        
         # 【日志】记录 UI 更新
         import logging
         logging.info(f"[UI 更新] 类型:{msg_type}, 成功:{success}, 消息:{message[:50]}...")
@@ -1485,51 +1560,34 @@ class ADBToolApp:
     # 文件选择方法
     def browse_apk(self) -> None:
         """
-        选择 APK 文件（增强版 - 自动提取包名和版本号）
+        选择 APK 文件（增强版 - 异步提取包名和版本号，不阻塞UI）
             
         打开文件对话框让用户选择 APK 文件，并将文件路径
-        填入到 APK 输入框中，同时提取包名和版本号。
+        填入到 APK 输入框中，然后异步提取包名和版本号。
         """
         import logging
+        import threading
+        
         file_path = filedialog.askopenfilename(filetypes=[("APK files", "*.apk")])
         if file_path:
             logging.info(f"[browse_apk] 选择了文件：{file_path}")
             self.apk_entry.delete(0, tk.END)
             self.apk_entry.insert(0, file_path)
-                
-            # 【新增】自动提取 APK 的包名和版本号
+            
+            # 显示文件信息（立即显示）
             try:
-                from utils import extract_package_name_from_apk
-                logging.info(f"[browse_apk] 开始提取 APK 信息")
-                package_name = extract_package_name_from_apk(file_path)
-                logging.info(f"[browse_apk] 提取结果：{package_name}")
-                    
-                if package_name:
-                    pkg_name = package_name
-                    version = ""  # aapt2/aapt 不直接返回版本号
-                    logging.info(f"[browse_apk] 提取成功 - 包名：{pkg_name}")
-                        
-                    # 更新包名输入框
-                    if hasattr(self, 'pkg_combobox') and pkg_name:
-                        self.pkg_combobox.set(pkg_name)
-                        self._save_pkg_to_history(pkg_name)
-                        
-                    # 【新增】更新版本展示框
-                    if version:
-                        self.update_version_display(version)
-                        self.update_status(f"已识别 APK: {pkg_name} (版本：{version})", True)
-                    else:
-                        self.update_version_display()
-                        self.update_status(f"已识别 APK 包名：{pkg_name}\n💡 点击'获取包名版本号'查看版本", True)
-                else:
-                    logging.warning(f"[browse_apk] 提取失败，package_name: {package_name}")
-                    # 清空版本显示
-                    self.update_version_display()
-                    self.update_status("无法从 APK 提取包名信息", False)
-            except Exception as e:
-                logging.error(f"[browse_apk] 提取异常：{str(e)}")
-                self.update_version_display()
-                self.update_status(f"提取 APK 信息失败：{str(e)}", False)
+                file_size = format_file_size(os.path.getsize(file_path))
+                file_name = os.path.basename(file_path)
+                self.update_status(f"📦 已选择APK文件: {file_name}\n📊 文件大小: {file_size}\n⏳ 正在提取包名信息...", True)
+            except:
+                self.update_status(f"📦 已选择 APK 文件：{os.path.basename(file_path)}\n⏳ 正在提取包名信息...", True)
+                
+            # 🆕 优化：使用后台线程异步提取包名，不阻塞界面
+            extract_thread = threading.Thread(
+                target=lambda: self._extract_and_update_package_name_async(file_path),
+                daemon=True
+            )
+            extract_thread.start()
             
             # 🆕 新增：保存 APK 路径到历史记录
             self._save_apk_to_history(file_path)
@@ -2659,15 +2717,25 @@ class ADBToolApp:
     
     @require_device_connected
     def screencap(self):
-        """屏幕截图(优化版)"""
+        """屏幕截图(优化版 - 异步执行，不阻塞UI)"""
         try:
-            # 先显示提示信息
-            self.update_status("正在截图，请稍候...", True)
-            # 强制更新界面
-            self.root.update()
-            # 短暂延迟，确保提示信息显示
-            time.sleep(0.5)
+            # 🆕 优化：立即显示提示信息，不阻塞 UI
+            self.update_status("⏳ 正在截图，请稍候...", True, "info")
             
+            # 🆕 优化：使用后台线程执行截图，不阻塞界面
+            import threading
+            screenshot_thread = threading.Thread(
+                target=self._do_screenshot_async,
+                daemon=True
+            )
+            screenshot_thread.start()
+            
+        except Exception as e:
+            self.update_status(f"截图过程出错: {str(e)}", False)
+    
+    def _do_screenshot_async(self):
+        """异步执行截图（后台线程）"""
+        try:
             # 先清理可能存在的旧截图
             self.run_adb_with_target("adb shell rm -f /sdcard/screenshot.png")
             
@@ -2720,14 +2788,15 @@ class ADBToolApp:
             # 清理设备上的临时文件
             self.run_adb_with_target("adb shell rm -f /sdcard/screenshot.png")
             
+            # 在主线程中更新 UI
             if success:
                 file_size = format_file_size(os.path.getsize(new_file))
-                self.update_status(f"截图已保存至路径：{new_file}\n文件大小：{file_size}", True)
+                self.root.after(0, lambda: self.update_status(f"✅ 截图已保存至路径：{new_file}\n📊 文件大小：{file_size}", True))
             else:
-                self.update_status(f"截图失败: {error_msg}", False)
+                self.root.after(0, lambda: self.update_status(f"❌ 截图失败: {error_msg}", False))
                 
         except Exception as e:
-            self.update_status(f"截图过程出错: {str(e)}", False)
+            self.root.after(0, lambda: self.update_status(f"❌ 截图过程出错: {str(e)}", False))
 
     @require_device_connected
     def get_serial_number(self):
@@ -2763,7 +2832,7 @@ class ADBToolApp:
     # 屏幕录制相关方法
     @require_device_connected
     def start_recording(self):
-        """开始屏幕录制"""
+        """开始屏幕录制（优化版 - 异步测试命令，不阻塞UI）"""
         if self.recording_active:
             self.update_status("屏幕录制已在进行中", False)
             return
@@ -2773,58 +2842,74 @@ class ADBToolApp:
             self.update_status("设备未连接，无法开始录制", False)
             return
             
-        # 测试screenrecord命令是否可用
-        test_output, test_success = self.run_adb_with_target("adb shell screenrecord --help")
-        if not test_success:
-            self.update_status(f"ADB screenrecord命令不可用: {test_output}", False)
-            return
-
-        # 获取用户输入的日志路径（与日志使用相同路径）
-        user_log_path = self.log_path_entry.get().strip()
-        if not user_log_path:
-            user_log_path = self.default_log_path
-            self.log_path_entry.delete(0, tk.END)
-            self.log_path_entry.insert(0, user_log_path)
-
-        # 确保路径存在并测试写入权限
-        try:
-            os.makedirs(user_log_path, exist_ok=True)
-            test_file = os.path.join(user_log_path, "test_write.tmp")
-            with open(test_file, 'w', encoding='utf-8') as tf:
-                tf.write("test")
-            os.remove(test_file)
-        except PermissionError:
-            self.update_status("无权限写入该目录，请以管理员身份运行程序或选择其他目录", False)
-            return
-        except Exception as e:
-            self.update_status(f"创建录制目录失败: {str(e)}", False)
-            return
-
-        # 设置录制文件路径（使用简单的临时名称，避免前缀问题）
-        recording_file_name = f"temp_rec_{timestamp_time()}.mp4"
-        self.recording_file_path = os.path.join(user_log_path, recording_file_name)
+        # 🆕 优化：立即显示提示信息
+        self.update_status("⏳ 正在启动屏幕录制...", True, "info")
         
-        # 设置状态
-        self.recording_active = True
-        
-        # 显示启动信息
-        self.update_status(f"正在开始屏幕录制...\n目标文件: {self.recording_file_path}", True)
-
-        # 启动录制线程
+        # 🆕 优化：使用后台线程执行测试和启动，不阻塞界面
+        import threading
+        recording_thread = threading.Thread(
+            target=self._start_recording_async,
+            daemon=True
+        )
+        recording_thread.start()
+    
+    def _start_recording_async(self):
+        """异步启动屏幕录制（后台线程）"""
         try:
-            self.recording_thread = threading.Thread(
-                target=self._run_recording,
-                name="RecordingThread",
-                daemon=True
-            )
-            self.recording_thread.start()
-                
-            # 使用 root.after 延迟检查，避免阻塞主线程
-            self.root.after(1000, self._check_recording_thread_status)
-                
+            # 测试screenrecord命令是否可用
+            test_output, test_success = self.run_adb_with_target("adb shell screenrecord --help")
+            if not test_success:
+                self.root.after(0, lambda: self.update_status(f"❌ ADB screenrecord命令不可用: {test_output}", False))
+                return
+
+            # 获取用户输入的日志路径（与日志使用相同路径）
+            user_log_path = self.log_path_entry.get().strip()
+            if not user_log_path:
+                user_log_path = self.default_log_path
+                self.root.after(0, lambda: self.log_path_entry.delete(0, tk.END))
+                self.root.after(0, lambda path=user_log_path: self.log_path_entry.insert(0, path))
+
+            # 确保路径存在并测试写入权限
+            try:
+                os.makedirs(user_log_path, exist_ok=True)
+                test_file = os.path.join(user_log_path, "test_write.tmp")
+                with open(test_file, 'w', encoding='utf-8') as tf:
+                    tf.write("test")
+                os.remove(test_file)
+            except PermissionError:
+                self.root.after(0, lambda: self.update_status("无权限写入该目录，请以管理员身份运行程序或选择其他目录", False))
+                return
+            except Exception as e:
+                self.root.after(0, lambda err=str(e): self.update_status(f"创建录制目录失败: {err}", False))
+                return
+
+            # 设置录制文件路径（使用简单的临时名称，避免前缀问题）
+            recording_file_name = f"temp_rec_{timestamp_time()}.mp4"
+            self.recording_file_path = os.path.join(user_log_path, recording_file_name)
+            
+            # 设置状态
+            self.recording_active = True
+            
+            # 显示启动信息
+            self.root.after(0, lambda: self.update_status(f"✅ 正在开始屏幕录制...\n📁 目标文件: {self.recording_file_path}", True))
+
+            # 启动录制线程
+            try:
+                self.recording_thread = threading.Thread(
+                    target=self._run_recording,
+                    name="RecordingThread",
+                    daemon=True
+                )
+                self.recording_thread.start()
+                    
+                # 使用 root.after 延迟检查，避免阻塞主线程
+                self.root.after(1000, self._check_recording_thread_status)
+                    
+            except Exception as e:
+                self.root.after(0, lambda err=str(e): self.update_status(f"启动录制线程时出错：{err}", False))
+                self.recording_active = False
         except Exception as e:
-            self.update_status(f"启动录制线程时出错：{str(e)}", False)
-            self.recording_active = False
+            self.root.after(0, lambda err=str(e): self.update_status(f"启动录制失败：{err}", False))
         
     def _check_recording_thread_status(self):
         """检查录制线程状态（异步回调）"""
@@ -3047,7 +3132,7 @@ class ADBToolApp:
     # 日志相关方法
     @require_device_connected
     def start_logcat(self):
-        """启动日志捕获（优化版，增强预检查和错误处理）"""
+        """启动日志捕获（优化版 - 异步测试命令，不阻塞UI）"""
         if self.logging_active:
             self.update_status("日志捕获已在运行", False)
             return
@@ -3057,72 +3142,88 @@ class ADBToolApp:
             self.update_status("设备未连接，无法启动日志捕获", False)
             return
             
-        # 测试ADB logcat命令是否可用
-        test_output, test_success = self.run_adb_with_target("adb logcat -d -t 1")
-        if not test_success:
-            self.update_status(f"ADB logcat命令不可用: {test_output}", False)
-            return
-
-        # 获取用户输入的日志路径
-        user_log_path = self.log_path_entry.get().strip()
-        if not user_log_path:
-            # 使用默认路径
-            user_log_path = self.default_log_path
-            self.log_path_entry.delete(0, tk.END)
-            self.log_path_entry.insert(0, user_log_path)
-
-        # 确保路径存在并测试写入权限
-        try:
-            os.makedirs(user_log_path, exist_ok=True)
-            # 测试写入权限
-            test_file = os.path.join(user_log_path, "test_write.tmp")
-            with open(test_file, 'w', encoding='utf-8') as tf:
-                tf.write("test")
-            os.remove(test_file)
-        except PermissionError:
-            self.update_status("无权限写入该目录，请以管理员身份运行程序或选择其他目录", False)
-            return
-        except Exception as e:
-            self.update_status(f"创建日志目录失败: {str(e)}", False)
-            return
-
-        # 设置日志文件路径
-        log_file_name = f"{timestamp_time()}.log"
-        self.log_file_path = os.path.join(user_log_path, log_file_name)
+        # 🆕 优化：立即显示提示信息
+        self.update_status("⏳ 正在启动日志捕获...", True, "info")
         
-        # 检查文件是否已存在（避免覆盖）
-        counter = 1
-        original_path = self.log_file_path
-        while os.path.exists(self.log_file_path):
-            base_name = os.path.splitext(original_path)[0]
-            self.log_file_path = f"{base_name}_{counter}.log"
-            counter += 1
-            if counter > 100:  # 防止无限循环
-                self.update_status("无法创建唯一文件名", False)
+        # 🆕 优化：使用后台线程执行测试和启动，不阻塞界面
+        import threading
+        logcat_thread = threading.Thread(
+            target=self._start_logcat_async,
+            daemon=True
+        )
+        logcat_thread.start()
+    
+    def _start_logcat_async(self):
+        """异步启动日志捕获（后台线程）"""
+        try:
+            # 测试ADB logcat命令是否可用
+            test_output, test_success = self.run_adb_with_target("adb logcat -d -t 1")
+            if not test_success:
+                self.root.after(0, lambda: self.update_status(f"❌ ADB logcat命令不可用: {test_output}", False))
                 return
-        
-        # 设置状态和事件
-        self.logging_active = True
-        self.stop_event.clear()
-        
-        # 显示启动信息
-        self._update_operation_status("日志捕获", "开始", f"目标文件: {self.log_file_path}")
 
-        # 启动日志捕获线程
-        try:
-            self.logcat_thread = threading.Thread(
-                target=self._run_logcat,
-                name="LogcatThread",
-                daemon=True
-            )
-            self.logcat_thread.start()
-                
-            # 使用 root.after 延迟检查，避免阻塞主线程
-            self.root.after(1000, self._check_logcat_thread_status)
-                
+            # 获取用户输入的日志路径
+            user_log_path = self.log_path_entry.get().strip()
+            if not user_log_path:
+                # 使用默认路径
+                user_log_path = self.default_log_path
+                self.root.after(0, lambda: self.log_path_entry.delete(0, tk.END))
+                self.root.after(0, lambda path=user_log_path: self.log_path_entry.insert(0, path))
+
+            # 确保路径存在并测试写入权限
+            try:
+                os.makedirs(user_log_path, exist_ok=True)
+                # 测试写入权限
+                test_file = os.path.join(user_log_path, "test_write.tmp")
+                with open(test_file, 'w', encoding='utf-8') as tf:
+                    tf.write("test")
+                os.remove(test_file)
+            except PermissionError:
+                self.root.after(0, lambda: self.update_status("无权限写入该目录，请以管理员身份运行程序或选择其他目录", False))
+                return
+            except Exception as e:
+                self.root.after(0, lambda err=str(e): self.update_status(f"创建日志目录失败: {err}", False))
+                return
+
+            # 设置日志文件路径
+            log_file_name = f"{timestamp_time()}.log"
+            self.log_file_path = os.path.join(user_log_path, log_file_name)
+            
+            # 检查文件是否已存在（避免覆盖）
+            counter = 1
+            original_path = self.log_file_path
+            while os.path.exists(self.log_file_path):
+                base_name = os.path.splitext(original_path)[0]
+                self.log_file_path = f"{base_name}_{counter}.log"
+                counter += 1
+                if counter > 100:  # 防止无限循环
+                    self.root.after(0, lambda: self.update_status("无法创建唯一文件名", False))
+                    return
+            
+            # 设置状态和事件
+            self.logging_active = True
+            self.stop_event.clear()
+            
+            # 显示启动信息
+            self.root.after(0, lambda: self._update_operation_status("日志捕获", "开始", f"目标文件: {self.log_file_path}"))
+
+            # 启动日志捕获线程
+            try:
+                self.logcat_thread = threading.Thread(
+                    target=self._run_logcat,
+                    name="LogcatThread",
+                    daemon=True
+                )
+                self.logcat_thread.start()
+                    
+                # 使用 root.after 延迟检查，避免阻塞主线程
+                self.root.after(1000, self._check_logcat_thread_status)
+                    
+            except Exception as e:
+                self.root.after(0, lambda err=str(e): self.update_status(f"启动日志捕获线程失败：{err}", False))
+                self.logging_active = False
         except Exception as e:
-            self.update_status(f"启动日志捕获线程失败：{str(e)}", False)
-            self.logging_active = False
+            self.root.after(0, lambda err=str(e): self.update_status(f"启动日志捕获失败：{err}", False))
         
     def _check_logcat_thread_status(self):
         """检查日志捕获线程状态（异步回调）"""
@@ -3726,35 +3827,94 @@ class ADBToolApp:
 
 
     def show_all_adb_commands(self):
-        """输出所有功能按钮及其对应的adb命令"""
-        # 功能名与命令映射
-        cmd_map = [
-            ("连接 ADB", "adb connect <IP地址>"),
-            ("断开所有ADB连接", "adb disconnect"),
-            ("强制安装apk", "adb install -r -d <APK路径>"),
-            ("卸载当前包名应用", "adb uninstall <包名>"),
-            ("获取已安装应用包名列表", "adb shell pm list packages"),
-            ("清除应用缓存", "adb shell pm clear <包名>"),
-            ("获取Root权限", "adb root"),
-            ("导出ANR文件", "adb pull /data/anr <本地目录>"),
-            ("重新挂载分区", "adb remount"),
-            ("获取当前包名版本号", "adb shell pm dump <包名> | 查找versionName"),
-            ("重启设备", "adb reboot"),
-            ("获取Android版本号", "adb shell getprop ro.build.version.release"),
-            ("清除日志缓存", "adb logcat -c"),
-            ("获取当前打开应用包名", "adb shell dumpsys window windows | findstr mCurrentFocus 或 adb shell dumpsys activity activities | findstr mResumedActivity"),
-            ("截取当前屏幕", "adb shell screencap -p /sdcard/screenshot.png && adb pull /sdcard/screenshot.png <本地路径>"),
-            ("获取设备串号", "adb shell getprop ro.serialno 或备用方案（优先硬件串号）"),
-            ("启动日志捕获", "adb logcat -v time *:V > <本地路径>"),
-            ("停止日志捕获", "结束logcat进程"),
-            ("开始屏幕录制", "adb shell screenrecord /sdcard/temp_recording.mp4 && adb pull /sdcard/temp_recording.mp4 <本地路径>"),
-            ("停止屏幕录制", "终止screenrecord进程并下载视频文件"),
-            ("终止当前包名所有进程", "adb shell am force-stop <包名>"),
-            ("获取当前包名应用安装路径", "adb shell pm path <包名>"),
+        """输出所有功能按钮及其对应的adb命令（优化版 - 清晰分组展示）"""
+        # 按功能分组的命令映射
+        command_groups = [
+            {
+                "title": "📱 设备连接",
+                "commands": [
+                    ("连接 ADB", "adb connect <IP地址>"),
+                    ("断开所有ADB连接", "adb disconnect"),
+                ]
+            },
+            {
+                "title": "📦 应用管理",
+                "commands": [
+                    ("强制安装apk", "adb install -r -d <APK路径>"),
+                    ("卸载当前包名应用", "adb uninstall <包名>"),
+                    ("获取已安装应用包名列表", "adb shell pm list packages"),
+                    ("清除应用缓存", "adb shell pm clear <包名>"),
+                    ("终止当前包名所有进程", "adb shell am force-stop <包名>"),
+                    ("获取当前包名应用安装路径", "adb shell pm path <包名>"),
+                ]
+            },
+            {
+                "title": "🔧 系统操作",
+                "commands": [
+                    ("获取Root权限", "adb root"),
+                    ("重新挂载分区", "adb remount"),
+                    ("重启设备", "adb reboot"),
+                ]
+            },
+            {
+                "title": "ℹ️ 系统信息",
+                "commands": [
+                    ("获取Android版本号", "adb shell getprop ro.build.version.release"),
+                    ("获取设备串号", "adb shell getprop ro.serialno"),
+                    ("获取当前包名版本号", "adb shell pm dump <包名> | 查找versionName"),
+                ]
+            },
+            {
+                "title": "📺 屏幕操作",
+                "commands": [
+                    ("截取当前屏幕", "adb shell screencap -p /sdcard/screenshot.png && adb pull /sdcard/screenshot.png <本地路径>"),
+                    ("开始屏幕录制", "adb shell screenrecord /sdcard/temp_recording.mp4 && adb pull /sdcard/temp_recording.mp4 <本地路径>"),
+                    ("停止屏幕录制", "终止screenrecord进程并下载视频文件"),
+                ]
+            },
+            {
+                "title": "📝 日志操作",
+                "commands": [
+                    ("启动日志捕获", "adb logcat -v time *:V > <本地路径>"),
+                    ("停止日志捕获", "结束logcat进程"),
+                    ("清除日志缓存", "adb logcat -c"),
+                    ("导出ANR文件", "adb pull /data/anr <本地目录>"),
+                ]
+            },
+            {
+                "title": "🎯 应用状态",
+                "commands": [
+                    ("获取当前打开应用包名", "adb shell dumpsys window windows | findstr mCurrentFocus"),
+                    ("获取当前打开应用包名(备用)", "adb shell dumpsys activity activities | findstr mResumedActivity"),
+                ]
+            },
         ]
-        self.status_text.insert(tk.END, "\n功能按钮与对应 ADB 命令如下：\n", "info")
-        for name, cmd in cmd_map:
-            self.status_text.insert(tk.END, f"{name}：{cmd}\n", "info")
+        
+        # 输出标题
+        self.status_text.insert(tk.END, "\n" + "="*70 + "\n", "info")
+        self.status_text.insert(tk.END, "📝 功能按钮与对应 ADB 命令速查\n", "info")
+        self.status_text.insert(tk.END, "="*70 + "\n\n", "info")
+        
+        # 按组输出命令
+        cmd_index = 1
+        for group in command_groups:
+            # 输出分组标题
+            self.status_text.insert(tk.END, f"{group['title']}\n", "info")
+            self.status_text.insert(tk.END, "-" * 70 + "\n", "info")
+            
+            # 输出该组的命令
+            for name, cmd in group['commands']:
+                # 使用更清晰的对齐格式
+                self.status_text.insert(tk.END, f"  {cmd_index:2d}. {name:<25} → {cmd}\n", "info")
+                cmd_index += 1
+            
+            # 组间空行
+            self.status_text.insert(tk.END, "\n", "info")
+        
+        # 输出结尾
+        self.status_text.insert(tk.END, "="*70 + "\n", "info")
+        self.status_text.insert(tk.END, "💡 提示：将 <xxx> 替换为实际参数值\n", "info")
+        self.status_text.insert(tk.END, "="*70 + "\n", "info")
         self.status_text.see(tk.END)
         
     def show_common_adb_commands(self):
@@ -4028,7 +4188,7 @@ class ADBToolApp:
             from tkinterdnd2 import DND_FILES
             
             def on_drop(event):
-                """处理文件拖拽"""
+                """处理文件拖拽（优化版 - 异步提取包名，不阻塞UI）"""
                 self.apk_entry.config(background="white")
                 
                 # 获取拖拽的文件路径
@@ -4042,16 +4202,21 @@ class ADBToolApp:
                         self.apk_entry.delete(0, tk.END)
                         self.apk_entry.insert(0, file_path)
                         
-                        # 显示文件信息
+                        # 显示文件信息（立即显示，不等待提取）
                         try:
                             file_size = format_file_size(os.path.getsize(file_path))
                             file_name = os.path.basename(file_path)
-                            self.update_status(f"📦 已选择APK文件: {file_name}\n📊 文件大小: {file_size}", True)
+                            self.update_status(f"📦 已选择APK文件: {file_name}\n📊 文件大小: {file_size}\n⏳ 正在提取包名信息...", True)
                         except:
-                            self.update_status(f"📦 已选择 APK 文件：{os.path.basename(file_path)}", True)
+                            self.update_status(f"📦 已选择 APK 文件：{os.path.basename(file_path)}\n⏳ 正在提取包名信息...", True)
                                                 
-                        # 🆕 新增：自动提取包名并更新到输入框（异步执行，不阻塞界面）
-                        self.root.after(0, lambda: self._extract_and_update_package_name(file_path))
+                        # 🆕 优化：使用后台线程异步提取包名，不阻塞界面
+                        import threading
+                        extract_thread = threading.Thread(
+                            target=lambda: self._extract_and_update_package_name_async(file_path),
+                            daemon=True
+                        )
+                        extract_thread.start()
                             
                         # 提示用户可以安装
                         self.update_status("🚀 请点击'强制安装apk'按钮进行安装", True)

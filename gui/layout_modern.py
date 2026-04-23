@@ -171,13 +171,15 @@ class LayoutModern:
                        font=('Microsoft YaHei UI', 9, 'bold'),
                        background=self.COLORS["success"],
                        foreground='white',
-                       padding=(8, 4))
+                       padding=(8, 4),
+                       anchor='center')  # 文字居中
         
         style.configure('StatusDisconnected.TLabel',
                        font=('Microsoft YaHei UI', 9, 'bold'),
                        background='#C8C6C4',
                        foreground='white',
-                       padding=(8, 4))
+                       padding=(8, 4),
+                       anchor='center')  # 文字居中
         
         # 配置鼠标悬停效果
         style.map('ModernTab.TButton',
@@ -241,12 +243,16 @@ class LayoutModern:
         self.app.ip_combobox['height'] = 8
         self.app.ip_combobox.insert(0, "192.168.")
         
-        # 连接状态标签
-        self.app.connection_status_label = ttk.Label(
+        # 连接状态标签（使用 tk.Label 以获得更好的对齐控制）
+        self.app.connection_status_label = tk.Label(
             ip_row,
             text="● 未连接",
-            style='StatusDisconnected.TLabel',
-            width=12
+            font=('Microsoft YaHei UI', 9, 'bold'),
+            background='#C8C6C4',
+            foreground='white',
+            width=14,
+            relief='flat',
+            anchor='center'  # 文字居中
         )
         self.app.connection_status_label.pack(side=tk.LEFT, padx=(10, 0))
         
