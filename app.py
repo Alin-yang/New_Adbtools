@@ -25,6 +25,7 @@ from config import Config
 from cache_manager import cache_manager
 import concurrent.futures
 from device_monitor import DeviceStatusManager
+from modules.performance_monitor import PerformanceMonitor
 
 # 配置日志输出（使用轮转日志处理器）
 from logging.handlers import RotatingFileHandler
@@ -105,9 +106,20 @@ class ADBToolApp:
 
     def _setup_window_close_handler(self):
         """设置窗口关闭时的清理逻辑"""
+        # 绑定窗口最小化/切换后台事件
+        self.root.bind('<Unmap>', lambda e: self._hide_perf_dropdown())
+        
         def on_closing():
             import logging
             logging.info("[窗口关闭] 开始清理资源...")
+            
+            # 隐藏性能监控下拉列表
+            if hasattr(self, 'perf_dropdown_toplevel') and self.perf_dropdown_toplevel:
+                try:
+                    self._hide_perf_dropdown()
+                    logging.info("[窗口关闭] 性能监控下拉列表已隐藏")
+                except Exception as e:
+                    logging.error(f"[窗口关闭] 隐藏下拉列表失败: {e}")
             
             # 停止设备监控
             if self.device_monitor_manager:
@@ -132,6 +144,14 @@ class ADBToolApp:
                     logging.info("[窗口关闭] 录屏已停止")
                 except Exception as e:
                     logging.error(f"[窗口关闭] 停止录屏失败: {e}")
+            
+            # 停止性能监控
+            if hasattr(self, 'performance_monitor') and self.performance_monitor.monitoring:
+                try:
+                    self.performance_monitor.stop_monitoring()
+                    logging.info("[窗口关闭] 性能监控已停止")
+                except Exception as e:
+                    logging.error(f"[窗口关闭] 停止性能监控失败: {e}")
             
             # 关闭线程池（不等待任务完成，快速退出）
             if hasattr(self, '_executor'):
@@ -233,11 +253,15 @@ class ADBToolApp:
         # 设备状态显示控制变量
         self.last_device_status_time = 0
         self.device_status_cooldown = 0.5  # 缩短冷却时间到0.5秒，提高响应性
+        
         self._last_displayed_ip = ""  # 记录上次显示的IP地址
         
         # 历史记录防抖保存
         self._history_save_timer = None
         self._pending_history_save = False
+        
+        # 性能监控器
+        self.performance_monitor = PerformanceMonitor(self)
 
     def _load_all_history_async(self):
         """异步加载所有历史记录（合并 IP 和 pkg 历史）"""
@@ -4027,7 +4051,7 @@ class ADBToolApp:
                 
             # 输出该组的命令
             for name, cmd in group['commands']:
-                self.status_text.insert(tk.END, f"  {cmd_index:2d}. {name:<20} → {cmd}\n", "info")
+                self.status_text.insert(tk.END, f"  {cmd_index:2d}. {name:<30} → {cmd}\n", "info")
                 cmd_index += 1
                 
             # 组间空行
@@ -4163,7 +4187,7 @@ class ADBToolApp:
             pass  # 失败不提示
 
     def _setup_drag_drop(self):
-        """设置拖拽APK文件功能"""
+        """设置拖拽APK文件和脚本文件功能"""
         # 先设置占位符文本
         def setup_placeholder():
             if not self.apk_entry.get():
@@ -4187,8 +4211,8 @@ class ADBToolApp:
             import tkinterdnd2 as tkdnd
             from tkinterdnd2 import DND_FILES
             
-            def on_drop(event):
-                """处理文件拖拽（优化版 - 异步提取包名，不阻塞UI）"""
+            def on_drop_apk(event):
+                """处理APK文件拖拽（优化版 - 异步提取包名，不阻塞UI）"""
                 self.apk_entry.config(background="white")
                 
                 # 获取拖拽的文件路径
@@ -4223,19 +4247,73 @@ class ADBToolApp:
                     else:
                         self.update_status("⚠️ 请拖拽有效的.apk文件", False)
             
-            def on_drag_enter(event):
+            def on_drag_enter_apk(event):
                 """鼠标进入拖拽区域时的视觉反馈"""
                 self.apk_entry.config(background="lightblue")
             
-            def on_drag_leave(event):
+            def on_drag_leave_apk(event):
                 """鼠标离开拖拽区域时恢复原样"""
                 self.apk_entry.config(background="white")
             
-            # 注册拖拽事件
+            # 注册APK拖拽事件
             self.apk_entry.drop_target_register(DND_FILES)
-            self.apk_entry.dnd_bind('<<Drop>>', on_drop)
-            self.apk_entry.dnd_bind('<<DragEnter>>', on_drag_enter)
-            self.apk_entry.dnd_bind('<<DragLeave>>', on_drag_leave)
+            self.apk_entry.dnd_bind('<<Drop>>', on_drop_apk)
+            self.apk_entry.dnd_bind('<<DragEnter>>', on_drag_enter_apk)
+            self.apk_entry.dnd_bind('<<DragLeave>>', on_drag_leave_apk)
+            
+            # === 为脚本输入框添加拖拽支持 ===
+            if hasattr(self, 'script_entry'):
+                def setup_script_placeholder():
+                    if not self.script_entry.get():
+                        self.script_entry.insert(0, "可直接拖拽.sh脚本文件到此处...")
+                    
+                def on_script_focus_in(event):
+                    if self.script_entry.get() == "可直接拖拽.sh脚本文件到此处...":
+                        self.script_entry.delete(0, tk.END)
+                        
+                def on_script_focus_out(event):
+                    if not self.script_entry.get():
+                        setup_script_placeholder()
+                
+                # 绑定焦点事件
+                self.script_entry.bind('<FocusIn>', on_script_focus_in)
+                self.script_entry.bind('<FocusOut>', on_script_focus_out)
+                setup_script_placeholder()
+                
+                def on_drop_script(event):
+                    """处理脚本文件拖拽"""
+                    self.script_entry.config(background="white")
+                    
+                    # 获取拖拽的文件路径
+                    files = event.data.split()
+                    if files:
+                        file_path = files[0].strip('{}"')
+                        
+                        # 检查文件是否存在且为.sh文件
+                        if os.path.exists(file_path) and file_path.lower().endswith('.sh'):
+                            # 清除占位符
+                            self.script_entry.delete(0, tk.END)
+                            self.script_entry.insert(0, file_path)
+                            
+                            file_name = os.path.basename(file_path)
+                            self.update_status(f"✅ 已选择脚本文件: {file_name}", True)
+                            self.update_status(f"💡 点击'推送脚本'按钮上传到设备", True)
+                        else:
+                            self.update_status("⚠️ 请拖拽有效的.sh脚本文件", False)
+                
+                def on_drag_enter_script(event):
+                    """鼠标进入拖拽区域时的视觉反馈"""
+                    self.script_entry.config(background="lightgreen")
+                
+                def on_drag_leave_script(event):
+                    """鼠标离开拖拽区域时恢复原样"""
+                    self.script_entry.config(background="white")
+                
+                # 注册脚本拖拽事件
+                self.script_entry.drop_target_register(DND_FILES)
+                self.script_entry.dnd_bind('<<Drop>>', on_drop_script)
+                self.script_entry.dnd_bind('<<DragEnter>>', on_drag_enter_script)
+                self.script_entry.dnd_bind('<<DragLeave>>', on_drag_leave_script)
             
         except ImportError:
             # 如果没有安装tkinterdnd2，提供基本的文件选择功能
@@ -4310,7 +4388,7 @@ class ADBToolApp:
             self.update_status(f"打开工厂菜单时出错：{str(e)}", False)
         
     def open_cmd_window(self):
-        """打开 CMD 窗口（在当前目录或设备相关目录）"""
+        """打开 CMD 窗口（在日志路径下）"""
         try:
             # 获取目标设备 IP
             target_ip = self.get_ip_address()
@@ -4332,8 +4410,14 @@ class ADBToolApp:
                     "echo."
                 ]
                 
-            # 设置工作目录为应用所在目录
-            work_dir = os.path.dirname(os.path.abspath(__file__))
+            # 设置工作目录为用户设置的日志路径或默认路径
+            user_log_path = self.log_path_entry.get().strip()
+            if not user_log_path:
+                user_log_path = self.default_log_path
+            
+            # 确保路径存在
+            os.makedirs(user_log_path, exist_ok=True)
+            work_dir = os.path.normpath(user_log_path)
                 
             # 创建批处理脚本来启动带初始命令的 CMD
             import tempfile
@@ -4375,7 +4459,7 @@ class ADBToolApp:
             cleanup_thread.start()
                 
             # 显示成功信息
-            self.update_status("🖥️ CMD 窗口已打开", True)
+            self.update_status(f"🖥️ CMD 窗口已打开 (路径: {work_dir})", True)
                 
         except Exception as e:
             self.update_status(f"打开 CMD 窗口失败：{str(e)}", False)
@@ -4415,55 +4499,55 @@ class ADBToolApp:
     
     def key_up(self):
         """模拟上方向键"""
-        self._send_key_event(19, "上")
+        self._send_key_event(19, "方向键-上 (DPAD_UP)")
     
     def key_down(self):
         """模拟下方向键"""
-        self._send_key_event(20, "下")
+        self._send_key_event(20, "方向键-下 (DPAD_DOWN)")
     
     def key_left(self):
         """模拟左方向键"""
-        self._send_key_event(21, "左")
+        self._send_key_event(21, "方向键-左 (DPAD_LEFT)")
     
     def key_right(self):
         """模拟右方向键"""
-        self._send_key_event(22, "右")
+        self._send_key_event(22, "方向键-右 (DPAD_RIGHT)")
     
     def key_enter(self):
         """模拟确认键（Enter）"""
-        self._send_key_event(66, "确认")
+        self._send_key_event(66, "确认键 (ENTER/DPAD_CENTER)")
     
     def key_back(self):
         """模拟返回键"""
-        self._send_key_event(4, "返回")
+        self._send_key_event(4, "返回键 (BACK)")
     
     def key_home(self):
         """模拟主页键"""
-        self._send_key_event(3, "主页")
+        self._send_key_event(3, "主页键 (HOME)")
     
     def key_menu(self):
         """模拟菜单键"""
-        self._send_key_event(82, "菜单")
+        self._send_key_event(82, "菜单键 (MENU)")
     
     def key_volume_up(self):
         """模拟音量+"""
-        self._send_key_event(24, "音量+")
+        self._send_key_event(24, "音量增加键 (VOLUME_UP)")
     
     def key_volume_down(self):
         """模拟音量-"""
-        self._send_key_event(25, "音量-")
+        self._send_key_event(25, "音量减少键 (VOLUME_DOWN)")
     
     def key_mute(self):
         """模拟静音键"""
-        self._send_key_event(164, "静音")
+        self._send_key_event(164, "静音键 (MUTE)")
     
     def key_power(self):
         """模拟电源键"""
-        self._send_key_event(26, "电源")
+        self._send_key_event(26, "电源键 (POWER)")
     
     def key_lock(self):
         """模拟锁屏键"""
-        self._send_key_event(276, "锁屏")
+        self._send_key_event(276, "锁屏键 (LOCK)")
     
     def key_media_prev(self):
         """模拟上一曲"""
@@ -4501,4 +4585,795 @@ class ADBToolApp:
             error_msg = f"模拟按键 {key_name} 失败: {str(e)}"
             logging.error(f"[按键模拟] {error_msg}", exc_info=True)
             self.update_status(f"✗ {error_msg}", False)
+    
+    # ==================== 性能监控相关方法 ====================
+    
+    def refresh_perf_package_list(self):
+        """刷新性能监控的包名列表"""
+        try:
+            self.update_status("⏳ 正在获取应用列表...", True, "info")
+            
+            # 获取已安装的包名列表
+            output, success = self.run_adb_with_target("adb shell pm list packages")
+            
+            if success:
+                # 解析包名
+                packages = [line.replace("package:", "").strip() 
+                           for line in output.splitlines() if line.strip()]
+                
+                # 保存完整列表（用于搜索）
+                self._perf_all_packages = sorted(packages)
+                
+                # 隐藏下拉列表
+                self._hide_perf_dropdown()
+                
+                self.update_status(f"✓ 已加载 {len(packages)} 个应用", True)
+                logging.info(f"[性能监控] 已加载 {len(packages)} 个应用")
+            else:
+                self.update_status(f"✗ 获取应用列表失败: {output}", False)
+        
+        except Exception as e:
+            logging.error(f"[性能监控] 刷新包名列表失败: {str(e)}", exc_info=True)
+            self.update_status(f"✗ 刷新失败: {str(e)}", False)
+    
+    def _on_perf_package_search(self, event=None):
+        """性能监控包名搜索过滤（Entry + 浮动Listbox）"""
+        try:
+            if not hasattr(self, '_perf_all_packages') or not self._perf_all_packages:
+                return
+            
+            # 获取输入内容
+            search_text = self.perf_package_entry.get().strip().lower()
+            
+            if not search_text:
+                # 如果输入为空，隐藏下拉列表
+                self._hide_perf_dropdown()
+                return
+            
+            # 模糊匹配：包含关键字的包名
+            matched = [
+                pkg for pkg in self._perf_all_packages
+                if search_text in pkg.lower()
+            ]
+            
+            if not matched:
+                # 没有匹配项，隐藏下拉列表
+                self._hide_perf_dropdown()
+                return
+            
+            # 显示或更新浮动下拉列表
+            self._show_perf_dropdown(matched)
+            
+        except Exception as e:
+            logging.debug(f"[性能监控搜索] 过滤失败: {e}")
+    
+    def _show_perf_dropdown(self, packages):
+        """显示浮动下拉列表"""
+        try:
+            # 如果下拉列表不存在，创建它
+            if self.perf_dropdown_toplevel is None or not self.perf_dropdown_toplevel.winfo_exists():
+                self._create_perf_dropdown()
+            
+            # 更新列表内容
+            self.perf_dropdown_listbox.delete(0, tk.END)
+            for pkg in packages:
+                self.perf_dropdown_listbox.insert(tk.END, pkg)
+            
+            # 显示下拉列表
+            self.perf_dropdown_toplevel.deiconify()
+            
+            # 计算位置和宽度
+            entry_x = self.perf_package_entry.winfo_rootx()
+            entry_y = self.perf_package_entry.winfo_rooty()
+            entry_height = self.perf_package_entry.winfo_height()
+            entry_width = self.perf_package_entry.winfo_width()
+            
+            # 设置下拉列表的宽度和位置
+            self.perf_dropdown_toplevel.geometry(f"{entry_width}x150+{entry_x}+{entry_y + entry_height}")
+            
+        except Exception as e:
+            logging.debug(f"[性能监控搜索] 显示下拉列表失败: {e}")
+    
+    def _create_perf_dropdown(self):
+        """创建浮动下拉列表"""
+        try:
+            # 创建 Toplevel 窗口
+            self.perf_dropdown_toplevel = tk.Toplevel(self.root)
+            self.perf_dropdown_toplevel.withdraw()  # 初始隐藏
+            self.perf_dropdown_toplevel.overrideredirect(True)  # 无边框
+            self.perf_dropdown_toplevel.attributes('-topmost', True)  # 置顶
+            
+            # 创建 Listbox
+            self.perf_dropdown_listbox = tk.Listbox(
+                self.perf_dropdown_toplevel,
+                font=('Microsoft YaHei UI', 9),
+                selectbackground='#0078D4',
+                selectforeground='white',
+                bd=1,
+                relief='solid',
+                highlightthickness=0
+            )
+            self.perf_dropdown_listbox.pack(fill=tk.BOTH, expand=True)
+            
+            # 绑定点击事件
+            self.perf_dropdown_listbox.bind('<ButtonRelease-1>', self._on_perf_package_select)
+            
+            # 绑定键盘事件（上下键选择，回车确认）
+            self.perf_dropdown_listbox.bind('<Return>', self._on_perf_package_select)
+            self.perf_dropdown_listbox.bind('<Escape>', lambda e: self._hide_perf_dropdown())
+            
+            # 绑定鼠标滚轮
+            self.perf_dropdown_listbox.bind('<MouseWheel>', self._on_perf_dropdown_mousewheel)
+            
+        except Exception as e:
+            logging.error(f"[性能监控] 创建下拉列表失败: {e}")
+    
+    def _hide_perf_dropdown(self):
+        """隐藏下拉列表"""
+        try:
+            if self.perf_dropdown_toplevel and self.perf_dropdown_toplevel.winfo_exists():
+                self.perf_dropdown_toplevel.withdraw()
+        except Exception as e:
+            logging.debug(f"[性能监控搜索] 隐藏下拉列表失败: {e}")
+    
+    def _on_perf_package_select(self, event=None):
+        """选择包名"""
+        try:
+            selection = self.perf_dropdown_listbox.curselection()
+            if selection:
+                package_name = self.perf_dropdown_listbox.get(selection[0])
+                # 设置到输入框
+                self.perf_package_entry.delete(0, tk.END)
+                self.perf_package_entry.insert(0, package_name)
+                # 隐藏下拉列表
+                self._hide_perf_dropdown()
+                logging.info(f"[性能监控] 选择包名: {package_name}")
+        except Exception as e:
+            logging.debug(f"[性能监控搜索] 选择包名失败: {e}")
+    
+    def _on_perf_dropdown_mousewheel(self, event):
+        """鼠标滚轮滚动"""
+        try:
+            self.perf_dropdown_listbox.yview_scroll(int(-1*(event.delta/120)), "units")
+        except:
+            pass
+    
+    def get_current_package_for_perf(self):
+        """获取当前正在运行的应用包名并设置到性能监控"""
+        try:
+            # 尝试第一个命令
+            output, success = self.run_adb_with_target("adb shell dumpsys window windows | findstr mCurrentFocus")
+            if not success or not output:
+                # 如果第一个命令失败，尝试第二个命令
+                output, success = self.run_adb_with_target("adb shell dumpsys window | findstr mCurrentFocus")
+                if not success or not output:
+                    # 如果还是失败，尝试第三个命令
+                    output, success = self.run_adb_with_target("adb shell dumpsys activity activities | findstr mResumedActivity")
+                    if not success or not output:
+                        self.update_status("获取当前应用包名失败", False)
+                        return
+    
+            package_name = None
+            # 尝试多种格式匹配
+            if "u0" in output:
+                # 格式1: mCurrentFocus=Window{...u0 包名/活动名}
+                try:
+                    package_name = output.split("u0 ")[1].split("/")[0].strip()
+                except:
+                    pass
+                
+            if not package_name and "Window{" in output:
+                # 格式2: mCurrentFocus=Window{...包名/活动名}
+                try:
+                    package_name = output.split("Window{")[1].split("/")[0].split()[-1].strip()
+                except:
+                    pass
+                
+            if not package_name and "ResumedActivity" in output:
+                # 格式3: ResumedActivity: ActivityRecord{...包名/活动名}
+                try:
+                    package_name = output.split("ResumedActivity")[1].split("/")[0].split()[-1].strip()
+                except:
+                    pass
+                
+            if not package_name:
+                # 格式4: 尝试直接从/分隔的内容中提取
+                try:
+                    parts = output.split("/")
+                    if len(parts) > 1:
+                        package_name = parts[0].split()[-1].strip()
+                except:
+                    pass
+    
+            if package_name:
+                # 验证包名格式
+                if "." in package_name and not package_name.startswith(".") and not package_name.endswith("."):
+                    # 设置到输入框
+                    if hasattr(self, 'perf_package_entry'):
+                        self.perf_package_entry.delete(0, tk.END)
+                        self.perf_package_entry.insert(0, package_name)
+                        self.update_status(f"✓ 已设置监控目标: {package_name}", True)
+                        logging.info(f"[性能监控] 设置监控目标: {package_name}")
+                    else:
+                        self.update_status("✗ 性能监控组件未初始化", False)
+                else:
+                    self.update_status("解析出的包名格式不正确", False)
+            else:
+                self.update_status("无法解析应用包名", False)
+            
+        except Exception as e:
+            logging.error(f"[性能监控] 获取当前应用失败: {str(e)}", exc_info=True)
+            self.update_status(f"✗ 获取失败: {str(e)}", False)
+    
+    def start_performance_monitor(self):
+        """开始性能监控"""
+        try:
+            # 获取包名（留空表示监控系统整体）
+            package_name = None
+            if hasattr(self, 'perf_package_entry'):
+                pkg_input = self.perf_package_entry.get().strip()
+                if pkg_input:  # 如果有选择包名
+                    package_name = pkg_input
+            
+            # 获取采样间隔
+            interval = 1
+            if hasattr(self, 'perf_interval_var'):
+                try:
+                    interval = int(self.perf_interval_var.get())
+                except:
+                    interval = 1
+            
+            # 设置回调函数更新UI
+            self.performance_monitor.update_callback = self._update_performance_ui
+            
+            # 显示进度条
+            if hasattr(self, 'perf_progress'):
+                self.perf_progress.pack(fill=tk.X, pady=5)
+                self.perf_progress.start()
+            
+            # 启动监控
+            success = self.performance_monitor.start_monitoring(package_name, interval)
+            
+            if not success:
+                if hasattr(self, 'perf_progress'):
+                    self.perf_progress.stop()
+                    self.perf_progress.pack_forget()
+        
+        except Exception as e:
+            logging.error(f"[性能监控] 启动失败: {str(e)}", exc_info=True)
+            self.update_status(f"✗ 启动性能监控失败: {str(e)}", False)
+    
+    def stop_performance_monitor(self):
+        """停止性能监控"""
+        try:
+            success = self.performance_monitor.stop_monitoring()
+            
+            # 隐藏进度条
+            if hasattr(self, 'perf_progress'):
+                self.perf_progress.stop()
+                self.perf_progress.pack_forget()
+            
+            return success
+        
+        except Exception as e:
+            logging.error(f"[性能监控] 停止失败: {str(e)}", exc_info=True)
+            self.update_status(f"✗ 停止性能监控失败: {str(e)}", False)
+            return False
+    
+    def get_performance_snapshot(self):
+        """获取单次性能快照"""
+        try:
+            # 获取包名
+            package_name = None
+            if hasattr(self, 'perf_package_entry'):
+                pkg_input = self.perf_package_entry.get().strip()
+                if pkg_input:
+                    package_name = pkg_input
+            
+            # 获取性能数据
+            perf_data = self.performance_monitor.get_current_performance(package_name)
+            
+            # 显示结果
+            cpu = perf_data['cpu']
+            mem = perf_data['memory']
+            fps = perf_data['fps']
+            temp = perf_data['temperature']
+            timestamp = perf_data['timestamp']
+            
+            snapshot_text = f"""
+📸 性能快照 ({timestamp})
+{'='*50}
+CPU使用率: {cpu:.1f}%
+内存使用: {mem['used']:.1f} MB / {mem['total']:.1f} MB ({mem['usage_percent']:.1f}%)
+帧率(FPS): {fps:.1f}
+设备温度: {temp:.1f}°C
+{'='*50}
+"""
+            self.update_status(snapshot_text, True, "info")
+        
+        except Exception as e:
+            logging.error(f"[性能监控] 获取快照失败: {str(e)}", exc_info=True)
+            self.update_status(f"✗ 获取性能快照失败: {str(e)}", False)
+    
+    def show_performance_summary(self):
+        """显示性能摘要报告"""
+        try:
+            summary = self.performance_monitor.get_performance_summary()
+            self.update_status(summary, True, "info")
+        
+        except Exception as e:
+            logging.error(f"[性能监控] 生成报告失败: {str(e)}", exc_info=True)
+            self.update_status(f"✗ 生成性能报告失败: {str(e)}", False)
+    
+    def _update_performance_ui(self, perf_data: dict):
+        """
+        更新性能监控UI（在主线程中调用）
+        
+        Args:
+            perf_data: 性能数据字典
+        """
+        try:
+            # 更新CPU显示
+            if hasattr(self, 'perf_cpu_label'):
+                cpu = perf_data['cpu']
+                self.perf_cpu_label.config(text=f"{cpu:.1f} %")
+                
+                # 根据CPU使用率改变颜色
+                if cpu > 80:
+                    self.perf_cpu_label.config(foreground="#E81123")  # 红色 - 高负载
+                elif cpu > 50:
+                    self.perf_cpu_label.config(foreground="#FFB900")  # 黄色 - 中等
+                else:
+                    self.perf_cpu_label.config(foreground="#107C10")  # 绿色 - 正常
+            
+            # 更新内存显示
+            if hasattr(self, 'perf_mem_label'):
+                mem = perf_data['memory']
+                mem_text = f"{mem['used']:.1f} MB / {mem['total']:.1f} MB"
+                if mem['usage_percent'] > 0:
+                    mem_text += f" ({mem['usage_percent']:.1f}%)"
+                self.perf_mem_label.config(text=mem_text)
+            
+            # 更新FPS显示
+            if hasattr(self, 'perf_fps_label'):
+                fps = perf_data['fps']
+                self.perf_fps_label.config(text=f"{fps:.1f} FPS")
+                
+                # 根据FPS改变颜色
+                if fps < 30:
+                    self.perf_fps_label.config(foreground="#E81123")  # 红色 - 卡顿
+                elif fps < 50:
+                    self.perf_fps_label.config(foreground="#FFB900")  # 黄色 - 一般
+                else:
+                    self.perf_fps_label.config(foreground="#107C10")  # 绿色 - 流畅
+            
+            # 更新温度显示
+            if hasattr(self, 'perf_temp_label'):
+                temp = perf_data['temperature']
+                self.perf_temp_label.config(text=f"{temp:.1f} °C")
+                
+                # 根据温度改变颜色
+                if temp > 45:
+                    self.perf_temp_label.config(foreground="#E81123")  # 红色 - 过热
+                elif temp > 38:
+                    self.perf_temp_label.config(foreground="#FFB900")  # 黄色 - 偏热
+                else:
+                    self.perf_temp_label.config(foreground="#107C10")  # 绿色 - 正常
+        
+        except Exception as e:
+            logging.error(f"[性能监控] UI更新失败: {str(e)}")
+    
+    # ==================== 脚本运行相关方法 ====================
+    
+    def browse_script(self):
+        """选择脚本文件"""
+        from tkinter import filedialog
+        script_path = filedialog.askopenfilename(
+            title="选择Shell脚本文件",
+            filetypes=[("Shell脚本", "*.sh"), ("所有文件", "*.*")]
+        )
+        if script_path:
+            self.script_entry.delete(0, tk.END)
+            self.script_entry.insert(0, script_path)
+            self.update_status(f"✅ 已选择脚本: {os.path.basename(script_path)}", True)
+    
+    def push_script_to_device(self):
+        """推送脚本到设备（智能检测版本）"""
+        try:
+            # 获取脚本路径
+            script_path = self.script_entry.get().strip()
+            if not script_path:
+                self.update_status("❌ 请先选择脚本文件", False)
+                return
+                
+            if not os.path.exists(script_path):
+                self.update_status(f"❌ 脚本文件不存在: {script_path}", False)
+                return
+                
+            # 获取文件名
+            script_name = os.path.basename(script_path)
+            device_path = f"/data/local/tmp/{script_name}"
+                
+            # 🆕 先检查设备上是否已存在相同版本的脚本
+            need_push = self._check_and_push_script_if_needed(script_path, device_path)
+                
+            if not need_push:
+                # 脚本已存在且无需更新，询问用户是否强制推送
+                from tkinter import messagebox
+                result = messagebox.askyesno(
+                    "脚本已存在",
+                    f"设备上已存在相同版本的脚本:\n{script_name}\n\n是否仍要重新推送？",
+                    icon="question"
+                )
+                if not result:
+                    self.update_status("❌ 已取消推送", False)
+                    return
+                
+            # 推送脚本
+            self.update_status(f"📤 正在推送脚本: {script_name}...", True)
+            output, success = self.run_adb_with_target(f'adb push "{script_path}" {device_path}')
+                
+            if success:
+                self.update_status(f"✅ 脚本推送成功: {device_path}", True)
+                    
+                # 自动赋予执行权限
+                self.update_status(f"🔧 正在赋予执行权限...", True)
+                chmod_output, chmod_success = self.run_adb_with_target(f"adb shell chmod +x {device_path}")
+                    
+                if chmod_success:
+                    self.update_status(f"✅ 执行权限已赋予", True)
+                    self.update_status(f"💡 点击'启动脚本'按钮运行此脚本", True)
+                else:
+                    self.update_status(f"⚠️ 权限赋予可能失败: {chmod_output}", False)
+            else:
+                self.update_status(f"❌ 脚本推送失败: {output}", False)
+            
+        except Exception as e:
+            self.update_status(f"❌ 推送脚本出错: {str(e)}", False)
+    
+    def start_script_on_device(self):
+        """在设备上启动脚本（异步执行）"""
+        import threading
+        
+        # 获取脚本路径
+        script_path = self.script_entry.get().strip()
+        if not script_path:
+            self.update_status("❌ 请先选择脚本文件", False)
+            return
+        
+        # 在后台线程中执行启动操作
+        thread = threading.Thread(target=self._start_script_async, args=(script_path,), daemon=True)
+        thread.start()
+        self.update_status("⏳ 正在后台启动脚本...", True)
+    
+    def _check_and_push_script_if_needed(self, script_path, device_path):
+        """检查并推送脚本（如果需要）
+        
+        Args:
+            script_path: 本地脚本路径
+            device_path: 设备上的脚本路径
+            
+        Returns:
+            bool: 是否需要推送
+        """
+        try:
+            import logging
+            import os
+            
+            # 检查本地文件是否存在
+            if not os.path.exists(script_path):
+                self.update_status(f"❌ 本地脚本文件不存在: {script_path}", False)
+                return False
+            
+            # 检查设备上是否存在脚本
+            check_output, check_success = self.run_adb_with_target(f"adb shell ls -l {device_path}")
+            
+            if not check_success or "No such file" in check_output:
+                # 设备上不存在脚本，需要推送
+                logging.info(f"[脚本检查] 设备上未找到脚本，需要推送")
+                return True
+            
+            # 解析设备上的文件信息
+            device_file_info = check_output.strip()
+            logging.info(f"[脚本检查] 设备上的文件信息: {device_file_info}")
+            
+            # 获取本地文件信息
+            local_file_size = os.path.getsize(script_path)
+            local_mod_time = os.path.getmtime(script_path)
+            
+            # 尝试从设备输出中提取文件大小（不同Android版本格式可能不同）
+            # 格式示例: "-rwxr-xr-x 1 root root 1234 2024-01-01 12:00 script.sh"
+            parts = device_file_info.split()
+            device_file_size = None
+            
+            for i, part in enumerate(parts):
+                if part.isdigit() and i > 2:  # 文件大小通常是数字
+                    try:
+                        device_file_size = int(part)
+                        break
+                    except ValueError:
+                        continue
+            
+            # 如果文件大小不同，需要重新推送
+            if device_file_size is not None and device_file_size != local_file_size:
+                logging.info(f"[脚本检查] 文件大小不同 (本地: {local_file_size}, 设备: {device_file_size})，需要推送")
+                self.update_status(f"📝 检测到脚本已更新，正在重新推送...", True)
+                return True
+            
+            # 文件大小相同，认为脚本已存在且无需更新
+            logging.info(f"[脚本检查] ✅ 脚本已存在且无需更新")
+            self.update_status(f"✅ 脚本已存在于设备上（无需重新推送）", True)
+            return False
+            
+        except Exception as e:
+            import logging
+            import traceback
+            logging.error(f"[脚本检查] 检查出错: {str(e)}\n{traceback.format_exc()}")
+            # 出错时保守处理，建议推送
+            return True
+    
+    def _start_script_async(self, script_path):
+        """异步启动脚本（在后台线程中执行）"""
+        try:
+            import logging
+            
+            logging.info(f"[脚本启动] 开始启动脚本: {script_path}")
+            
+            # 获取文件名
+            script_name = os.path.basename(script_path)
+            device_path = f"/data/local/tmp/{script_name}"
+            log_path = f"/data/local/tmp/{script_name}.log"
+            
+            logging.info(f"[脚本启动] 脚本名称: {script_name}")
+            logging.info(f"[脚本启动] 设备路径: {device_path}")
+            logging.info(f"[脚本启动] 日志路径: {log_path}")
+            
+            # 🆕 智能检查并推送脚本（如果需要）
+            need_push = self._check_and_push_script_if_needed(script_path, device_path)
+            
+            if need_push:
+                # 需要推送脚本
+                self.update_status(f"📤 正在推送脚本到设备...", True)
+                push_output, push_success = self.run_adb_with_target(f'adb push "{script_path}" {device_path}')
+                
+                if not push_success:
+                    self.update_status(f"❌ 脚本推送失败: {push_output}", False)
+                    logging.error(f"[脚本启动] ❌ 脚本推送失败: {push_output}")
+                    return
+                
+                self.update_status(f"✅ 脚本推送成功", True)
+                
+                # 赋予执行权限
+                self.update_status(f"🔧 正在赋予执行权限...", True)
+                chmod_output, chmod_success = self.run_adb_with_target(f"adb shell chmod +x {device_path}")
+                
+                if chmod_success:
+                    self.update_status(f"✅ 执行权限已赋予", True)
+                else:
+                    self.update_status(f"⚠️ 权限赋予可能失败: {chmod_output}", False)
+            else:
+                # 脚本已存在，提示用户
+                self.update_status(f"💡 使用设备上已有的脚本", True)
+            
+            # 检查脚本是否有执行权限
+            self.update_status(f"🔍 正在检查执行权限...", True)
+            perm_output, perm_success = self.run_adb_with_target(f"adb shell ls -l {device_path}")
+            
+            logging.info(f"[脚本启动] 权限检查: {perm_output[:200]}")
+            
+            if perm_success and 'x' in perm_output:
+                self.update_status(f"✅ 脚本已有执行权限", True)
+                logging.info(f"[脚本启动] ✅ 脚本已有执行权限")
+            else:
+                self.update_status(f"⚠️ 脚本可能没有执行权限，尝试赋予权限...", True)
+                chmod_output, chmod_success = self.run_adb_with_target(f"adb shell chmod +x {device_path}")
+                if chmod_success:
+                    self.update_status(f"✅ 已赋予执行权限", True)
+                    logging.info(f"[脚本启动] ✅ 已赋予执行权限")
+                else:
+                    self.update_status(f"⚠️ 权限赋予可能失败: {chmod_output}", False)
+                    logging.warning(f"[脚本启动] 权限赋予失败: {chmod_output}")
+            
+            # 启动脚本（后台运行）- 使用更可靠的方式
+            self.update_status(f"▶️ 正在启动脚本: {script_name}...", True)
+            logging.info(f"[脚本启动] 准备执行启动命令...")
+            
+            # 方式1: 使用 nohup 后台执行（最可靠的方式）
+            start_cmd = f'adb shell "cd /data/local/tmp && nohup ./{script_name} > {log_path} 2>&1 &"'
+            logging.info(f"[脚本启动] 执行命令: {start_cmd}")
+            
+            output, success = self.run_adb_with_target(start_cmd)
+            
+            logging.info(f"[脚本启动] 启动结果: success={success}, output={output[:200] if output else 'None'}")
+            
+            if success:
+                self.update_status(f"✅ 脚本已在后台启动", True)
+                self.update_status(f"📝 日志文件: {log_path}", True)
+                self.update_status(f"💡 可使用'导出Monkey日志'按钮查看日志", True)
+                logging.info(f"[脚本启动] ✅ 脚本启动成功")
+                
+                # 等待1秒后检查日志文件是否生成
+                import time
+                self.update_status(f"⏳ 等待1秒后检查日志文件...", True)
+                time.sleep(1)
+                
+                logging.info(f"[脚本启动] 开始检查日志文件是否存在...")
+                check_log_output, check_log_success = self.run_adb_with_target(f"adb shell ls -l {log_path}")
+                
+                logging.info(f"[脚本启动] 日志文件检查: success={check_log_success}, output={check_log_output[:200] if check_log_output else 'None'}")
+                
+                if check_log_success and "No such file" not in check_log_output:
+                    self.update_status(f"✅ 日志文件已生成，脚本正在运行", True)
+                    logging.info(f"[脚本启动] ✅ 日志文件已生成，脚本正在运行")
+                    
+                    # 显示日志文件大小
+                    if check_log_output.strip():
+                        self.update_status(f"📊 日志文件信息: {check_log_output.strip()}", True)
+                else:
+                    self.update_status(f"⚠️ 日志文件尚未生成，请检查脚本是否正确", False)
+                    logging.warning(f"[脚本启动] ⚠️ 日志文件未生成")
+                    
+                    # 尝试查看目录内容
+                    dir_output, dir_success = self.run_adb_with_target("adb shell ls -la /data/local/tmp/")
+                    if dir_success:
+                        logging.info(f"[脚本启动] /data/local/tmp 目录内容:\n{dir_output[:500]}")
+                        self.update_status(f"📁 /data/local/tmp 目录内容:\n{dir_output[:300]}", True)
+            else:
+                self.update_status(f"❌ 脚本启动失败: {output}", False)
+                logging.error(f"[脚本启动] ❌ 脚本启动失败: {output}")
+                
+                # 尝试方式2: 使用备用方式
+                self.update_status(f"🔄 尝试使用备用启动方式...", True)
+                logging.info(f"[脚本启动] 尝试备用启动方式...")
+                
+                start_cmd2 = f"adb shell nohup sh {device_path} > {log_path} 2>&1 &"
+                logging.info(f"[脚本启动] 备用命令: {start_cmd2}")
+                
+                output2, success2 = self.run_adb_with_target(start_cmd2)
+                
+                logging.info(f"[脚本启动] 备用启动结果: success={success2}, output={output2[:200] if output2 else 'None'}")
+                
+                if success2:
+                    self.update_status(f"✅ 脚本已通过备用方式启动", True)
+                    self.update_status(f"📝 日志文件: {log_path}", True)
+                    logging.info(f"[脚本启动] ✅ 备用方式启动成功")
+                else:
+                    self.update_status(f"❌ 备用启动方式也失败: {output2}", False)
+                    logging.error(f"[脚本启动] ❌ 备用方式也失败: {output2}")
+        
+        except Exception as e:
+            import traceback
+            error_traceback = traceback.format_exc()
+            logging.error(f"[脚本启动] ❌ 异常: {str(e)}\n{error_traceback}")
+            self.update_status(f"❌ 启动脚本出错: {str(e)}", False)
+    
+    def stop_script_on_device(self):
+        """停止设备上运行的脚本"""
+        try:
+            # 获取脚本路径
+            script_path = self.script_entry.get().strip()
+            if not script_path:
+                self.update_status("❌ 请先选择脚本文件", False)
+                return
+            
+            # 获取文件名
+            script_name = os.path.basename(script_path)
+            
+            # 查找并杀死进程
+            self.update_status(f"⏹️ 正在停止脚本: {script_name}...", True)
+            
+            # 先查找进程
+            ps_output, ps_success = self.run_adb_with_target(f"adb shell ps | grep {script_name}")
+            
+            if ps_success and ps_output.strip():
+                # 提取PID并杀死
+                lines = ps_output.strip().split('\n')
+                for line in lines:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        pid = parts[1]
+                        if pid.isdigit():
+                            kill_output, kill_success = self.run_adb_with_target(f"adb shell kill {pid}")
+                            if kill_success:
+                                self.update_status(f"✅ 已停止进程 PID: {pid}", True)
+                            else:
+                                self.update_status(f"⚠️ 停止进程 {pid} 失败", False)
+            else:
+                self.update_status(f"⚠️ 未找到运行中的脚本进程", False)
+        
+        except Exception as e:
+            self.update_status(f"❌ 停止脚本出错: {str(e)}", False)
+    
+    def clear_tmp_directory(self):
+        """清空 /data/local/tmp 目录下的所有文件"""
+        try:
+            from tkinter import messagebox
+            
+            # 确认对话框
+            result = messagebox.askyesno(
+                "确认清空",
+                "确定要清空 /data/local/tmp 目录下的所有文件吗？\n\n此操作不可恢复！",
+                icon="warning"
+            )
+            
+            if not result:
+                self.update_status("❌ 已取消清空操作", False)
+                return
+            
+            self.update_status("🗑️ 正在清空 /data/local/tmp 目录...", True)
+            
+            # 执行清空命令
+            clear_output, clear_success = self.run_adb_with_target("adb shell rm -rf /data/local/tmp/*")
+            
+            if clear_success:
+                self.update_status("✅ /data/local/tmp 目录已清空", True)
+                
+                # 验证清空结果
+                verify_output, verify_success = self.run_adb_with_target("adb shell ls /data/local/tmp/")
+                if verify_success and (not verify_output.strip() or "No such file" in verify_output):
+                    self.update_status("✅ 验证成功：目录已完全清空", True)
+                else:
+                    self.update_status(f"⚠️ 目录下可能还有文件:\n{verify_output}", False)
+            else:
+                self.update_status(f"❌ 清空失败: {clear_output}", False)
+        
+        except Exception as e:
+            self.update_status(f"❌ 清空目录出错: {str(e)}", False)
+    
+    def export_monkey_logs(self):
+        """导出Monkey日志"""
+        try:
+            # 获取用户设置的日志路径
+            user_log_path = self.log_path_entry.get().strip()
+            if not user_log_path:
+                user_log_path = self.default_log_path
+            
+            # 确保路径存在
+            os.makedirs(user_log_path, exist_ok=True)
+            
+            # 列出设备上的日志文件
+            self.update_status(f"🔍 正在查找 /data/local/tmp 下的日志文件...", True)
+            ls_output, ls_success = self.run_adb_with_target("adb shell ls -l /data/local/tmp/*.log")
+            
+            if not ls_success or "No such file" in ls_output:
+                self.update_status(f"⚠️ 未找到日志文件 (*.log)", False)
+                return
+            
+            # 解析日志文件列表
+            log_files = []
+            for line in ls_output.strip().split('\n'):
+                if line.strip() and '.log' in line:
+                    # 提取文件名
+                    parts = line.split()
+                    if parts:
+                        filename = parts[-1].split('/')[-1]
+                        if filename.endswith('.log'):
+                            log_files.append(filename)
+            
+            if not log_files:
+                self.update_status(f"⚠️ 未找到有效的日志文件", False)
+                return
+            
+            # 导出每个日志文件
+            exported_count = 0
+            for log_file in log_files:
+                device_path = f"/data/local/tmp/{log_file}"
+                local_path = os.path.join(user_log_path, log_file)
+                
+                self.update_status(f"📥 正在导出: {log_file}...", True)
+                pull_output, pull_success = self.run_adb_with_target(f"adb pull {device_path} \"{local_path}\"")
+                
+                if pull_success:
+                    exported_count += 1
+                    self.update_status(f"✅ 已导出: {log_file} -> {local_path}", True)
+                else:
+                    self.update_status(f"❌ 导出失败: {log_file} - {pull_output}", False)
+            
+            if exported_count > 0:
+                self.update_status(f"\n🎉 成功导出 {exported_count} 个日志文件到:\n{user_log_path}", True)
+            else:
+                self.update_status(f"❌ 没有成功导出任何日志文件", False)
+        
+        except Exception as e:
+            self.update_status(f"❌ 导出日志出错: {str(e)}", False)
 

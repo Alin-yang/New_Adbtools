@@ -3,6 +3,9 @@
 # ADB Tool PyInstaller SPEC文件
 # 自动生成，包含tkinterdnd2库的必要文件
 
+import os
+from PyInstaller.utils.hooks import collect_data_files
+
 block_cipher = None
 
 # 包含所有平台的tkdnd文件以确保兼容性
@@ -15,6 +18,18 @@ tkdnd_binaries = [
     ('D:/python/Lib/site-packages/tkinterdnd2/tkdnd/win-x64', 'tkinterdnd2/tkdnd/win-x64'),
     ('D:/python/Lib/site-packages/tkinterdnd2/tkdnd/win-x86', 'tkinterdnd2/tkdnd/win-x86'),
 ]
+
+# 收集 scrcpy 目录下的所有文件
+scrcpy_dir = 'tools/scrcpy'
+scrcpy_files = []
+if os.path.exists(scrcpy_dir):
+    for root, dirs, files in os.walk(scrcpy_dir):
+        for file in files:
+            full_path = os.path.join(root, file)
+            # 计算相对路径
+            rel_path = os.path.relpath(full_path, scrcpy_dir)
+            dest_dir = os.path.join('tools/scrcpy', os.path.dirname(rel_path))
+            scrcpy_files.append((full_path, dest_dir))
 
 a = Analysis(
     ['main.py'],
@@ -29,9 +44,7 @@ a = Analysis(
         ('cache_manager.py', '.'),
         ('device_monitor.py', '.'),
         ('adaptive_cache.py', '.'),
-        # 集成 scrcpy 投屏工具
-        ('tools/scrcpy', 'tools/scrcpy'),
-    ],
+    ] + scrcpy_files,  # 添加 scrcpy 文件
     hiddenimports=[
         'tkinterdnd2',
         'tkinterdnd2.TkinterDnD',

@@ -61,6 +61,8 @@ class LayoutModern:
         self.create_app_tab()
         self.create_log_screen_tab()
         self.create_mirror_tab()      # 投屏
+        self.create_performance_tab() # 性能监控
+        self.create_script_runner_tab()  # 脚本运行
         self.create_advanced_tab()
         
         # 创建右侧输出区域
@@ -293,7 +295,9 @@ class LayoutModern:
             ("📱 设备管理", "device"),
             ("📦 应用管理", "app"),
             ("📋 日志录屏", "log_screen"),
-            ("🖥️ 投屏", "mirror"),  # 新增投屏 Tab
+            ("🖥️ 投屏", "mirror"),  # 投屏 Tab
+            ("📊 性能监控", "performance"),  # 性能监控 Tab
+            ("🔧 脚本运行", "script_runner"),  # 脚本运行 Tab
             ("⚙️ 高级工具", "advanced"),
         ]
         
@@ -346,8 +350,8 @@ class LayoutModern:
         
         # 配置主容器的grid
         content_frame.grid_rowconfigure(0, weight=1)
-        content_frame.grid_columnconfigure(0, weight=0, minsize=300)  # 左侧功能按钮区（进一步缩小）
-        content_frame.grid_columnconfigure(1, weight=1)  # 右侧输出框区（弹性扩展）
+        content_frame.grid_columnconfigure(0, weight=1, minsize=300)  # 左侧功能按钮区
+        content_frame.grid_columnconfigure(1, weight=3)  # 右侧输出框区（弹性扩展，更宽）
         
         # === 左侧：功能按钮区域 ===
         left_panel = ttk.Frame(content_frame, style='Card.TFrame')
@@ -644,6 +648,381 @@ class LayoutModern:
             row=0, col=0
         )
     
+    def create_script_runner_tab(self) -> None:
+        """创建脚本运行Tab"""
+        tab = ttk.Frame(self.content_area, style='Card.TFrame')
+        self.tabs['script_runner'] = tab
+        
+        tab.columnconfigure(0, weight=1)
+        tab.columnconfigure(1, weight=1)
+        tab.rowconfigure(0, weight=0)  # Shell脚本管理
+        tab.rowconfigure(1, weight=1)  # Monkey日志导出 + 设备文件管理器（左右排列，扩展）
+        
+        # 脚本选择卡片
+        script_card = ttk.LabelFrame(
+            tab,
+            text="📜 Shell脚本管理",
+            style='Card.TLabelframe',
+            padding=(10, 8)
+        )
+        script_card.grid(row=0, column=0, columnspan=2, sticky=tk.EW, padx=6, pady=6)
+        
+        # 脚本文件路径行
+        script_row = ttk.Frame(script_card, style='Card.TFrame')
+        script_row.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(
+            script_row,
+            text="脚本文件:",
+            font=('Microsoft YaHei UI', 9),
+            background=self.COLORS["bg_card"]
+        ).pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.app.script_entry = ttk.Entry(
+            script_row,
+            font=('Microsoft YaHei UI', 9),
+            width=40
+        )
+        self.app.script_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        
+        browse_btn = ttk.Button(
+            script_row,
+            text="浏览",
+            command=self.app.browse_script,
+            style='Secondary.TButton',
+            width=8
+        )
+        browse_btn.pack(side=tk.LEFT)
+        
+        # 操作按钮行
+        btn_row = ttk.Frame(script_card, style='Card.TFrame')
+        btn_row.pack(fill=tk.X, pady=8)
+        
+        push_btn = ttk.Button(
+            btn_row,
+            text="📤 推送脚本",
+            command=self.app.push_script_to_device,
+            style='Primary.TButton'
+        )
+        push_btn.pack(side=tk.LEFT, padx=5)
+        
+        start_btn = ttk.Button(
+            btn_row,
+            text="▶️ 启动脚本",
+            command=self.app.start_script_on_device,
+            style='Primary.TButton'
+        )
+        start_btn.pack(side=tk.LEFT, padx=5)
+        
+        stop_btn = ttk.Button(
+            btn_row,
+            text="⏹️ 停止脚本",
+            command=self.app.stop_script_on_device,
+            style='Danger.TButton'
+        )
+        stop_btn.pack(side=tk.LEFT, padx=5)
+        
+        clear_btn = ttk.Button(
+            btn_row,
+            text="🗑️ 清空tmp",
+            command=self.app.clear_tmp_directory,
+            style='Secondary.TButton'
+        )
+        clear_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Monkey日志导出卡片（紧凑版）
+        monkey_card = ttk.LabelFrame(
+            tab,
+            text="🐒 Monkey日志导出",
+            style='Card.TLabelframe',
+            padding=(10, 4)
+        )
+        monkey_card.grid(row=1, column=0, sticky=tk.N, padx=6, pady=(2, 6))
+        
+        # 仅保留按钮
+        export_btn = ttk.Button(
+            monkey_card,
+            text=" 导出日志",
+            command=self.app.export_monkey_logs,
+            style='Primary.TButton',
+            width=15
+        )
+        export_btn.pack(side=tk.RIGHT, padx=5, pady=5)
+    
+    def create_performance_tab(self) -> None:
+        """创建性能监控Tab"""
+        tab = ttk.Frame(self.content_area, style='Card.TFrame')
+        self.tabs['performance'] = tab
+        
+        tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(0, weight=0)
+        tab.rowconfigure(1, weight=0)
+        tab.rowconfigure(2, weight=0)
+        tab.rowconfigure(3, weight=0)
+        tab.rowconfigure(4, weight=1)
+        
+        # 控制面板卡片
+        control_card = ttk.LabelFrame(
+            tab,
+            text="⚡ 性能监控控制",
+            style='Card.TLabelframe',
+            padding=(10, 8)
+        )
+        control_card.grid(row=0, column=0, sticky=tk.EW, padx=6, pady=6)
+        tab.columnconfigure(0, weight=1)
+        
+        # 包名选择行（使用Entry + 浮动Listbox实现动态搜索）
+        pkg_row = ttk.Frame(control_card, style='Card.TFrame')
+        pkg_row.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(
+            pkg_row,
+            text="监控应用:",
+            font=('Microsoft YaHei UI', 9),
+            background=self.COLORS["bg_card"]
+        ).pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 包名输入框（Entry）
+        self.app.perf_package_entry = ttk.Entry(
+            pkg_row,
+            font=('Microsoft YaHei UI', 9),
+            width=30
+        )
+        self.app.perf_package_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        
+        # 绑定键盘事件实现搜索过滤
+        self.app.perf_package_entry.bind('<KeyRelease>', self.app._on_perf_package_search)
+        
+        # 创建浮动下拉列表（Toplevel）
+        self.app.perf_dropdown_listbox = None
+        self.app.perf_dropdown_toplevel = None
+        
+        # 保存完整的包名列表（用于搜索过滤）
+        self.app._perf_all_packages = []
+        
+        # 刷新包名列表按钮
+        refresh_pkg_btn = ttk.Button(
+            pkg_row,
+            text="🔄 刷新",
+            command=self.app.refresh_perf_package_list,
+            style='Secondary.TButton',
+            width=8
+        )
+        refresh_pkg_btn.pack(side=tk.LEFT, padx=2)
+        
+        # 获取当前包名按钮
+        get_current_btn = ttk.Button(
+            pkg_row,
+            text="📱 当前",
+            command=self.app.get_current_package_for_perf,
+            style='Secondary.TButton',
+            width=8
+        )
+        get_current_btn.pack(side=tk.LEFT)
+        
+        # 采样间隔
+        interval_row = ttk.Frame(control_card, style='Card.TFrame')
+        interval_row.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(
+            interval_row,
+            text="采样间隔:",
+            font=('Microsoft YaHei UI', 9),
+            background=self.COLORS["bg_card"]
+        ).pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.app.perf_interval_var = tk.StringVar(value="1")
+        interval_combo = ttk.Combobox(
+            interval_row,
+            textvariable=self.app.perf_interval_var,
+            values=["1", "2", "5", "10"],
+            width=10,
+            font=('Microsoft YaHei UI', 9),
+            state="readonly"
+        )
+        interval_combo.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(
+            interval_row,
+            text="秒",
+            font=('Microsoft YaHei UI', 9),
+            background=self.COLORS["bg_card"]
+        ).pack(side=tk.LEFT)
+        
+        # 按钮行
+        btn_row = ttk.Frame(control_card, style='Card.TFrame')
+        btn_row.pack(fill=tk.X, pady=8)
+        
+        start_btn = ttk.Button(
+            btn_row,
+            text="▶ 开始监控",
+            command=self.app.start_performance_monitor,
+            style='Primary.TButton'
+        )
+        start_btn.pack(side=tk.LEFT, padx=5)
+        
+        stop_btn = ttk.Button(
+            btn_row,
+            text="⏹ 停止监控",
+            command=self.app.stop_performance_monitor,
+            style='Danger.TButton'
+        )
+        stop_btn.pack(side=tk.LEFT, padx=5)
+        
+        snapshot_btn = ttk.Button(
+            btn_row,
+            text="📸 单次快照",
+            command=self.app.get_performance_snapshot,
+            style='Secondary.TButton'
+        )
+        snapshot_btn.pack(side=tk.LEFT, padx=5)
+        
+        summary_btn = ttk.Button(
+            btn_row,
+            text="📊 生成报告",
+            command=self.app.show_performance_summary,
+            style='Secondary.TButton'
+        )
+        summary_btn.pack(side=tk.LEFT, padx=5)
+        
+        # 实时数据显示卡片
+        realtime_card = ttk.LabelFrame(
+            tab,
+            text="📈 实时数据",
+            style='Card.TLabelframe',
+            padding=(10, 8)
+        )
+        realtime_card.grid(row=1, column=0, sticky=tk.EW, padx=6, pady=6)
+        
+        # CPU显示
+        cpu_frame = ttk.Frame(realtime_card, style='Card.TFrame')
+        cpu_frame.pack(fill=tk.X, pady=3)
+        
+        ttk.Label(
+            cpu_frame,
+            text="CPU:",
+            font=('Microsoft YaHei UI', 9, 'bold'),
+            background=self.COLORS["bg_card"],
+            width=8
+        ).pack(side=tk.LEFT)
+        
+        self.app.perf_cpu_label = ttk.Label(
+            cpu_frame,
+            text="-- %",
+            font=('Consolas', 10),
+            background=self.COLORS["bg_card"],
+            foreground=self.COLORS["primary"]
+        )
+        self.app.perf_cpu_label.pack(side=tk.LEFT, padx=10)
+        
+        # 内存显示
+        mem_frame = ttk.Frame(realtime_card, style='Card.TFrame')
+        mem_frame.pack(fill=tk.X, pady=3)
+        
+        ttk.Label(
+            mem_frame,
+            text="内存:",
+            font=('Microsoft YaHei UI', 9, 'bold'),
+            background=self.COLORS["bg_card"],
+            width=8
+        ).pack(side=tk.LEFT)
+        
+        self.app.perf_mem_label = ttk.Label(
+            mem_frame,
+            text="-- MB / -- MB (--%)",
+            font=('Consolas', 10),
+            background=self.COLORS["bg_card"],
+            foreground="#107C10"
+        )
+        self.app.perf_mem_label.pack(side=tk.LEFT, padx=10)
+        
+        # FPS显示
+        fps_frame = ttk.Frame(realtime_card, style='Card.TFrame')
+        fps_frame.pack(fill=tk.X, pady=3)
+        
+        ttk.Label(
+            fps_frame,
+            text="FPS:",
+            font=('Microsoft YaHei UI', 9, 'bold'),
+            background=self.COLORS["bg_card"],
+            width=8
+        ).pack(side=tk.LEFT)
+        
+        self.app.perf_fps_label = ttk.Label(
+            fps_frame,
+            text="-- FPS",
+            font=('Consolas', 10),
+            background=self.COLORS["bg_card"],
+            foreground="#FFB900"
+        )
+        self.app.perf_fps_label.pack(side=tk.LEFT, padx=10)
+        
+        # 温度显示
+        temp_frame = ttk.Frame(realtime_card, style='Card.TFrame')
+        temp_frame.pack(fill=tk.X, pady=3)
+        
+        ttk.Label(
+            temp_frame,
+            text="温度:",
+            font=('Microsoft YaHei UI', 9, 'bold'),
+            background=self.COLORS["bg_card"],
+            width=8
+        ).pack(side=tk.LEFT)
+        
+        self.app.perf_temp_label = ttk.Label(
+            temp_frame,
+            text="-- °C",
+            font=('Consolas', 10),
+            background=self.COLORS["bg_card"],
+            foreground="#E81123"
+        )
+        self.app.perf_temp_label.pack(side=tk.LEFT, padx=10)
+        
+        # 进度条（可选）
+        progress_frame = ttk.Frame(realtime_card, style='Card.TFrame')
+        progress_frame.pack(fill=tk.X, pady=5)
+        
+        self.app.perf_progress = ttk.Progressbar(
+            progress_frame,
+            mode='indeterminate',
+            length=300
+        )
+        self.app.perf_progress.pack(fill=tk.X)
+        
+        # 隐藏进度条初始状态
+        self.app.perf_progress.pack_forget()
+        
+        # 提示信息卡片
+        info_card = ttk.LabelFrame(
+            tab,
+            text="💡 使用说明",
+            style='Card.TLabelframe',
+            padding=(10, 8)
+        )
+        info_card.grid(row=2, column=0, sticky=tk.EW, padx=6, pady=6)
+        
+        info_text = (
+            "• 选择包名：从下拉框选择已安装应用\n"
+            "• 🔍 搜索功能：输入关键字实时过滤（如 tencent、weixin）\n"
+            "• 🔄 刷新：获取设备上的应用列表\n"
+            "• 📱 当前：获取当前正在运行的应用\n"
+            "• 留空监控：不选择包名则监控系统整体\n"
+            "• 采样间隔：建议1-2秒，过长会丢失细节\n"
+            "• 单次快照：获取当前时刻的性能数据\n"
+            "• 生成报告：查看历史数据统计摘要"
+        )
+        
+        info_label = ttk.Label(
+            info_card,
+            text=info_text,
+            font=('Microsoft YaHei UI', 8),
+            background=self.COLORS["bg_card"],
+            foreground=self.COLORS["text_secondary"],
+            justify=tk.LEFT,
+            anchor='w'
+        )
+        info_label.pack(fill=tk.X, padx=5, pady=5)
+    
     def _create_card(self, parent, title: str, buttons: List[Tuple], row: int, col: int, colspan: int = 1) -> None:
         """创建功能卡片"""
         card = ttk.LabelFrame(
@@ -861,9 +1240,11 @@ class LayoutModern:
         )
         auto_scroll_cb.pack(side=tk.RIGHT, padx=10)
         
-        # 日志文本框容器
+        # 日志文本框容器 - 增加expand权重使其更大
         log_frame = ttk.Frame(self.output_area, style='Card.TFrame')
         log_frame.grid(row=1, column=0, sticky=tk.NSEW)
+        # 设置行权重，让日志区域占据更多空间（从10增加到20）
+        self.output_area.rowconfigure(1, weight=20)
         
         self.app.status_text = tk.Text(
             log_frame,
