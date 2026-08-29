@@ -3,382 +3,262 @@
 ## 一、项目概述
 
 ### 1.1 项目简介
-ADB Tool 是一款基于 Python + Tkinter 开发的 Android 设备管理工具，提供图形化界面进行 ADB 设备连接、应用管理、日志调试、屏幕操作等功能。
+ADB Tool 是一款基于 Python + Tkinter 开发的 Android 设备管理工具，提供图形化界面进行 ADB 设备连接、应用管理、日志调试、屏幕操作、scrcpy 投屏、性能监控等功能。界面采用现代化卡片式布局（参考 WOA AutoBot 风格），支持多设备管理与后台实时设备监控。
 
 ### 1.2 技术栈
 - **开发语言**: Python 3.x
-- **GUI 框架**: Tkinter (ttk)
+- **GUI 框架**: Tkinter (ttk) + tkinterdnd2（拖拽支持）
 - **ADB 工具**: Android Debug Bridge
+- **投屏工具**: scrcpy（已内置到 `tools/scrcpy/`）
 - **打包工具**: PyInstaller
+- **依赖**: psutil（进程/资源信息）、concurrent.futures（线程池）
 
 ### 1.3 项目结构
 ```
 New_Adbtools/
-├── main.py                 # 程序入口
-├── app.py                  # 主应用逻辑
-├── config.py               # 配置管理
-├── utils.py                # 工具函数
-├── decorators.py           # 装饰器
-├── cache_manager.py        # 缓存管理
-├── gui/                    # GUI 布局模块
-│   ├── layout_tab_view.py  # Tab 视图布局 (当前使用)
-│   ├── layout_base.py      # 基础布局
-│   ├── layout_tab.py       # Tab 布局
-│   ├── layout_tab_zh.py    # 中文 Tab 布局
-│   └── layout_zh.py        # 中文布局
-├── modules/                # 功能模块
-│   ├── device_manager.py   # 设备管理
-│   ├── app_manager.py      # 应用管理
-│   └── system_manager.py   # 系统管理
-└── ip_history.txt          # IP 历史记录
+├── main.py                      # 程序入口（加载 layout_modern 布局）
+├── app.py                       # 主应用逻辑（ADBToolApp 类）
+├── config.py                    # 配置管理（路径/缓存/性能/投屏配置）
+├── utils.py                     # 工具函数（ADB 命令封装/设备检测/历史记录）
+├── decorators.py                # 装饰器（require_device_connected 等）
+├── cache_manager.py             # 缓存管理（TTL 缓存）
+├── adaptive_cache.py            # 自适应 LRU 缓存（智能 TTL 调整）
+├── device_monitor.py            # 设备状态实时后台监控
+├── gui/
+│   ├── __init__.py
+│   └── layout_modern.py         # 现代化 UI 布局（当前使用）
+├── modules/
+│   ├── __init__.py
+│   ├── app_manager.py           # 应用管理（安装/卸载/列表）
+│   ├── device_manager.py        # 设备管理
+│   ├── system_manager.py        # 系统管理
+│   ├── screen_mirror.py         # 投屏管理（scrcpy 封装）
+│   └── performance_monitor.py   # 性能监控（CPU/内存/FPS/温度）
+├── tools/
+│   └── scrcpy/                  # scrcpy 工具集（scrcpy.exe/adb.exe/各类 DLL）
+├── ADBTool.spec                 # PyInstaller 打包配置
+├── package.bat / package.ps1    # 打包脚本
+├── run_tool.bat                 # 运行脚本
+└── .gitignore
 ```
 
 ## 二、核心功能模块
 
-### 2.1 设备管理模块
-**功能**:
-- 连接/断开 ADB 设备 (网络/USB)
-- 查看已连接设备列表
-- 重启设备
-- 获取 Root 权限
-- 重新挂载分区
-- 查看 Android 版本号
-- 获取设备串号
+应用顶部共 **7 个 Tab**，对应 7 大功能域：
+
+### 2.1 设备管理模块（📱 设备管理）
+**功能卡片**:
+- **ADB 服务管理**: 连接 ADB / 断开所有连接 / 重启 ADB 服务
+- **设备信息**: 查看设备 / 详细信息 / 获取串号
+- **设备控制**: 重启设备 / 获取 Root 权限 / 重新挂载分区
+- **系统工具**: 打开 CMD / 常用命令 / 获取 Android 版本号
+- **文本输入**: 向设备发送文本输入（支持数字/中文/逐字符/输入法等多种发送策略）
 
 **实现逻辑**:
 ```python
-# 1. 设备连接检测
-def check_device_connected(ip_address):
-    # 执行 adb devices 命令
-    # 解析输出，匹配设备 IP 或序列号
-    # 更新缓存状态
+# 多设备支持：构建带 -s 参数的命令
+def build_adb_command_with_device(base_cmd, target_ip):
+    # USB 设备（序列号）与网络设备（IP:端口）统一处理
+    if ":" not in target_ip:
+        return f"adb -s {target_ip} {base_cmd[4:]}"
+    return f"adb -s {target_ip} {base_cmd[4:]}"
 
-# 2. 连接设备
-def connect_adb():
-    ip = get_ip_address()  # 从下拉框获取
-    run_adb_command(f"adb connect {ip}")
-    update_status("已连接", success=True)
-
-# 3. 多设备支持
-# - IP 下拉框显示所有设备 (包括 USB 序列号和网络 IP)
-# - 装饰器确保操作前已选择设备
+# 装饰器确保操作前已选择并连接设备
+@require_device_connected
+def force_install(self): ...
 ```
 
-### 2.2 应用管理模块
-**功能**:
-- 强制安装 APK (带进度显示)
-- 卸载应用
-- 获取已安装应用列表
-- 清除应用缓存
-- 终止应用进程
-- 获取应用版本号
-- 获取应用安装路径
-- 获取当前打开应用包名
+### 2.2 应用管理模块（📦 应用管理）
+**功能卡片**:
+- **应用操作**: 强制安装 APK（带进度显示）/ 卸载应用 / 清除应用缓存
+- **启动与进程**: 启动应用 / 终止进程 / 查看资源占用
+- **应用信息**: 获取版本号 / 安装路径 / 当前打开应用包名
+- **应用列表**: 获取已安装应用包名列表（异步获取版本）
 
 **实现逻辑**:
 ```python
-# 1. 强制安装 (带进度)
-def force_install():
-    apk_path = get_apk_path()
-    # 构建多设备安装命令
-    install_cmd = build_adb_command_with_device(
-        f"adb install -r -d \"{apk_path}\"", 
-        target_ip
-    )
-    # 启动线程执行安装
-    # 实时捕获输出显示进度
-    # 解析 "Performing Streamed Install" 计算进度百分比
-
-# 2. 卸载应用
-def uninstall():
-    pkg_name = get_package_name()
-    # 显示确认对话框
-    # 执行 adb uninstall {pkg_name}
-    # 清除缓存
-
-# 3. 获取应用列表
-def package_list():
-    # 执行 adb shell pm list packages
-    # 解析输出，提取包名
-    # 异步获取每个包的版本信息
-    # 更新下拉框
+# 带进度的安装（后台线程 + 实时输出捕获）
+def _run_install_with_progress(self, apk_path):
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, ...)
+    while True:
+        output = process.stdout.readline()
+        # 解析 "Performing Streamed Install" 计算进度百分比
+        self.app.root.after(0, self._update_install_status, message)
 ```
 
-### 2.3 日志调试模块
+### 2.3 日志录屏模块（📋 日志录屏）
+**功能卡片**:
+- **日志捕获**: 开始捕获 / 停止捕获 / 清除日志缓存
+- **ANR 与命令**: 导出 ANR 文件 / 查看功能按键原始命令
+- **屏幕操作**: 开始录制 / 停止录制 / 截屏
+- **文件管理**: 打开存储文件夹
+
+**实现逻辑**: 日志捕获/录屏均在后台线程持续运行，通过 `root.after()` 线程安全地更新 UI。
+
+### 2.4 投屏模块（🖥️ 投屏）
+基于 **scrcpy** 实现的设备屏幕镜像与交互，已内置 scrcpy 工具集，无需额外下载。
 **功能**:
-- 启动/停止日志捕获
-- 清除日志缓存
-- 导出 ANR 文件
-- 查看功能按键原始命令
+- 启动/停止投屏（后台进程管理，自动清理）
+- 按键模拟：方向键（上下左右）/ 确认
+- 系统按键：返回 / 主页 / 菜单
+- 系统控制：音量+ / 音量- / 静音 / 电源 / 锁屏
 
 **实现逻辑**:
 ```python
-# 1. 日志捕获
-def start_logcat():
-    log_path = get_log_path()
-    # 执行 adb logcat -v time > log_path
-    # 后台线程持续捕获
-    # 实时显示到输出窗口
-
-# 2. 导出 ANR
-def pull_anr_file():
-    # 执行 adb pull /data/anr/ 到本地
-    # 显示导出进度
+class ScreenMirrorManager:
+    def _build_scrcpy_command(self, scrcpy_path, device_ip):
+        cmd = [scrcpy_path,
+               "--video-bit-rate", Config.SCRCPY_BITRATE,  # 8M
+               "--max-size", Config.SCRCPY_MAX_SIZE,       # 1920
+               "--max-fps", Config.SCRCPY_MAX_FPS,         # 30
+               "--stay-awake", "--show-touches"]
+        if device_ip:
+            cmd.extend(["-s", device_ip])
+        return cmd
 ```
 
-### 2.4 屏幕操作模块
+### 2.5 性能监控模块（📊 性能监控）
+实时监控 Android 设备的 CPU、内存、FPS、温度等性能指标。
 **功能**:
-- 截取屏幕
-- 开始/停止录屏
+- 选择监控应用（支持下拉搜索/获取当前应用）
+- 设置采样间隔
+- 开始/停止监控
+- 单次快照
+- 生成性能报告
+- 实时数据展示（CPU/内存/FPS/温度）
 
 **实现逻辑**:
 ```python
-# 1. 截屏
-def screencap():
-    # 执行 adb shell screencap -p
-    # 保存为 PNG 文件
-    # 显示预览
-
-# 2. 录屏
-def start_recording():
-    # 执行 adb shell screenrecord /sdcard/video.mp4
-    # 后台录制
-    # 定时停止并拉取到本地
+class PerformanceMonitor:
+    # 采样线程循环采集，通过 adb 读取 /proc/stat、dumpsys 等数据
+    # 回调函数更新 UI 的实时数据卡片
 ```
 
-### 2.5 高级工具模块
+### 2.6 脚本运行模块（🔧 脚本运行）
 **功能**:
-- 打开工厂菜单
-- 🆕 **智能脚本管理**：自动检测设备上是否存在脚本，避免重复推送
-  - 首次使用时自动推送脚本到设备
-  - 后续启动时智能检测脚本版本（通过文件大小比对）
-  - 如脚本已更新则自动重新推送
-  - 手动推送时提供重复推送确认提示
-- 🆕 **查看设备文件**：浏览设备上 `/data/local/tmp` 目录内容
-  - 显示文件类型、权限、大小等详细信息
-  - 支持复制文件列表到剪贴板
-  - 不同类型文件用不同图标和颜色标识
+- **Shell 脚本管理**: 浏览脚本 / 推送脚本 / 启动脚本 / 停止脚本 / 清空 tmp
+  - 智能脚本推送：自动检测设备上是否存在脚本（通过文件大小比对），避免重复推送
+- **Monkey 日志导出**: 导出设备上的 Monkey 测试日志
+
+### 2.7 高级工具模块（⚙️ 高级工具）
+- **工厂菜单**: 打开设备工厂菜单
 
 ## 三、界面布局设计
 
-### 3.1 三栏布局结构
+### 3.1 左右分栏布局结构
 ```
-┌─────────────────────────────────────────────────────┐
-│  ADB Tool                                    - □ X  │
-├────────────┬──────────────────┬─────────────────────┤
-│ 左侧 Tab   │ 中间功能按钮区域   │ 右侧输出窗口        │
-│ (140px)    │ (内容自适应)     │ (占据剩余空间)      │
-│            │                  │                     │
-│ [设备管理] │ IP 地址：[下拉框] │ [12:00:00] ✓       │
-│ [应用管理] │                  │ 已连接 2 台设备      │
-│ [日志调试] │ [连接 ADB]       │ ...                │
-│ [屏幕操作] │ [卸载应用]       │                     │
-│ [高级工具] │ ...              │                     │
-└────────────┴──────────────────┴─────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  ADB Tool  v2.0 · 现代化UI      📱当前设备 ● 未连接  │  ← 顶部栏
+├──────────────────────────────────────────────────────┤
+│ 📱设备管理 │ 📦应用管理 │ 📋日志录屏 │ 🖥️投屏 │ ...  │  ← Tab 导航
+├──────────────────────┬───────────────────────────────┤
+│  左侧功能按钮区域      │  右侧实时终端输出             │
+│  (卡片式按钮组)       │  (弹性扩展，自动滚动)         │
+│  ┌──────────────┐    │  [12:00:00] ✓ 已连接 2 台设备 │
+│  │ 卡片标题       │    │  ...                         │
+│  │ [按钮][按钮]   │    │                               │
+│  └──────────────┘    │                               │
+└──────────────────────┴───────────────────────────────┘
 ```
 
-### 3.2 布局实现代码
+### 3.2 布局实现（layout_modern.py）
 ```python
-def create_three_column_layout(self):
-    # 左侧 Tab (固定宽度)
-    self.left_panel = ttk.Frame(self.main_frame, width=140)
-    self.left_panel.grid(row=0, column=0, sticky=tk.NSEW)
-    self.left_panel.grid_propagate(False)
-    
-    # 中间功能 (内容自适应)
-    self.center_panel = ttk.Frame(self.main_frame)
-    self.center_panel.grid(row=0, column=1, sticky=tk.NSEW)
-    
-    # 右侧输出 (弹性扩展)
-    self.right_panel = ttk.Frame(self.main_frame)
-    self.right_panel.grid(row=0, column=2, sticky=tk.NSEW)
-    
-    # 配置权重
-    self.main_frame.grid_columnconfigure(0, weight=0)  # 固定
-    self.main_frame.grid_columnconfigure(1, weight=0)  # 自适应
-    self.main_frame.grid_columnconfigure(2, weight=1)  # 弹性
-```
-
-### 3.3 Tab 选中效果
-```python
-# 未选中：浅灰色背景
-style.configure('LeftTab.TButton', 
-               background='#e8e8e8',
-               font=('Arial', 10, 'bold'))
-
-# 选中：深蓝色背景 + 5px 粗边框
-style.configure('SelectedTab.TButton',
-               background='#0078d7',  # Windows 标准蓝
-               relief='solid',
-               borderwidth=5)
+class LayoutModern:
+    COLORS = {
+        "primary": "#0078D4",   # 主色调（Windows蓝）
+        "success": "#107C10",
+        "warning": "#FFB900",
+        "error": "#E81123",
+        "bg_main": "#F3F2F1",
+        "bg_card": "#FFFFFF",
+        ...
+    }
+    # 左右分栏：左列 weight=1（功能按钮），右列 weight=3（输出框）
+    # Tab 选中：高亮背景 #E6F2FF + 蓝色文字
 ```
 
 ## 四、核心技术实现
 
 ### 4.1 设备检测与同步
-**问题**: 启动时检测到的设备与 IP 下拉框不同步
-
-**解决方案**:
-```python
-def _load_ip_history(self):
-    # 1. 从文件加载历史记录
-    file_history = load_ip_history()
-    
-    # 2. 合并已检测到的设备
-    merged_history = []
-    # 先添加设备检测结果
-    for device in self.ip_history:
-        if device not in merged_history:
-            merged_history.append(device)
-    # 再添加文件历史
-    for item in file_history:
-        if device not in merged_history:
-            merged_history.append(item)
-    
-    # 3. 更新下拉框
-    self.ip_history = merged_history[:MAX_IP_HISTORY]
-    self.ip_combobox['values'] = self.ip_history
-```
+启动时并行检测已连接设备（USB + 网络），合并历史记录，去重后更新下拉框。
 
 ### 4.2 装饰器模式
-**用途**: 统一前置条件检查
-
 ```python
 def require_device_connected(func):
-    """设备连接校验装饰器"""
+    """设备连接校验装饰器：强制刷新设备状态 → 检查连接 → 执行"""
     def wrapper(self):
-        # 1. 强制刷新设备状态
         cache_manager.device_cache.clear()
         self.show_current_device_status(force_display=True)
-        
-        # 2. 检查连接
         if not self.ensure_device_connected():
-            return  # 未连接则提前返回
-        
-        # 3. 执行原函数
+            return
         return func(self)
     return wrapper
-
-# 使用示例
-@require_device_connected
-def force_install(self):
-    # 无需手动检查连接状态
-    ...
 ```
 
 ### 4.3 缓存管理
-**缓存类型**:
-- `device_cache`: 设备状态缓存 (TTL: 3 秒)
-- `package_cache`: 包信息缓存 (TTL: 180 秒)
-- `system_cache`: 系统信息缓存
-- `ip_history`: IP 历史记录 (文件持久化)
-
-**实现**:
-```python
-class CacheManager:
-    def __init__(self):
-        self.device_cache = TTLCache(maxsize=50, ttl=3)
-        self.package_cache = TTLCache(maxsize=50, ttl=180)
-    
-    def get_device_status(self, ip):
-        return self.device_cache.get(ip)
-    
-    def set_device_status(self, ip, status):
-        self.device_cache[ip] = status
-```
+- **cache_manager**: TTL 缓存（device_cache TTL=3s、package_cache TTL=180s）
+- **AdaptiveLRUCache** (`adaptive_cache.py`): 自适应 LRU 缓存，根据访问频率动态调整 TTL，高频访问的缓存项自动延长有效期
 
 ### 4.4 异步操作与 UI 刷新
-**原则**: 耗时操作在后台线程，UI 更新在主线程
-
-```python
-def force_install(self):
-    # 主线程：显示进度条
-    self._show_progress()
-    
-    # 启动后台线程
-    install_thread = threading.Thread(
-        target=self._run_install_with_progress,
-        args=(apk_path,),
-        daemon=True
-    )
-    install_thread.start()
-
-def _run_install_with_progress(self, apk_path):
-    # 后台线程：执行安装
-    process = subprocess.Popen(cmd, ...)
-    
-    while True:
-        output = process.stdout.readline()
-        # 更新进度 (线程安全)
-        self.app.root.after(0, self._update_install_status, message)
-```
+- 耗时操作在后台线程执行，UI 更新通过 `root.after()` 回到主线程
+- 线程池 `ThreadPoolExecutor`（max_workers=10）并发执行功能操作
+- 长时间运行任务（日志/录屏）使用独立线程，不占用线程池
 
 ### 4.5 多设备支持
-**实现**:
+IP 下拉框统一显示 USB 序列号和网络 IP，`build_adb_command_with_device()` 为命令自动添加 `-s` 参数。
+
+### 4.6 设备实时监控
+`DeviceMonitor` 后台线程定时检测设备连接状态，状态变化时触发回调更新 UI。
+
+### 4.7 拖拽支持
+通过 `tkinterdnd2` 支持 APK/脚本文件拖拽到输入框，自动提取包名与版本信息。
+
+## 五、配置说明（config.py）
+
+### 5.1 路径配置
 ```python
-def build_adb_command_with_device(base_cmd, target_ip):
-    """构建支持多设备的 ADB 命令"""
-    if not target_ip:
-        return base_cmd
-    
-    # 检查是否为 USB 设备 (序列号)
-    if ":" not in target_ip:
-        return f"adb -s {target_ip} {base_cmd[4:]}"
-    
-    # 网络设备，添加端口
-    if ":" not in target_ip:
-        target_ip = f"{target_ip}:5555"
-    
-    return f"adb -s {target_ip} {base_cmd[4:]}"
+DEFAULT_LOG_PATH = "D:\\adbtool_log\\logs"        # 日志
+DEFAULT_ANR_PATH = "D:\\adbtool_log\\anr_files"  # ANR 文件
+DEFAULT_SCREENSHOT_PATH = "D:\\adbtool_log\\screenshots"  # 截图
+DEFAULT_RECORD_PATH = "D:\\adbtool_log\\records"          # 录屏
+# D 盘不存在时自动回退到当前工作目录
 ```
 
-## 五、配置与优化
-
-### 5.1 性能配置
+### 5.2 性能与缓存配置
 ```python
-# config.py
-CACHE_TIMEOUT = 180          # 缓存超时 (秒)
-DEVICE_CACHE_TIMEOUT = 3     # 设备状态缓存 (秒)
-MAX_CACHE_SIZE = 50          # 最大缓存数
-MAX_IP_HISTORY = 10          # IP 历史记录数
+CACHE_TIMEOUT = 180           # 缓存超时（秒）
+DEVICE_CACHE_TIMEOUT = 3     # 设备状态缓存（秒）
+MAX_CACHE_SIZE = 50
+DEVICE_MONITOR_INTERVAL = 3   # 设备监控间隔（秒）
 ```
 
-### 5.2 UI 配置
+### 5.3 投屏配置
 ```python
-WINDOW_GEOMETRY = "1200x700"  # 窗口大小
-MIN_WINDOW_SIZE = (800, 600)  # 最小尺寸
+SCRCPY_PATH = "tools\\scrcpy\\scrcpy.exe"
+SCRCPY_BITRATE = "8M"        # 码率
+SCRCPY_MAX_SIZE = "1920"     # 最大尺寸
+SCRCPY_MAX_FPS = "30"       # 最大帧率
 ```
 
-### 5.3 布局优化要点
-1. **左侧 Tab**: 固定 140px，垂直排列
-2. **中间区域**: 根据按钮内容自适应，不设置固定宽度
-3. **右侧输出**: weight=1，占据剩余空间
-4. **按钮布局**: 每行 3 个，无空格空缺
-5. **进度条**: 使用 pack 布局，避免与 grid 混用
+### 5.4 界面配置
+```python
+WINDOW_GEOMETRY = "1078x464"   # 窗口大小
+MIN_WINDOW_SIZE = (1026, 422)  # 最小尺寸
+```
 
 ## 六、打包发布
 
-### 6.1 打包配置
-```python
-# ADBTool.spec
-a = Analysis(
-    ['main.py'],
-    pathex=[],
-    binaries=[],
-    datas=[
-        ('gui/', 'gui'),
-        ('modules/', 'modules'),
-        ('ip_history.txt', '.'),
-    ],
-    ...
-)
-```
+### 6.1 打包配置（ADBTool.spec）
+- 入口：`main.py`
+- 包含数据：`gui/`、`modules/`、`config.py`、`decorators.py`、`utils.py`、`cache_manager.py`、`device_monitor.py`、`adaptive_cache.py`
+- 自动收集 `tools/scrcpy/` 下所有文件
+- 包含 tkinterdnd2 各平台二进制（linux/osx/win × x64/x86/arm64）
+- 输出：单文件无控制台窗口的 `ADBTool.exe`
 
 ### 6.2 打包步骤
-```bash
+```powershell
 # Windows PowerShell
 .\package.ps1
-
 # 或手动执行
 pyinstaller --onefile --windowed ADBTool.spec
 ```
@@ -392,81 +272,62 @@ dist/
 ## 七、常见问题
 
 ### 7.1 设备不显示
-**原因**: ip_history.txt 旧数据覆盖异步检测结果
+启动时检测到的设备与 IP 下拉框不同步 → 已通过合并设备检测结果和文件历史、去重后显示解决。
 
-**解决**: 合并设备检测结果和文件历史，去重后显示
+### 7.2 安装无反应
+进度条布局冲突 → 将 `grid()` 改为 `pack()` 解决。
 
-### 7.2 布局不生效
-**原因**: 
-1. Tkinter 缓存未刷新
-2. grid 和 pack 混用
-
-**解决**:
-1. 调用 `update_idletasks()` 强制刷新
-2. 统一使用 pack 或 grid
-
-### 7.3 安装无反应
-**原因**: 进度条布局冲突
-
-**解决**: 将 `grid()` 改为 `pack()`
-
-### 7.4 Tab 选中效果不明显
-**原因**: 样式配置不够醒目
-
-**解决**: 使用深蓝色背景 (#0078d7) + 5px 粗边框
+### 7.3 投屏无法启动
+确认 `tools/scrcpy/scrcpy.exe` 存在；打包后路径会自动从 `_MEIPASS` 解析。
 
 ## 八、开发规范
 
 ### 8.1 代码结构
-- 主逻辑：`app.py`
-- GUI 布局：`gui/` 目录，模块化
+- 主逻辑：`app.py`（ADBToolApp 类）
+- GUI 布局：`gui/layout_modern.py`
 - 功能模块：`modules/` 目录
 - 配置集中：`config.py`
 
 ### 8.2 命名规范
-- 变量：驼峰式 (如 `ip_combobox`)
-- 函数：下划线式 (如 `force_install`)
-- 类：大驼峰 (如 `LayoutTabView`)
+- 变量：驼峰式（如 `ip_combobox`）
+- 函数：下划线式（如 `force_install`）
+- 类：大驼峰（如 `LayoutModern`）
 
-### 8.3 注释规范
-- 函数必须有 docstring
-- 复杂逻辑必须有注释
-- 使用中文注释
-
-### 8.4 Git 分支
-- 主分支：`main`
-- 开发分支：`new_view` (界面重构)
+### 8.3 Git 分支
+- 默认分支：`test_about`
+- 开发分支：`new_view`（界面重构 + 新功能）
 - 提交信息：使用中文，描述清晰
 
 ## 九、版本历史
 
-### v2.3 (最新版本)
-- 🆕 **智能脚本推送功能**：
-  - 启动脚本前自动检测设备上是否存在该脚本
-  - 通过文件大小比对判断脚本是否需要更新
-  - 首次使用或脚本更新时自动推送，无需手动操作
-  - 手动推送时提供重复推送确认提示
-  - 减少不必要的网络传输，提升用户体验
-- 📝 新增测试脚本 `test_script.sh` 用于验证功能
+### v3.0（当前版本）
+- 🆕 **scrcpy 投屏功能**：集成 scrcpy 工具集，支持屏幕镜像与按键模拟
+- 🆕 **性能监控模块**：实时监控 CPU/内存/FPS/温度，支持快照与报告
+- 🆕 **自适应 LRU 缓存**：根据访问频率智能调整 TTL
+- 🆕 **设备实时监控**：后台线程定时检测设备连接状态
+- ✅ **现代化 UI 布局**（layout_modern.py）：卡片式设计、左右分栏、彩色状态标签
+- ✅ **多设备支持**：USB 序列号与网络 IP 统一管理
+- ✅ **拖拽支持**：APK/脚本文件拖拽自动解析
+- ✅ **轮转日志**：10MB 滚动、保留 5 个备份
+- ✅ **线程池并发**：max_workers=10，长时间任务独立线程
+
+### v2.3
+- 🆕 智能脚本推送：自动检测设备脚本、文件大小比对、避免重复推送
 
 ### v2.0
-- ✅ 三栏布局重构 (左侧 Tab + 中间功能 + 右侧输出)
-- ✅ 自适应宽度优化
-- ✅ Tab 选中效果增强 (深蓝背景 +5px 边框)
-- ✅ 功能按钮补齐 (无空格)
-- ✅ 输出区域宽度优化 (500px)
-- ✅ 修复布局管理器冲突
+- ✅ 三栏布局重构（左侧 Tab + 中间功能 + 右侧输出）
+- ✅ Tab 选中效果增强（深蓝背景 +5px 边框）
 - ✅ 修复设备检测同步问题
 
 ### v1.0
 - 基础功能实现
-- 传统按钮布局
 
 ## 十、联系方式
 
 项目位置：`D:\N_ADBtools\New_Adbtools-test_about\New_Adbtools`
+GitHub：https://github.com/Alin-yang/New_Adbtools
 
 ---
 
-**最后更新**: 2026-05-09
-**文档版本**: v2.3
+**最后更新**: 2026-08-29
+**文档版本**: v3.0
