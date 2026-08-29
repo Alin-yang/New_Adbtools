@@ -6,7 +6,9 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
+# dist/ 目录下构建产物默认忽略，但保留 exe 供团队直接拉取使用
+dist/*
+!dist/ADBTool.exe
 downloads/
 eggs/
 .eggs/
