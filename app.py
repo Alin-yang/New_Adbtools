@@ -845,7 +845,7 @@ class ADBToolApp:
                 try:
                     output, _ = self.run_adb_with_target(f"adb shell getprop {prop_name}")
                     return output.strip() if output else None
-                except:
+                except Exception:
                     return None
             
             # 核心信息（6 个，必获取）
@@ -871,7 +871,7 @@ class ADBToolApp:
                         value = future.result(timeout=1.5)
                         if value:
                             core_results[name] = value
-                    except:
+                    except Exception:
                         pass  # 超时或失败就跳过
             
             # 额外信息（串行获取，更详细的设备信息）
@@ -890,13 +890,13 @@ class ADBToolApp:
                     output, _ = self.run_adb_with_target("adb shell getprop ro.serialno")
                     if output and output.strip():
                         extra_info["设备序列号"] = output.strip()
-            except:
+            except Exception:
                 # 失败时尝试获取序列号
                 try:
                     output, _ = self.run_adb_with_target("adb shell getprop ro.serialno")
                     if output and output.strip():
                         extra_info["设备序列号"] = output.strip()
-                except:
+                except Exception:
                     pass
             
             # 2. 软件版本号
@@ -904,7 +904,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.build.display.id")
                 if output and output.strip():
                     extra_info["软件版本"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 3. 硬件平台
@@ -912,7 +912,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.hardware")
                 if output and output.strip():
                     extra_info["硬件平台"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 4. 构建 ID
@@ -920,7 +920,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.build.id")
                 if output and output.strip():
                     extra_info["构建 ID"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 5. 基带版本
@@ -928,7 +928,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop gsm.version.baseband")
                 if output and output.strip():
                     extra_info["基带版本"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 6. 内核版本（精简）
@@ -936,7 +936,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell uname -r")
                 if output and output.strip():
                     extra_info["内核版本"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 7. 屏幕密度
@@ -944,7 +944,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.sf.lcd_density")
                 if output and output.strip():
                     extra_info["屏幕密度"] = output.strip() + " dpi"
-            except:
+            except Exception:
                 pass
             
             # 8. 电池电量
@@ -954,7 +954,7 @@ class ADBToolApp:
                     match = re.search(r'level:\s*(\d+)', output)
                     if match:
                         extra_info["电池电量"] = match.group(1) + "%"
-            except:
+            except Exception:
                 pass
             
             # 9. 设备制造商
@@ -962,7 +962,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.product.manufacturer")
                 if output and output.strip():
                     extra_info["制造商"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 10. 产品名称
@@ -970,7 +970,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.product.name")
                 if output and output.strip():
                     extra_info["产品名称"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 11. 设备代号
@@ -978,7 +978,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.product.device")
                 if output and output.strip():
                     extra_info["设备代号"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 12. 构建时间
@@ -989,7 +989,7 @@ class ADBToolApp:
                     timestamp = int(output.strip())
                     build_date = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
                     extra_info["构建时间"] = build_date
-            except:
+            except Exception:
                 pass
             
             # 13. 系统版本
@@ -997,7 +997,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.build.version.incremental")
                 if output and output.strip():
                     extra_info["系统版本号"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 14. 用户版本
@@ -1005,7 +1005,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.build.user")
                 if output and output.strip():
                     extra_info["构建用户"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 15. 主机信息
@@ -1013,7 +1013,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.build.host")
                 if output and output.strip():
                     extra_info["构建主机"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 16. 主板信息
@@ -1021,7 +1021,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.board.platform")
                 if output and output.strip():
                     extra_info["主板平台"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 17. Bootloader 版本
@@ -1029,7 +1029,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.bootloader")
                 if output and output.strip():
                     extra_info["Bootloader"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 18. 蓝牙版本
@@ -1037,7 +1037,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.bluetooth.version")
                 if output and output.strip():
                     extra_info["蓝牙版本"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 19. WiFi 芯片版本
@@ -1045,7 +1045,7 @@ class ADBToolApp:
                 output, _ = self.run_adb_with_target("adb shell getprop ro.wifi.version")
                 if output and output.strip():
                     extra_info["WiFi 版本"] = output.strip()
-            except:
+            except Exception:
                 pass
             
             # 20. 屏幕分辨率（如果支持）
@@ -1055,7 +1055,7 @@ class ADBToolApp:
                     match = re.search(r'Physical size: (\d+x\d+)', output)
                     if match:
                         extra_info["屏幕分辨率"] = match.group(1)
-            except:
+            except Exception:
                 pass
             
             # 构建显示信息（分类显示）
@@ -1101,7 +1101,7 @@ class ADBToolApp:
                 try:
                     output, _ = self.run_adb_with_target(f"adb shell getprop {prop_name}")
                     return output.strip() if output else "未知"
-                except:
+                except Exception:
                     return "获取失败"
             
             # 关键信息优先（先显示这些）
@@ -1123,7 +1123,7 @@ class ADBToolApp:
                     name = future_to_name[future]
                     try:
                         results[name] = future.result(timeout=2)
-                    except:
+                    except Exception:
                         results[name] = "超时"
             
             # 立即显示关键信息（快速响应）
@@ -1162,7 +1162,7 @@ class ADBToolApp:
                         if len(parts) >= 4:
                             available = self._format_storage_size(parts[3])
                             info_lines.append(f"  可用存储：{available}")
-                except:
+                except Exception:
                     pass
                 
                 # 电池信息（可选）
@@ -1173,7 +1173,7 @@ class ADBToolApp:
                         match = re.search(r'level:\s*(\d+)', output)
                         if match:
                             info_lines.append(f"  电池电量：{match.group(1)}%")
-                except:
+                except Exception:
                     pass
                 
                 info_lines.append("="*50)
@@ -1200,7 +1200,7 @@ class ADBToolApp:
                 return f"{size_kb / 1024:.1f} MB"
             else:
                 return f"{size_kb} KB"
-        except:
+        except Exception:
             return size_str
     
     def show_current_device_status(self, force_display=False, decorator_call=False):
@@ -1541,7 +1541,7 @@ class ADBToolApp:
             if int(lines) > 1000:  # 限制最多 1000 行
                 # 删除最早的 200 行，保留最近 800 行
                 self.status_text.delete(1.0, f"{int(lines)-800}.0")
-        except:
+        except Exception:
             pass
         
         # 【日志】记录 UI 更新
@@ -1603,7 +1603,7 @@ class ADBToolApp:
                 file_size = format_file_size(os.path.getsize(file_path))
                 file_name = os.path.basename(file_path)
                 self.update_status(f"📦 已选择APK文件: {file_name}\n📊 文件大小: {file_size}\n⏳ 正在提取包名信息...", True)
-            except:
+            except Exception:
                 self.update_status(f"📦 已选择 APK 文件：{os.path.basename(file_path)}\n⏳ 正在提取包名信息...", True)
                 
             # 🆕 优化：使用后台线程异步提取包名，不阻塞界面
@@ -1651,7 +1651,7 @@ class ADBToolApp:
                 self.update_status(f"成功终止{pkg_name}应用所处进程", True)
             else:
                 self.update_status(f"终止{pkg_name}进程失败", False)
-        except:
+        except Exception:
             self.update_status(f"未找到{pkg_name}所属进程:", False)
     
     @require_device_connected
@@ -1859,30 +1859,26 @@ class ADBToolApp:
             self.root.after(0, lambda msg=error_msg: self.update_status(msg, False))
 
     def check_device_connected(self, ip_address: Optional[str] = None) -> bool:
-        """检查设备连接状态(强化版，确保获取最新状态)"""
+        """检查设备连接状态（复用 2 秒缓存，与装饰器/设备监控共用同一数据源）"""
         if not ip_address:
             ip_address = self.get_ip_address()
-            
+
         if not ip_address:
             return False
-            
-        # 强制刷新设备列表，不使用缓存
-        output, success = run_adb_command("adb devices")
-        if success:
-            devices = [line.split("\t")[0] for line in output.splitlines()[1:] if "device" in line]
-            ip_with_port = f"{ip_address}:5555" if ip_address else None
-            
-            # 精确匹配设备
-            is_connected = False
-            for device in devices:
-                if device == ip_address or device == ip_with_port or device.startswith(ip_address + ':'):
-                    is_connected = True
-                    break
-            
-            # 更新缓存
-            cache_manager.set_device_status(ip_address, is_connected)
-            return is_connected
-        return False
+
+        # 复用缓存版设备列表，避免每次调用都 spawn adb 进程
+        # 缓存版会自动排除 unauthorized/offline 状态，比原实现的字符串包含判断更准确
+        devices = get_connected_devices_cached()
+        ip_with_port = f"{ip_address}:5555" if ip_address else None
+
+        is_connected = any(
+            device == ip_address or device == ip_with_port or device.startswith(ip_address + ':')
+            for device in devices
+        )
+
+        # 同步状态缓存
+        cache_manager.set_device_status(ip_address, is_connected)
+        return is_connected
 
     def ensure_device_connected(self) -> bool:
         """设备连接验证"""
@@ -1960,7 +1956,7 @@ class ADBToolApp:
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True
+                text=True, encoding='utf-8', errors='replace'
             )
 
             # 定义需要过滤的关键词
@@ -2020,6 +2016,18 @@ class ADBToolApp:
             # 构建详细的错误信息
             if not success:
                 error_detail = "\\n".join(full_output[-5:]) if full_output else "无输出"  # 显示最后5行
+                # 回退：adb install 失败且错误像设备端 push 路径 bug（如 "Is a directory"）时，
+                # 改用 push + pm install 两步式，手动指定临时文件名绕过 adb install 的路径生成
+                if ("Is a directory" in error_detail) or ("failed to copy" in error_detail):
+                    fb_ok, fb_msg = self._install_via_push_pm(apk_path, apk_size, target_ip)
+                    if fb_ok:
+                        self._update_install_status(fb_msg)
+                        self.progress["mode"] = "indeterminate"
+                        self._hide_progress()
+                        file_size = format_file_size(os.path.getsize(apk_path))
+                        self.update_status(f"安装完成（回退模式）\\n文件: {os.path.basename(apk_path)}\\n大小: {file_size}\\n目标设备: {target_ip if target_ip else '未知'}", True)
+                        return
+                    error_detail = f"{error_detail}\\n\\n回退安装也失败:\\n{fb_msg}"
                 final_output = f"安装失败 (code {return_code})\\n详细信息:\\n{error_detail}"
             else:
                 final_output = "安装成功"
@@ -2035,6 +2043,78 @@ class ADBToolApp:
         except Exception as e:
             self._update_install_status(f"安装过程出错: {str(e)}")
             self._hide_progress()
+
+    def _install_via_push_pm(self, apk_path: str, apk_size: int, target_ip: str = None) -> Tuple[bool, str]:
+        """adb install 失败时的回退安装方式：手动 push + pm install 两步式（带进度）。
+
+        绕过 adb install 内部生成设备端临时路径的 bug
+        （如目标 '/data/local/tmp/./.' → remote Is a directory），
+        改用手动指定的明确临时文件名，并复用与正常安装一致的进度展示。
+        """
+        from utils import build_adb_command_with_device
+        remote_tmp = "/data/local/tmp/_adbtool_install.apk"
+        self._update_install_status("尝试回退安装方式（push + pm install）...")
+
+        # 1. push APK 到设备指定临时文件名（避开 adb install 的路径生成）
+        push_cmd = build_adb_command_with_device(f'adb push "{apk_path}" {remote_tmp}', target_ip)
+
+        # 进度条：复用正常安装的估算方式（按已读输出量占 APK 大小比例）
+        self.progress["mode"] = "determinate"
+        self.progress["maximum"] = 100
+        self.progress["value"] = 0
+        current_size = 0
+        push_out_lines = []
+        push_ok = False
+        try:
+            process = subprocess.Popen(
+                push_cmd,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding='utf-8',
+                errors='replace'
+            )
+            while True:
+                output = process.stdout.readline()
+                if output == '' and process.poll() is not None:
+                    break
+                if output:
+                    stripped_output = output.strip()
+                    push_out_lines.append(output)
+                    current_size += len(output)
+                    progress = min(95, int((current_size / apk_size) * 100)) if apk_size else 0
+                    self.progress["value"] = progress
+                    transferred = format_file_size(current_size)
+                    total = format_file_size(apk_size)
+                    self._update_install_status(f"回退安装 正在传输... {progress}% ({transferred} / {total})")
+            process.wait()
+            push_ok = process.returncode == 0
+        except Exception as e:
+            self.progress["mode"] = "indeterminate"
+            self._hide_progress()
+            return False, f"回退 push 异常: {str(e)}"
+
+        self.progress["mode"] = "indeterminate"
+        self._hide_progress()
+
+        push_out = "".join(push_out_lines)
+        # adb push 成功通常输出 "1 file pushed"
+        if not push_ok and "1 file pushed" not in push_out:
+            return False, f"回退 push 失败: {push_out}"
+
+        # 2. pm install（较快，无需进度）
+        self._update_install_status("回退安装 正在执行 pm install...")
+        pm_out, _ = self.run_adb_with_target(f"adb shell pm install -r -d {remote_tmp}", timeout=120)
+        # 3. 清理设备临时文件（无论成败）
+        try:
+            self.run_adb_with_target(f"adb shell rm -f {remote_tmp}")
+        except Exception:
+            pass
+        if "Success" in pm_out:
+            self.progress["value"] = 100
+            return True, "安装成功（回退模式：push + pm install）"
+        return False, f"回退 pm install 失败: {pm_out}"
 
     def _update_operation_status(self, operation: str, status: str, details: str = "", msg_type: str = "info"):
         """更新操作状态显示（统一格式 - 零阻塞优化）
@@ -2943,7 +3023,7 @@ class ADBToolApp:
             else:
                 self._update_operation_status("屏幕录制", "启动失败", "", "error")
                 self.recording_active = False
-        except:
+        except Exception:
             pass
 
     @require_device_connected  
@@ -2961,7 +3041,7 @@ class ADBToolApp:
         if self.recording_subprocess and self.recording_subprocess.poll() is None:
             try:
                 self.recording_subprocess.terminate()
-            except:
+            except Exception:
                 pass
             
         # 将耗时的等待和文件处理移到后台线程
@@ -3042,7 +3122,7 @@ class ADBToolApp:
                 cmd_parts,
                 stderr=subprocess.PIPE,
                 creationflags=creation_flags,
-                text=True
+                text=True, encoding='utf-8', errors='replace'
             )
             
             time.sleep(0.5)  # 等待一小段时间确保进程启动
@@ -3150,7 +3230,7 @@ class ADBToolApp:
                 try:
                     self.recording_subprocess.terminate()
                     self.recording_subprocess.wait(timeout=3)
-                except:
+                except Exception:
                     pass
 
     # 日志相关方法
@@ -3257,7 +3337,7 @@ class ADBToolApp:
             else:
                 self._update_operation_status("日志捕获", "启动失败", "", "error")
                 self.logging_active = False
-        except:
+        except Exception:
             pass
 
     @require_device_connected
@@ -3473,7 +3553,7 @@ class ADBToolApp:
                     stdout=f,
                     stderr=subprocess.PIPE,
                     creationflags=creation_flags,
-                    text=True,
+                    text=True, encoding='utf-8', errors='replace',
                     bufsize=1
                 )
                 
@@ -3538,7 +3618,7 @@ class ADBToolApp:
                 try:
                     self.logcat_subprocess.terminate()
                     self.logcat_subprocess.wait(timeout=3)
-                except:
+                except Exception:
                     pass
             
             if f:
@@ -3633,21 +3713,21 @@ class ADBToolApp:
                 # 格式1: mCurrentFocus=Window{...u0 包名/活动名}
                 try:
                     package_name = output.split("u0 ")[1].split("/")[0].strip()
-                except:
+                except Exception:
                     pass
             
             if not package_name and "Window{" in output:
                 # 格式2: mCurrentFocus=Window{...包名/活动名}
                 try:
                     package_name = output.split("Window{")[1].split("/")[0].split()[-1].strip()
-                except:
+                except Exception:
                     pass
             
             if not package_name and "ResumedActivity" in output:
                 # 格式3: ResumedActivity: ActivityRecord{...包名/活动名}
                 try:
                     package_name = output.split("ResumedActivity")[1].split("/")[0].split()[-1].strip()
-                except:
+                except Exception:
                     pass
             
             if not package_name:
@@ -3656,7 +3736,7 @@ class ADBToolApp:
                     parts = output.split("/")
                     if len(parts) > 1:
                         package_name = parts[0].split()[-1].strip()
-                except:
+                except Exception:
                     pass
 
             if package_name:
@@ -3801,7 +3881,7 @@ class ADBToolApp:
                     if dalvik_match:
                         dalvik_heap = int(dalvik_match.group(1))
                         info_lines.append(f"  Dalvik Heap: {self._format_memory_size(dalvik_heap)}")
-            except:
+            except Exception:
                 info_lines.append("\n⚠️ 无法获取详细内存信息")
                 
             # 3. 获取进程信息
@@ -3816,7 +3896,7 @@ class ADBToolApp:
                         if len(parts) >= 2:
                             pid = parts[0]
                             info_lines.append(f"  进程{i} PID: {pid}")
-            except:
+            except Exception:
                 info_lines.append("\n⚠️ 无法获取进程信息")
                 
             # 4. 获取电池消耗（可选）
@@ -3826,7 +3906,7 @@ class ADBToolApp:
                     info_lines.append("\n【电池消耗】")
                     # 简化显示
                     info_lines.append(f"  有电池消耗记录")
-            except:
+            except Exception:
                 pass
                 
             info_lines.append("\n" + "="*60)
@@ -4161,7 +4241,7 @@ class ADBToolApp:
                                     result = subprocess.run(
                                         ['adb', '-s', device_id, 'shell', 'getprop', 'ro.product.model'],
                                         capture_output=True,
-                                        text=True,
+                                        text=True, encoding='utf-8', errors='replace',
                                         timeout=0.5
                                     )
                                     model = result.stdout.strip()
@@ -4169,7 +4249,7 @@ class ADBToolApp:
                                         devices.append(f"{model} - {device_id} ✓")
                                     else:
                                         devices.append(f"{device_id} ✓")
-                                except:
+                                except Exception:
                                     devices.append(f"{device_id} ✓")
                 
                 # 更新 IP 下拉框
@@ -4183,7 +4263,7 @@ class ADBToolApp:
                         self.ip_combobox.set(current_ip)
                     elif devices:
                         self.ip_combobox.current(0)
-        except:
+        except Exception:
             pass  # 失败不提示
 
     def _setup_drag_drop(self):
@@ -4231,7 +4311,7 @@ class ADBToolApp:
                             file_size = format_file_size(os.path.getsize(file_path))
                             file_name = os.path.basename(file_path)
                             self.update_status(f"📦 已选择APK文件: {file_name}\n📊 文件大小: {file_size}\n⏳ 正在提取包名信息...", True)
-                        except:
+                        except Exception:
                             self.update_status(f"📦 已选择 APK 文件：{os.path.basename(file_path)}\n⏳ 正在提取包名信息...", True)
                                                 
                         # 🆕 优化：使用后台线程异步提取包名，不阻塞界面
@@ -4452,7 +4532,7 @@ class ADBToolApp:
                     time.sleep(2)  # 等待 2 秒确保文件被读取
                     if os.path.exists(bat_file):
                         os.remove(bat_file)
-                except:
+                except Exception:
                     pass
                 
             cleanup_thread = threading.Thread(target=cleanup_bat, daemon=True)
@@ -4735,7 +4815,7 @@ class ADBToolApp:
         """鼠标滚轮滚动"""
         try:
             self.perf_dropdown_listbox.yview_scroll(int(-1*(event.delta/120)), "units")
-        except:
+        except Exception:
             pass
     
     def get_current_package_for_perf(self):
@@ -4759,21 +4839,21 @@ class ADBToolApp:
                 # 格式1: mCurrentFocus=Window{...u0 包名/活动名}
                 try:
                     package_name = output.split("u0 ")[1].split("/")[0].strip()
-                except:
+                except Exception:
                     pass
                 
             if not package_name and "Window{" in output:
                 # 格式2: mCurrentFocus=Window{...包名/活动名}
                 try:
                     package_name = output.split("Window{")[1].split("/")[0].split()[-1].strip()
-                except:
+                except Exception:
                     pass
                 
             if not package_name and "ResumedActivity" in output:
                 # 格式3: ResumedActivity: ActivityRecord{...包名/活动名}
                 try:
                     package_name = output.split("ResumedActivity")[1].split("/")[0].split()[-1].strip()
-                except:
+                except Exception:
                     pass
                 
             if not package_name:
@@ -4782,7 +4862,7 @@ class ADBToolApp:
                     parts = output.split("/")
                     if len(parts) > 1:
                         package_name = parts[0].split()[-1].strip()
-                except:
+                except Exception:
                     pass
     
             if package_name:
@@ -4820,7 +4900,7 @@ class ADBToolApp:
             if hasattr(self, 'perf_interval_var'):
                 try:
                     interval = int(self.perf_interval_var.get())
-                except:
+                except Exception:
                     interval = 1
             
             # 设置回调函数更新UI

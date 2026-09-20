@@ -8,16 +8,21 @@ from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
 
-# 包含所有平台的tkdnd文件以确保兼容性
-tkdnd_binaries = [
-    ('D:/python/Lib/site-packages/tkinterdnd2/tkdnd/linux-arm64', 'tkinterdnd2/tkdnd/linux-arm64'),
-    ('D:/python/Lib/site-packages/tkinterdnd2/tkdnd/linux-x64', 'tkinterdnd2/tkdnd/linux-x64'),
-    ('D:/python/Lib/site-packages/tkinterdnd2/tkdnd/osx-arm64', 'tkinterdnd2/tkdnd/osx-arm64'),
-    ('D:/python/Lib/site-packages/tkinterdnd2/tkdnd/osx-x64', 'tkinterdnd2/tkdnd/osx-x64'),
-    ('D:/python/Lib/site-packages/tkinterdnd2/tkdnd/win-arm64', 'tkinterdnd2/tkdnd/win-arm64'),
-    ('D:/python/Lib/site-packages/tkinterdnd2/tkdnd/win-x64', 'tkinterdnd2/tkdnd/win-x64'),
-    ('D:/python/Lib/site-packages/tkinterdnd2/tkdnd/win-x86', 'tkinterdnd2/tkdnd/win-x86'),
-]
+# 动态收集 tkinterdnd2 的 tkdnd 二进制（兼容任意 Python 安装路径，不再硬编码 D:/python）
+tkdnd_binaries = []
+try:
+    import tkinterdnd2
+    _tkdnd_dir = os.path.join(os.path.dirname(tkinterdnd2.__file__), 'tkdnd')
+    if os.path.isdir(_tkdnd_dir):
+        for _root, _dirs, _files in os.walk(_tkdnd_dir):
+            for _f in _files:
+                _src = os.path.join(_root, _f)
+                _rel = os.path.relpath(_root, _tkdnd_dir)
+                _dst = 'tkinterdnd2/tkdnd' if _rel == '.' else os.path.join('tkinterdnd2/tkdnd', _rel).replace('\\', '/')
+                tkdnd_binaries.append((_src, _dst))
+except ImportError:
+    # 未安装 tkinterdnd2 时静默；后续 hiddenimports 会在运行时暴露问题
+    pass
 
 # 收集 scrcpy 目录下的所有文件
 scrcpy_dir = 'tools/scrcpy'

@@ -177,7 +177,7 @@ class DeviceStatusManager:
         for callback in self._device_change_callbacks:
             try:
                 callback(devices)
-            except:
+            except Exception:
                 pass
     
     def add_device_change_callback(self, callback: Callable[[List[str]], None]):

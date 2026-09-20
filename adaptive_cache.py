@@ -27,37 +27,34 @@ class AdaptiveLRUCache:
     def get(self, key: str) -> Optional[Any]:
         """
         获取缓存值（智能调整 TTL）
-        
+
+        访问次数越多，_get_current_ttl 返回的 TTL 越长，
+        高频访问的缓存项会自然获得更长的有效期，无需手动续期。
+
         Args:
             key: 缓存键
-            
+
         Returns:
             Optional[Any]: 缓存值，如果不存在或已过期则返回 None
         """
         if key not in self.cache:
             return None
-            
+
         value, timestamp, access_count = self.cache[key]
         current_time = time.time()
-        
-        # 检查是否过期
+
+        # 检查是否过期（TTL 由访问次数决定）
         if current_time - timestamp > self._get_current_ttl(access_count):
             del self.cache[key]
             return None
-        
-        # 增加访问计数
+
+        # 命中：累加访问计数，访问越多下次 TTL 越长
         new_access_count = access_count + 1
         self.cache[key] = (value, timestamp, new_access_count)
-        
+
         # 移动到最后（最近使用）
         self.cache.move_to_end(key)
-        
-        # 高频访问的项延长 TTL
-        if new_access_count > 5:
-            # 更新超时时间（最多延长 2 倍）
-            extended_ttl = min(self.base_timeout * 2, self.base_timeout * (1 + new_access_count * 0.1))
-            self.cache[key] = (value, current_time, new_access_count)
-        
+
         return value
     
     def set(self, key: str, value: Any) -> None:

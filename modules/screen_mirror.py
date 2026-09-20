@@ -221,18 +221,19 @@ class ScreenMirrorManager:
             
             # 等待进程结束
             stdout, stderr = self.scrcpy_process.communicate()
-            
-            # 进程结束后更新状态
+
+            # 关键修复：先取出退出码，再清理引用
+            # 原代码先置 None 再判断 returncode，导致正常退出分支永远不可达
+            returncode = self.scrcpy_process.returncode
             self.is_mirroring = False
             self.scrcpy_process = None
-            
+
             # 检查退出码
-            if self.scrcpy_process and self.scrcpy_process.returncode == 0:
+            if returncode == 0:
                 logging.info("[投屏] scrcpy 正常退出")
                 self.app.root.after(0, lambda: self.app.update_status("✓ 投屏已正常结束", True))
             else:
                 error_output = stderr.decode('utf-8', errors='ignore') if stderr else ""
-                returncode = self.scrcpy_process.returncode if self.scrcpy_process else 'N/A'
                 logging.warning(f"[投屏] scrcpy 异常退出 (returncode: {returncode})")
                 if error_output:
                     logging.warning(f"[投屏] 错误输出: {error_output[:500]}")
@@ -259,7 +260,7 @@ class ScreenMirrorManager:
                 idx = cmd.index("-s")
                 if idx + 1 < len(cmd):
                     return cmd[idx + 1]
-        except:
+        except Exception:
             pass
         return "Device"
     

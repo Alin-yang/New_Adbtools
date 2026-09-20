@@ -171,7 +171,7 @@ class PerformanceMonitor:
                                         cpu = float(part.replace('%', ''))
                                         logging.debug(f"[CPU监控] 应用CPU: {cpu}%")
                                         return cpu
-                                    except:
+                                    except Exception:
                                         continue
             else:
                 # 获取系统整体CPU使用率
@@ -265,34 +265,35 @@ class PerformanceMonitor:
         return {'total': 0, 'used': 0, 'usage_percent': 0}
     
     def _get_fps(self) -> float:
-        """
-        获取当前FPS（帧率）
-        
+        """获取当前帧率（估算值）
+
+        注意：基于 dumpsys gfxinfo frames 的帧记录数估算，并非精确的实时 FPS。
+        精确 FPS 需通过 SurfaceFlinger --latency 解析帧时间戳，且依赖具体图层名，
+        因设备/Android 版本差异较大，建议在真机环境下进一步校准。
+
         Returns:
-            float: FPS值
+            float: 估算 FPS 值，无法获取时返回 0.0
         """
         try:
-            # 使用简化方法：通过dumpsys gfxinfo获取最近帧信息
             cmd = "adb shell dumpsys gfxinfo frames"
             output, success = run_adb_command(cmd)
-            
+
             if success and output.strip():
                 lines = output.strip().split('\n')
-                # 过滤掉空行和标题行
-                valid_lines = [l for l in lines if l.strip() and not l.startswith(' ')]
-                frame_count = len(valid_lines)
-                
+                # gfxinfo frames 的数据行以数字开头，过滤标题行与空行
+                data_lines = [l for l in lines if l.strip() and re.match(r'^\d', l.strip())]
+                frame_count = len(data_lines)
+
                 if frame_count > 0:
-                    # 返回一个合理的FPS估计值
-                    fps = min(frame_count, 60)  # 最多60FPS
+                    # 估算值（上限 60），仅作参考
+                    fps = min(frame_count, 60)
                     return round(fps, 2)
-            
-            # 备用方案：返回0表示无法获取
+
             return 0.0
-        
+
         except Exception as e:
             logging.debug(f"[性能监控] 获取FPS失败: {str(e)}")
-        
+
         return 0.0
     
     def _get_temperature(self) -> float:
@@ -319,7 +320,7 @@ class PerformanceMonitor:
                         # 温度值通常是毫摄氏度，需要除以1000
                         temp = int(output.strip()) / 1000.0
                         return round(temp, 1)
-                    except:
+                    except Exception:
                         continue
         
         except Exception as e:

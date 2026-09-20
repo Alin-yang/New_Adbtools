@@ -186,7 +186,7 @@ def get_connected_devices_parallel() -> List[str]:
                     result = future.result(timeout=2)
                     if result:
                         validated_devices.append(result)
-                except:
+                except Exception:
                     # 超时或失败的设备跳过
                     continue
         
@@ -608,9 +608,9 @@ def extract_package_name_from_apk(apk_path: str) -> Optional[str]:
                         package_name = match.group(1)
                         if is_valid_package_name(package_name):
                             return package_name
-            except:
+            except Exception:
                 pass
-    except:
+    except Exception:
         pass
     
     return None
