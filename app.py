@@ -620,16 +620,13 @@ class ADBToolApp:
         return run_adb_command(command, retries=retries, timeout=timeout, target_device=target_ip)
     
     def on_ip_changed(self, event=None):
-        """当 IP 地址改变时触发，显示当前设备状态（极致优化版）"""
-        # 立即更新连接状态（不使用防抖）
+        """当 IP 地址改变时触发，刷新连接状态与设备显示
+
+        注：下拉选择的自动连接由 LayoutModern._on_ip_selected 直接处理，
+        此方法仅负责状态刷新（供设备同步等场景调用）。
+        """
         self.update_connection_status()
-            
-        # 获取当前 IP 地址
-        current_ip = self.get_ip_address()
-        if current_ip and current_ip != "192.168.":
-            # 只在下拉框选择时才刷新设备状态
-            if event and event.type == 'VirtualEvent' and event.name == 'ComboboxSelected':
-                self.show_current_device_status(force_display=True)
+        self.show_current_device_status(force_display=True)
 
     def update_connection_status(self, ip_address: Optional[str] = None):
         """更新连接状态标签（支持 USB 设备）"""
@@ -1392,28 +1389,34 @@ class ADBToolApp:
         try:
             logging.info(f"[_extract_and_update_package_name_async] 开始后台处理：{apk_path}")
             
-            # 使用新函数提取包名和版本信息
-            from utils import extract_package_name_from_apk
-            package_name = extract_package_name_from_apk(apk_path)
-            logging.info(f"[_extract_and_update_package_name_async] 提取结果：{package_name}")
+            # 一次性从 APK 本地解析 package/versionName/versionCode（不依赖设备连接，更快更稳）
+            from utils import extract_apk_info
+            info = extract_apk_info(apk_path)
+            package_name = info.get('package')
+            version_name = info.get('versionName') or ''
+            logging.info(
+                f"[_extract_and_update_package_name_async] 提取结果：pkg={package_name}, "
+                f"versionName={version_name}, versionCode={info.get('versionCode')}"
+            )
             
             if package_name:
                 pkg_name = package_name
-                version = ""
+                version = version_name
                 logging.info(f"[_extract_and_update_package_name_async] 包名：{pkg_name}")
                 
-                # 尝试从设备获取该包名的版本号（如果设备已连接）
-                try:
-                    if self.check_device_connected():
-                        logging.info(f"[_extract_and_update_package_name_async] 设备已连接，尝试获取版本号")
-                        output, success = self.run_adb_with_target(f"adb shell pm dump {pkg_name}")
-                        if success:
-                            from utils import extract_version_info
-                            version = extract_version_info(output)
-                            if version:
-                                logging.info(f"[_extract_and_update_package_name_async] 获取到版本号：{version}")
-                except Exception as e:
-                    logging.warning(f"[_extract_and_update_package_name_async] 获取版本号失败：{str(e)}")
+                # 兜底：APK 内 versionName 为空且设备已连接时，再尝试从设备查询
+                if not version:
+                    try:
+                        if self.check_device_connected():
+                            logging.info(f"[_extract_and_update_package_name_async] APK 无 versionName，设备已连接，尝试 pm dump 获取")
+                            output, success = self.run_adb_with_target(f"adb shell pm dump {pkg_name}")
+                            if success:
+                                from utils import extract_version_info
+                                version = extract_version_info(output) or ''
+                                if version:
+                                    logging.info(f"[_extract_and_update_package_name_async] 获取到版本号：{version}")
+                    except Exception as e:
+                        logging.warning(f"[_extract_and_update_package_name_async] 获取版本号失败：{str(e)}")
                 
                 # 在主线程中更新UI
                 self.root.after(0, lambda: self._update_package_info_ui(pkg_name, version, apk_path))

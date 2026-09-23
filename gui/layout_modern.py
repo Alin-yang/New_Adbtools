@@ -317,15 +317,11 @@ class LayoutModern:
         border.grid(row=2, column=0, sticky=tk.EW, padx=10)
     
     def switch_tab(self, tab_name: str) -> None:
-        """切换Tab页"""
-        # 隐藏所有Tab内容
-        for name, frame in self.tabs.items():
-            frame.grid_remove()
-        
-        # 显示选中的Tab
+        """切换Tab页（使用 tkraise 优化，避免 grid_remove+grid 触发布局重算卡顿）"""
+        # 所有 Tab 均已 grid 在同一 cell 叠放，仅提升选中项的 Z 顺序
         if tab_name in self.tabs:
-            self.tabs[tab_name].grid(row=0, column=0, sticky=tk.NSEW)
-        
+            self.tabs[tab_name].tkraise()
+
         # 更新Tab选中效果
         self._update_tab_selection(tab_name)
     
@@ -657,6 +653,7 @@ class LayoutModern:
         tab.columnconfigure(1, weight=1)
         tab.rowconfigure(0, weight=0)  # Shell脚本管理
         tab.rowconfigure(1, weight=1)  # Monkey日志导出 + 设备文件管理器（左右排列，扩展）
+        tab.grid(row=0, column=0, sticky=tk.NSEW)
         
         # 脚本选择卡片
         script_card = ttk.LabelFrame(
@@ -760,7 +757,8 @@ class LayoutModern:
         tab.rowconfigure(2, weight=0)
         tab.rowconfigure(3, weight=0)
         tab.rowconfigure(4, weight=1)
-        
+        tab.grid(row=0, column=0, sticky=tk.NSEW)
+
         # 控制面板卡片
         control_card = ttk.LabelFrame(
             tab,
@@ -1288,12 +1286,18 @@ class LayoutModern:
             self.app.status_text.delete(1.0, tk.END)
     
     def _on_ip_selected(self, event):
-        """IP选择处理"""
+        """IP 下拉选择处理：有效 IP 时自动发起连接，无需手动点"立即连接"按钮"""
         if hasattr(self.app, 'ip_combobox'):
             selected_value = self.app.ip_combobox.get()
             self.app.ip_combobox.set(selected_value)
-        
-        self.app.on_ip_changed(event)
+        # 先刷新连接状态标签
+        self.app.update_connection_status()
+        # 有效 IP（非 192.168. 占位符）时自动连接；否则只显示设备状态
+        current_ip = self.app.get_ip_address()
+        if current_ip and current_ip != "192.168.":
+            self.app.connect_adb()
+        else:
+            self.app.show_current_device_status(force_display=True)
     
     def setup_keyboard_shortcuts(self) -> None:
         """设置键盘快捷键"""

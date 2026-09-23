@@ -53,7 +53,6 @@ a = Analysis(
     hiddenimports=[
         'tkinterdnd2',
         'tkinterdnd2.TkinterDnD',
-        'tkinterdnd2.tkDnD',
     ],
     hookspath=[],
     hooksconfig={},

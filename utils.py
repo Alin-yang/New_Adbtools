@@ -588,32 +588,381 @@ def extract_package_name_from_apk(apk_path: str) -> Optional[str]:
     
     # 如果所有工具都失败，尝试使用 zipfile 解析 AndroidManifest.xml（备用方案）
     try:
-        import zipfile
-        import xml.etree.ElementTree as ET
-        from io import BytesIO
-        
-        with zipfile.ZipFile(apk_path, 'r') as zip_ref:
-            # 读取 AndroidManifest.xml
-            manifest_data = zip_ref.read('AndroidManifest.xml')
-            
-            # 尝试解析二进制 XML（需要额外的库，这里只做简单尝试）
-            # 注意：完整的二进制 XML 解析比较复杂，这里仅作为备选方案
-            # 如果 Manifest 是文本格式（罕见），可以直接解析
-            try:
-                manifest_str = manifest_data.decode('utf-8', errors='ignore')
-                if 'package=' in manifest_str:
-                    import re
-                    match = re.search(r'package=["\']([^"\']+)["\']', manifest_str)
-                    if match:
-                        package_name = match.group(1)
-                        if is_valid_package_name(package_name):
-                            return package_name
-            except Exception:
-                pass
+        info = _extract_apk_info_from_zip(apk_path)
+        if info.get('package') and is_valid_package_name(info['package']):
+            return info['package']
     except Exception:
         pass
-    
+
     return None
+
+
+def _extract_apk_info_from_zip(apk_path: str) -> dict:
+    """从 APK 内 AndroidManifest.xml 提取 package/versionName/versionCode（zipfile 方案）
+
+    纯本地解析，不依赖 aapt/aapt2，不依赖设备连接。
+    一次读取 AndroidManifest.xml 并解析所有属性，避免重复 IO。
+
+    Args:
+        apk_path: APK 文件路径
+
+    Returns:
+        dict: {'package':..., 'versionName':..., 'versionCode':...}，未取到时对应值为 None
+    """
+    result = {'package': None, 'versionName': None, 'versionCode': None}
+    if not apk_path or not os.path.exists(apk_path):
+        return result
+
+    import zipfile
+
+    with zipfile.ZipFile(apk_path, 'r') as zip_ref:
+        manifest_data = zip_ref.read('AndroidManifest.xml')
+
+    # 优先用纯 Python 解析二进制 AXML 格式（Android 标准格式）
+    info = _extract_apk_info_from_axml(manifest_data)
+    if info.get('package') or info.get('versionName') or info.get('versionCode'):
+        return info
+
+    # 极少数情况下 Manifest 是文本格式，用正则匹配兜底
+    try:
+        manifest_str = manifest_data.decode('utf-8', errors='ignore')
+        import re
+
+        for key in ('package', 'versionName', 'versionCode'):
+            m = re.search(rf'{key}=["\']([^"\']+)["\']', manifest_str)
+            if m:
+                result[key] = m.group(1)
+    except Exception:
+        pass
+
+    return result
+
+
+def extract_version_name_from_apk(apk_path: str) -> Optional[str]:
+    """从 APK 文件中提取应用 versionName（本地解析，无需设备连接）
+
+    优先使用 aapt2/aapt 工具，失败时回退到 zipfile + 纯 Python AXML 解析。
+
+    Args:
+        apk_path: APK 文件路径
+
+    Returns:
+        Optional[str]: versionName 字符串，失败时返回 None
+    """
+    if not apk_path or not os.path.exists(apk_path):
+        return None
+
+    # 尝试使用的工具列表（按优先级）
+    tools = ['aapt2', 'aapt']
+    for tool in tools:
+        try:
+            cmd = f'{tool} dump badging "{apk_path}"'
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=10,
+                text=True,
+                encoding='utf-8',
+                errors='ignore'
+            )
+            if result.returncode == 0:
+                # aapt2/aapt 输出: package: name='...' versionCode='...' versionName='...'
+                import re
+                # 优先匹配 versionName='...' 或 versionName="..."
+                m = re.search(r"versionName=['\"]([^'\"]*)['\"]", result.stdout)
+                if m and m.group(1):
+                    return m.group(1)
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            continue
+
+    # 回退到 zipfile + 纯 Python AXML 解析
+    try:
+        info = _extract_apk_info_from_zip(apk_path)
+        return info.get('versionName')
+    except Exception:
+        return None
+
+
+def extract_apk_info(apk_path: str) -> dict:
+    """从 APK 中提取 package/versionName/versionCode（一次解析，本地无设备依赖）
+
+    Args:
+        apk_path: APK 文件路径
+
+    Returns:
+        dict: {'package':..., 'versionName':..., 'versionCode':...}，未取到时为 None
+    """
+    result = {'package': None, 'versionName': None, 'versionCode': None}
+    if not apk_path or not os.path.exists(apk_path):
+        return result
+
+    # 先用 aapt2/aapt 一次性拿到全部字段
+    for tool in ('aapt2', 'aapt'):
+        try:
+            cmd = f'{tool} dump badging "{apk_path}"'
+            r = subprocess.run(
+                cmd, shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=10, text=True,
+                encoding='utf-8', errors='ignore'
+            )
+            if r.returncode == 0:
+                import re
+                out = r.stdout
+                # package: name='...' versionCode='...' versionName='...'
+                pkg_m = re.search(r"name=['\"]([^'\"]+)['\"]", out)
+                vc_m = re.search(r"versionCode=['\"]([^'\"]*)['\"]", out)
+                vn_m = re.search(r"versionName=['\"]([^'\"]*)['\"]", out)
+                if pkg_m:
+                    result['package'] = pkg_m.group(1)
+                if vc_m:
+                    result['versionCode'] = vc_m.group(1)
+                if vn_m:
+                    result['versionName'] = vn_m.group(1)
+                if result['package'] and result['versionName']:
+                    return result
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            continue
+
+    # 回退 zipfile + AXML 解析
+    try:
+        info = _extract_apk_info_from_zip(apk_path)
+        if info.get('package'):
+            result['package'] = info['package']
+        if info.get('versionName'):
+            result['versionName'] = info['versionName']
+        if info.get('versionCode'):
+            result['versionCode'] = info['versionCode']
+    except Exception:
+        pass
+
+    return result
+
+
+def _parse_axml_string_pool(data: bytes, chunk_start: int) -> list:
+    """解析 AXML 的 StringPool chunk，返回字符串列表
+
+    Args:
+        data: 完整的 AXML 二进制数据
+        chunk_start: StringPool chunk 在 data 中的起始偏移
+
+    Returns:
+        list: 字符串列表，索引与 AXML 中的字符串索引一一对应
+    """
+    import struct
+
+    # StringPool chunk header 共 28 字节：
+    # type(2) + headerSize(2) + chunkSize(4) + stringCount(4) + styleCount(4)
+    # + flags(4) + stringsOffset(4) + stylesOffset(4)
+    if chunk_start + 28 > len(data):
+        return []
+
+    try:
+        # _type, _header_size, _chunk_size, string_count, _style_count, flags, \
+        # strings_offset, _styles_offset
+        header = struct.unpack_from('<HHIIIIII', data, chunk_start)
+        string_count = header[3]
+        flags = header[5]
+        strings_offset = header[6]
+    except struct.error:
+        return []
+
+    # 字符串偏移量表起始位置（相对 chunk 开始）
+    offsets_start = chunk_start + 28
+    # 字符串数据区起始位置（相对文件开始）
+    strings_data_start = chunk_start + strings_offset
+
+    is_utf8 = bool(flags & 0x100)
+
+    strings = []
+    for i in range(string_count):
+        try:
+            # 读取字符串偏移量（4 字节，相对 chunk 开始）
+            offset = struct.unpack_from('<I', data, offsets_start + i * 4)[0]
+            pos = strings_data_start + offset
+            if pos >= len(data):
+                strings.append('')
+                continue
+
+            if is_utf8:
+                # UTF-8 字符串：前两个字节是 u16 长度和 u8 长度
+                # 短字符串（u8len <= 0x7FFF）只用 1 字节长度，长字符串用 2 字节
+                # 实际 AOSP: 前两个 u16 都用，但简化处理：读取前两字节
+                # 如果第一字节高位为 0，说明单字节长度；否则双字节
+                b1 = data[pos]
+                if b1 & 0x80:
+                    # 双字节长度（大端）
+                    u16_len = ((b1 & 0x7F) << 8) | data[pos + 1]
+                    u8_len_byte = data[pos + 2]
+                    str_start = pos + 4
+                    str_len = u8_len_byte
+                else:
+                    # 单字节长度
+                    u8_len_byte = data[pos + 1]
+                    str_start = pos + 2
+                    str_len = u8_len_byte
+
+                raw = data[str_start:str_start + str_len]
+                strings.append(raw.decode('utf-8', errors='replace'))
+            else:
+                # UTF-16LE 字符串：前 2 字节是字符数（u16 长度）
+                u16_len = struct.unpack_from('<H', data, pos)[0]
+                # 长字符串用 4 字节前缀（高字节非 0）
+                if u16_len & 0x8000:
+                    u16_len = ((u16_len & 0x7FFF) << 16) | struct.unpack_from('<H', data, pos + 2)[0]
+                    str_start = pos + 4
+                else:
+                    str_start = pos + 2
+
+                raw = data[str_start:str_start + u16_len * 2]
+                strings.append(raw.decode('utf-16-le', errors='replace'))
+        except Exception:
+            strings.append('')
+
+    return strings
+
+
+def _extract_apk_info_from_axml(manifest_data: bytes) -> dict:
+    """纯 Python 解析二进制 AXML 格式的 AndroidManifest.xml，提取 package/versionName/versionCode
+
+    不依赖任何第三方库，仅用标准库 struct 解析二进制格式。
+    一次遍历属性表同时收集三个属性，避免重复解析。
+
+    Args:
+        manifest_data: AndroidManifest.xml 的原始二进制数据
+
+    Returns:
+        dict: {'package':..., 'versionName':..., 'versionCode':...}，未取到时对应值为 None
+    """
+    import struct
+
+    result = {'package': None, 'versionName': None, 'versionCode': None}
+
+    if not manifest_data or len(manifest_data) < 8:
+        return result
+
+    try:
+        # 文件头 8 字节：type(2) + headerSize(2) + fileSize(4)
+        file_type, file_header_size, _file_size = struct.unpack_from('<HHI', manifest_data, 0)
+    except struct.error:
+        return result
+
+    # AXML 文件 type 应为 0x0003
+    if file_type != 0x0003:
+        return result
+
+    # 遍历 chunks
+    pos = file_header_size  # 跳过文件头
+    string_pool = []
+    first_start_tag_attrs = None  # manifest 根标签的 attributes
+
+    while pos + 8 <= len(manifest_data):
+        try:
+            chunk_type, chunk_header_size, chunk_size = struct.unpack_from('<HHI', manifest_data, pos)
+        except struct.error:
+            break
+
+        if chunk_size < 8 or pos + chunk_size > len(manifest_data):
+            break
+
+        if chunk_type == 0x0001:
+            # RES_STRING_POOL_TYPE = 0x0001（字符串池 chunk）
+            string_pool = _parse_axml_string_pool(manifest_data, pos)
+        elif chunk_type == 0x0102:
+            # RES_XML_START_ELEMENT_TYPE = 0x0102（StartTag chunk）
+            # 布局: chunk_header(headerSize 字段值) + lineNumber(4) + comment(4)
+            #       + attrExt(20字节) + attributes 数据
+            # attributeStart 字段值 = 相对 attrExt 起始的字节偏移
+            attr_ext_start = pos + chunk_header_size
+            # attrExt 20 字节: ns(4) + name(4) + attributeStart(2) + attributeSize(2)
+            # + attributeCount(2) + idIdx(2) + classIdx(2) + styleIdx(2)
+            if attr_ext_start + 20 <= len(manifest_data):
+                try:
+                    _ns, _name = struct.unpack_from('<II', manifest_data, attr_ext_start)
+                    attr_start_off, attr_size, attr_count = struct.unpack_from(
+                        '<HHH', manifest_data, attr_ext_start + 8
+                    )
+                    # attributes 起始 = attrExt 起始 + attributeStart 字段值
+                    # attributeStart 通常=20（attrExt 自身大小）
+                    if attr_start_off < 20:
+                        attr_start_off = 20
+                    attr_data_start = attr_ext_start + attr_start_off
+                    # 每个 attribute 20 字节：ns_uri(4) + name(4) + raw_value(4)
+                    # + typed_size(2) + typed_res0(1) + typed_type(1) + typed_data(4)
+                    if attr_size == 0:
+                        attr_size = 20
+                    first_start_tag_attrs = (attr_data_start, attr_count, attr_size)
+                    break  # 只需第一个 StartTag（manifest 根标签）
+                except struct.error:
+                    pass
+
+        # 下一个 chunk
+        pos += chunk_size
+
+    if not first_start_tag_attrs or not string_pool:
+        return result
+
+    attr_data_start, attr_count, attr_size = first_start_tag_attrs
+
+    for i in range(attr_count):
+        attr_pos = attr_data_start + i * attr_size
+        if attr_pos + 20 > len(manifest_data):
+            break
+        try:
+            # ns_uri_idx(4) + name_idx(4) + raw_value_idx(4) + typed_size(2)
+            # + typed_res0(1) + typed_type(1) + typed_data(4)
+            _ns_idx, name_idx, raw_value_idx, _t_size, _t_res0, t_type, t_data = struct.unpack_from(
+                '<IIIHBBi', manifest_data, attr_pos
+            )
+        except struct.error:
+            continue
+
+        # name_idx 指向字符串池中的属性名
+        if name_idx >= len(string_pool):
+            continue
+        attr_name = string_pool[name_idx]
+        # 兼容 'android:versionName' 带命名空间前缀的写法
+        attr_name_simple = attr_name.split(':')[-1] if ':' in attr_name else attr_name
+
+        # 优先取 typed_value（type=0x03 STRING，data 是字符串索引）
+        # 兜底取 raw_value_idx（也指向字符串池）
+        def _str_value(ttype, tdata, raw_idx):
+            if ttype == 0x03 and 0 <= tdata < len(string_pool):
+                return string_pool[tdata]
+            if 0 <= raw_idx < len(string_pool):
+                return string_pool[raw_idx]
+            return None
+
+        if attr_name_simple == 'package':
+            result['package'] = _str_value(t_type, t_data, raw_value_idx)
+        elif attr_name_simple == 'versionName':
+            result['versionName'] = _str_value(t_type, t_data, raw_value_idx)
+        elif attr_name_simple == 'versionCode':
+            # versionCode 通常是 INT 类型(0x10=INT_DEC 或 0x01=INT_HEX)，data 是整数值
+            if t_type in (0x10, 0x01):
+                result['versionCode'] = str(t_data)
+            else:
+                v = _str_value(t_type, t_data, raw_value_idx)
+                if v is not None:
+                    result['versionCode'] = v
+
+    return result
+
+
+def _extract_package_from_axml(manifest_data: bytes) -> Optional[str]:
+    """兼容包装：从 AXML 提取 package 属性（内部调用 _extract_apk_info_from_axml）
+
+    保留以避免破坏既有调用方。
+
+    Args:
+        manifest_data: AndroidManifest.xml 的原始二进制数据
+
+    Returns:
+        Optional[str]: 包名，失败返回 None
+    """
+    return _extract_apk_info_from_axml(manifest_data).get('package')
 
 
 def parse_version_number(version_str: str) -> tuple:
