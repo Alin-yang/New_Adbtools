@@ -107,6 +107,11 @@ class Config:
         history_dir = os.path.join(log_path, "history")
         return os.path.join(history_dir, cls.PKG_HISTORY_FILE)
     
+    # 性能监控告警配置（连续超阈值若干次才告警，避免毛刺误报）
+    PERF_ALERT_CPU_PERCENT = 80   # 进程 CPU% 告警线（多核设备可比 100% 高）
+    PERF_ALERT_MEM_MB = 800       # PSS 内存(MB) 告警线
+    PERF_ALERT_STREAK = 3         # 连续多少次采样超阈值才触发告警
+
     # 投屏配置
     SCRCPY_PATH = "tools\\scrcpy\\scrcpy.exe"  # scrcpy 可执行文件路径
     SCRCPY_BITRATE = "8M"  # 默认码率

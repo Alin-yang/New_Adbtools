@@ -4891,160 +4891,320 @@ class ADBToolApp:
     def start_performance_monitor(self):
         """开始性能监控"""
         try:
-            # 获取包名（留空表示监控系统整体）
-            package_name = None
-            if hasattr(self, 'perf_package_entry'):
-                pkg_input = self.perf_package_entry.get().strip()
-                if pkg_input:  # 如果有选择包名
-                    package_name = pkg_input
-            
-            # 获取采样间隔
-            interval = 1
-            if hasattr(self, 'perf_interval_var'):
-                try:
-                    interval = int(self.perf_interval_var.get())
-                except Exception:
-                    interval = 1
-            
-            # 设置回调函数更新UI
-            self.performance_monitor.update_callback = self._update_performance_ui
-            
-            # 显示进度条
-            if hasattr(self, 'perf_progress'):
-                self.perf_progress.pack(fill=tk.X, pady=5)
-                self.perf_progress.start()
-            
-            # 启动监控
-            success = self.performance_monitor.start_monitoring(package_name, interval)
-            
-            if not success:
-                if hasattr(self, 'perf_progress'):
-                    self.perf_progress.stop()
-                    self.perf_progress.pack_forget()
-        
-        except Exception as e:
-            logging.error(f"[性能监控] 启动失败: {str(e)}", exc_info=True)
-            self.update_status(f"✗ 启动性能监控失败: {str(e)}", False)
-    
-    def stop_performance_monitor(self):
-        """停止性能监控"""
-        try:
-            success = self.performance_monitor.stop_monitoring()
-            
-            # 隐藏进度条
-            if hasattr(self, 'perf_progress'):
-                self.perf_progress.stop()
-                self.perf_progress.pack_forget()
-            
-            return success
-        
-        except Exception as e:
-            logging.error(f"[性能监控] 停止失败: {str(e)}", exc_info=True)
-            self.update_status(f"✗ 停止性能监控失败: {str(e)}", False)
-            return False
-    
-    def get_performance_snapshot(self):
-        """获取单次性能快照"""
-        try:
-            # 获取包名
+            # 包名留空表示监控系统整体
             package_name = None
             if hasattr(self, 'perf_package_entry'):
                 pkg_input = self.perf_package_entry.get().strip()
                 if pkg_input:
                     package_name = pkg_input
-            
-            # 获取性能数据
-            perf_data = self.performance_monitor.get_current_performance(package_name)
-            
-            # 显示结果
-            cpu = perf_data['cpu']
-            mem = perf_data['memory']
-            fps = perf_data['fps']
-            temp = perf_data['temperature']
-            timestamp = perf_data['timestamp']
-            
-            snapshot_text = f"""
-📸 性能快照 ({timestamp})
-{'='*50}
-CPU使用率: {cpu:.1f}%
-内存使用: {mem['used']:.1f} MB / {mem['total']:.1f} MB ({mem['usage_percent']:.1f}%)
-帧率(FPS): {fps:.1f}
-设备温度: {temp:.1f}°C
-{'='*50}
-"""
-            self.update_status(snapshot_text, True, "info")
-        
+
+            interval = 2
+            if hasattr(self, 'perf_interval_var'):
+                try:
+                    interval = float(self.perf_interval_var.get())
+                except (TypeError, ValueError):
+                    interval = 2
+
+            self._hide_perf_dropdown()
+            self.performance_monitor.update_callback = self._update_performance_ui
+            self.performance_monitor.start(package_name, interval)
+            self._set_perf_status(True)
+
         except Exception as e:
-            logging.error(f"[性能监控] 获取快照失败: {str(e)}", exc_info=True)
+            logging.error(f"[性能监控] 启动失败: {str(e)}", exc_info=True)
+            self.update_status(f"✗ 启动性能监控失败: {str(e)}", False)
+
+    def stop_performance_monitor(self):
+        """停止性能监控（停止后自动落盘一份 CSV，避免忘记导出丢失数据）"""
+        try:
+            success = self.performance_monitor.stop()
+            self._set_perf_status(False)
+
+            if self.performance_monitor.history:
+                pkg = self.performance_monitor.package_name or "system"
+                try:
+                    file_path = os.path.join(
+                        self._get_perf_report_dir(), f"perf_{pkg}_{timestamp_time()}.csv")
+                    self.performance_monitor.export_csv(file_path)
+                    self.update_status(f"💾 本次采样已自动保存: {file_path}", True, "info")
+                except Exception as e:
+                    logging.error(f"[性能监控] 自动保存失败: {str(e)}", exc_info=True)
+
+            return success
+        except Exception as e:
+            logging.error(f"[性能监控] 停止失败: {str(e)}", exc_info=True)
+            self.update_status(f"✗ 停止性能监控失败: {str(e)}", False)
+            return False
+
+    def clear_performance_data(self):
+        """清空性能统计数据"""
+        try:
+            self.performance_monitor.clear()
+            self._perf_thread_items = {}
+            if hasattr(self, 'perf_thread_tree'):
+                self.perf_thread_tree.delete(*self.perf_thread_tree.get_children())
+            if hasattr(self, 'perf_samples_tree'):
+                self.perf_samples_tree.delete(*self.perf_samples_tree.get_children())
+            self._set_perf_status(self.performance_monitor.monitoring)
+        except Exception as e:
+            logging.error(f"[性能监控] 清空失败: {str(e)}", exc_info=True)
+
+    def _set_perf_status(self, running: bool):
+        """更新性能页右上角的运行状态指示"""
+        if not hasattr(self, 'perf_status_label'):
+            return
+        try:
+            if running:
+                self.perf_status_label.config(text="● 采集中", foreground="#107C10")
+            else:
+                self.perf_status_label.config(text="● 未开始", foreground="#888780")
+        except Exception:
+            pass
+
+    def _on_perf_thread_sort(self, col: str):
+        """线程表格点击表头排序"""
+        try:
+            if getattr(self, '_perf_thread_sort_col', None) == col:
+                self._perf_thread_sort_rev = not getattr(self, '_perf_thread_sort_rev', False)
+            else:
+                self._perf_thread_sort_col = col
+                self._perf_thread_sort_rev = (col != 'name')
+            threads = list(self.performance_monitor.stats.get('threads', []))
+            self._fill_thread_table(threads)
+        except Exception as e:
+            logging.debug(f"[性能监控] 排序失败: {e}")
+    
+    def get_performance_snapshot(self):
+        """单次性能快照（后台线程执行，避免阻塞 UI）"""
+        try:
+            package_name = None
+            if hasattr(self, 'perf_package_entry'):
+                pkg_input = self.perf_package_entry.get().strip()
+                if pkg_input:
+                    package_name = pkg_input
+
+            self.update_status("📸 正在采集性能快照（约 1 秒）...", True, "info")
+            self.performance_monitor.update_callback = self._update_performance_ui
+
+            def _task():
+                try:
+                    self.performance_monitor.snapshot_once(package_name)
+                    # snapshot_once 内部回调会刷新指标卡与趋势图
+                    self.root.after(0, lambda: self.update_status(
+                        self.performance_monitor.get_summary(), True, "info"))
+                except Exception as e:
+                    logging.error(f"[性能监控] 快照失败: {e}", exc_info=True)
+                    self.root.after(0, lambda: self.update_status(
+                        f"✗ 获取性能快照失败: {e}", False))
+
+            threading.Thread(target=_task, daemon=True).start()
+
+        except Exception as e:
+            logging.error(f"[性能监控] 快照启动失败: {str(e)}", exc_info=True)
             self.update_status(f"✗ 获取性能快照失败: {str(e)}", False)
     
-    def show_performance_summary(self):
-        """显示性能摘要报告"""
+    def _get_perf_report_dir(self) -> str:
+        """性能报告输出目录：<数据存储路径>/perf_reports"""
+        user_log_path = ''
+        if hasattr(self, 'log_path_entry'):
+            user_log_path = self.log_path_entry.get().strip()
+        if not user_log_path:
+            user_log_path = getattr(self, 'default_log_path', os.getcwd())
+        return ensure_directory(os.path.join(user_log_path, "perf_reports"))
+
+    def export_performance_csv(self):
+        """导出逐次采样明细为 CSV"""
         try:
-            summary = self.performance_monitor.get_performance_summary()
-            self.update_status(summary, True, "info")
-        
+            if not self.performance_monitor.history:
+                self.update_status("⚠ 暂无历史数据，请先开始监控采集", False)
+                return
+
+            pkg = self.performance_monitor.package_name or "system"
+            file_path = os.path.join(
+                self._get_perf_report_dir(), f"perf_{pkg}_{timestamp_time()}.csv")
+
+            self.performance_monitor.export_csv(file_path)
+            self.update_status(f"✓ 采样明细已导出 CSV: {file_path}", True)
+
+        except Exception as e:
+            logging.error(f"[性能监控] 导出失败: {str(e)}", exc_info=True)
+            self.update_status(f"✗ 导出性能数据失败: {str(e)}", False)
+
+    def export_performance_report(self):
+        """生成统计报告并写入文件（同时在终端提示路径）"""
+        try:
+            if not self.performance_monitor.history:
+                self.update_status("⚠ 暂无历史数据，请先开始监控采集", False)
+                return
+
+            pkg = self.performance_monitor.package_name or "system"
+            report_dir = self._get_perf_report_dir()
+            file_path = os.path.join(report_dir, f"report_{pkg}_{timestamp_time()}.txt")
+
+            self.performance_monitor.export_report(file_path)
+            summary = self.performance_monitor.get_summary()
+            self.update_status(
+                f"✓ 统计报告已生成: {file_path}\n\n{summary}", True, "info")
+
         except Exception as e:
             logging.error(f"[性能监控] 生成报告失败: {str(e)}", exc_info=True)
             self.update_status(f"✗ 生成性能报告失败: {str(e)}", False)
-    
-    def _update_performance_ui(self, perf_data: dict):
+
+    def _update_performance_ui(self, stats: dict, status_msg: str = None):
         """
-        更新性能监控UI（在主线程中调用）
-        
+        性能数据回调（引擎已调度到主线程）
+
         Args:
-            perf_data: 性能数据字典
+            stats: PerformanceMonitor.stats 快照（指标聚合 + 线程列表 + 历史计数）
+            status_msg: 非 None 表示状态消息（启动/停止/异常提示）
         """
         try:
-            # 更新CPU显示
-            if hasattr(self, 'perf_cpu_label'):
-                cpu = perf_data['cpu']
-                self.perf_cpu_label.config(text=f"{cpu:.1f} %")
-                
-                # 根据CPU使用率改变颜色
-                if cpu > 80:
-                    self.perf_cpu_label.config(foreground="#E81123")  # 红色 - 高负载
-                elif cpu > 50:
-                    self.perf_cpu_label.config(foreground="#FFB900")  # 黄色 - 中等
+            if status_msg is not None:
+                self.update_status(status_msg, not status_msg.startswith("✗"), "info")
+                self._set_perf_status(self.performance_monitor.monitoring)
+
+            # 顶部 PID / 模式 / 采样数指示
+            if hasattr(self, 'perf_pid_label'):
+                mode_text = {'proc': '精确差分', 'cpuinfo': '降级模式',
+                             'system': '系统整体'}.get(
+                    stats.get('mode'), stats.get('mode') or '--')
+                duration = PerformanceMonitor._fmt_duration(stats.get('elapsed', 0))
+                self.perf_pid_label.config(
+                    text=(f"PID: {stats.get('pid') or '--'}   模式: {mode_text}   "
+                          f"采样: {stats.get('sample_count', 0)} 次   时长 {duration}"))
+
+            # 指标卡（当前大字 + 均值/峰值小字）
+            metric_units = {
+                'cpu': '%', 'pss': ' MB', 'rss': ' MB', 'java': ' MB',
+                'native': ' MB', 'fps': '',
+            }
+            for key, (cur_label, sub_label) in getattr(
+                    self, 'perf_metric_labels', {}).items():
+                m = stats.get(key, {})
+                unit = metric_units.get(key, '')
+                cur, avg, peak = m.get('cur'), m.get('avg'), m.get('peak')
+                if cur is None:
+                    cur_label.config(text="--")
+                    sub_label.config(text="均值 --   P95 --   峰值 --")
+                    continue
+                cur_label.config(text=f"{cur:.1f}{unit}")
+                sub_label.config(text=f"均 {avg:.1f}  P95 {m.get('p95'):.1f}  峰 {peak:.1f}")
+
+                # 阈值变色
+                if key == 'cpu':
+                    color = "#A32D2D" if cur > 80 else "#BA7517" if cur > 50 else "#107C10"
+                    cur_label.config(foreground=color)
+                elif key == 'fps':
+                    color = "#A32D2D" if cur < 30 else "#BA7517" if cur < 50 else "#107C10"
+                    cur_label.config(foreground=color)
+
+            # 卡顿率单独显示在状态栏式标签上（与 FPS 语义相近，不额外占卡片）
+            jank = stats.get('jank', {}).get('cur')
+            if hasattr(self, 'perf_jank_label'):
+                self.perf_jank_label.config(
+                    text=f"卡顿率 {jank:.1f}%" if jank is not None else "卡顿率 --")
+                if jank is not None:
+                    self.perf_jank_label.config(
+                        foreground="#A32D2D" if jank > 5 else
+                        "#BA7517" if jank > 2 else "#107C10")
+
+            # 告警状态指示
+            if hasattr(self, 'perf_status_label') and self.performance_monitor.monitoring:
+                if stats.get('alert'):
+                    self.perf_status_label.config(text="● 采集中 · 超阈值",
+                                                  foreground="#A32D2D")
                 else:
-                    self.perf_cpu_label.config(foreground="#107C10")  # 绿色 - 正常
-            
-            # 更新内存显示
-            if hasattr(self, 'perf_mem_label'):
-                mem = perf_data['memory']
-                mem_text = f"{mem['used']:.1f} MB / {mem['total']:.1f} MB"
-                if mem['usage_percent'] > 0:
-                    mem_text += f" ({mem['usage_percent']:.1f}%)"
-                self.perf_mem_label.config(text=mem_text)
-            
-            # 更新FPS显示
-            if hasattr(self, 'perf_fps_label'):
-                fps = perf_data['fps']
-                self.perf_fps_label.config(text=f"{fps:.1f} FPS")
-                
-                # 根据FPS改变颜色
-                if fps < 30:
-                    self.perf_fps_label.config(foreground="#E81123")  # 红色 - 卡顿
-                elif fps < 50:
-                    self.perf_fps_label.config(foreground="#FFB900")  # 黄色 - 一般
-                else:
-                    self.perf_fps_label.config(foreground="#107C10")  # 绿色 - 流畅
-            
-            # 更新温度显示
-            if hasattr(self, 'perf_temp_label'):
-                temp = perf_data['temperature']
-                self.perf_temp_label.config(text=f"{temp:.1f} °C")
-                
-                # 根据温度改变颜色
-                if temp > 45:
-                    self.perf_temp_label.config(foreground="#E81123")  # 红色 - 过热
-                elif temp > 38:
-                    self.perf_temp_label.config(foreground="#FFB900")  # 黄色 - 偏热
-                else:
-                    self.perf_temp_label.config(foreground="#107C10")  # 绿色 - 正常
-        
+                    self.perf_status_label.config(text="● 采集中",
+                                                  foreground="#107C10")
+
+            # 采样明细表 + 线程表格
+            if hasattr(self, 'perf_samples_tree'):
+                self._fill_perf_samples()
+            if hasattr(self, 'perf_thread_tree'):
+                self._fill_thread_table(stats.get('threads', []))
+
         except Exception as e:
             logging.error(f"[性能监控] UI更新失败: {str(e)}")
+
+    def _fill_perf_samples(self):
+        """采样明细增量刷新：新点插到顶部，最新行高亮，最多保留 60 行"""
+        try:
+            tree = self.perf_samples_tree
+            history = self.performance_monitor.history
+            if not history:
+                return
+
+            # 旧行取消高亮
+            children = tree.get_children()
+            if children:
+                old = tree.item(children[0], 'tags')
+                tree.item(children[0], tags=tuple(t for t in old if t != 'last'))
+
+            ts, cpu, pss, rss, java, native, fps, jank = history[-1]
+            tags = ('last',)
+            if self.performance_monitor.stats.get('alert'):
+                tags = ('last', 'alert')
+            tree.insert('', 0, tags=tags, values=(
+                ts,
+                '--' if cpu is None else f"{cpu:.2f}",
+                '--' if pss is None else f"{pss:.1f}",
+                '--' if rss is None else f"{rss:.1f}",
+                '--' if java is None else f"{java:.1f}",
+                '--' if native is None else f"{native:.1f}",
+                '--' if fps is None else f"{fps:.2f}",
+                '--' if jank is None else f"{jank:.2f}"))
+
+            # 截断到 60 行
+            children = tree.get_children()
+            if len(children) > 60:
+                tree.delete(*children[60:])
+        except Exception as e:
+            logging.debug(f"[性能监控] 采样表刷新失败: {e}")
+
+    def _fill_thread_table(self, threads: list):
+        """线程表增量刷新：按 tid 复用行，避免每次采样全量重建"""
+        try:
+            tree = self.perf_thread_tree
+            col = getattr(self, '_perf_thread_sort_col', 'cur')
+            rev = getattr(self, '_perf_thread_sort_rev', True)
+
+            def sort_key(t):
+                v = t.get(col)
+                if isinstance(v, str):
+                    return v.lower()
+                return v if v is not None else -1
+
+            ordered = sorted(threads, key=sort_key, reverse=rev)
+
+            if not hasattr(self, '_perf_thread_items'):
+                self._perf_thread_items = {}
+            items = self._perf_thread_items
+
+            # 移除已消失的线程行
+            alive = {t['tid'] for t in ordered}
+            for tid, item in list(items.items()):
+                if tid not in alive:
+                    if tree.exists(item):
+                        tree.delete(item)
+                    items.pop(tid, None)
+
+            # 新增或更新
+            for i, t in enumerate(ordered):
+                values = (t['tid'], t['name'],
+                          f"{t['cur']:.2f}", f"{t['avg']:.2f}", f"{t['peak']:.2f}")
+                item = items.get(t['tid'])
+                if item and tree.exists(item):
+                    tree.item(item, values=values)
+                else:
+                    items[t['tid']] = tree.insert('', tk.END, values=values)
+
+            # 按当前排序重排（仅移动行，不重建）
+            for i, t in enumerate(ordered):
+                tree.move(items[t['tid']], '', i)
+
+        except Exception as e:
+            logging.debug(f"[性能监控] 线程表刷新失败: {e}")
+
     
     # ==================== 脚本运行相关方法 ====================
     

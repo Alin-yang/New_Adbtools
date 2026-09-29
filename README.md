@@ -118,20 +118,29 @@ class ScreenMirrorManager:
 ```
 
 ### 2.5 性能监控模块（📊 性能监控）
-实时监控 Android 设备的 CPU、内存、FPS、温度等性能指标。
+实时监控 Android 设备的进程级 + 线程级 CPU、内存（PSS/Java/Native）、FPS、Jank 等性能指标。v3.1 全面重写采集引擎。
 **功能**:
-- 选择监控应用（支持下拉搜索/获取当前应用）
-- 设置采样间隔
-- 开始/停止监控
+- 选择监控应用（支持下拉搜索/获取当前应用）；未填包名时进入**系统整体模式**
+- 设置采样间隔（默认 2s）
+- 开始/停止监控（停止时自动落盘一份 CSV，避免忘记导出丢失数据）
 - 单次快照
-- 生成性能报告
-- 实时数据展示（CPU/内存/FPS/温度）
+- 导出 CSV 原始采样点 / 导出文本性能报告
+- 实时数据展示：CPU / PSS / RSS / Java Heap / Native Heap / FPS / Jank%，每项含**当前/均值/峰值**
+- **线程级 CPU 表**：展示 Top N 线程瞬时 CPU%，表头可点击排序
+- **采样点回看**：保留最近 600 条采样记录，可滚动查看
+- **告警机制**：进程 CPU% 或 PSS 连续 N 次（可配置）超阈值时触发告警回调，避免毛刺误报
 
 **实现逻辑**:
 ```python
 class PerformanceMonitor:
-    # 采样线程循环采集，通过 adb 读取 /proc/stat、dumpsys 等数据
-    # 回调函数更新 UI 的实时数据卡片
+    # 一次采样同时产出进程级 + 线程级数据：
+    # adb shell cat /proc/<pid>/stat /proc/<pid>/task/*/stat 单次调用读回
+    # 进程与全部线程的 CPU jiffies，两次采样差分得到真实瞬时 CPU%（与采样间隔无关）
+    # 内存：一次 dumpsys meminfo 同时解析 PSS / Java Heap / Native Heap
+    # FPS：gfxinfo 累计帧数两次差分（与采样间隔无关）
+    # 智能降级：/proc 不可读自动回退 dumpsys cpuinfo（仅进程级）
+    # 系统整体模式：/proc/stat + /proc/meminfo 差分
+    # CLK_TCK 与 CPU 最大值自动探测，兼容多核设备
 ```
 
 ### 2.6 脚本运行模块（🔧 脚本运行）
@@ -230,6 +239,11 @@ CACHE_TIMEOUT = 180           # 缓存超时（秒）
 DEVICE_CACHE_TIMEOUT = 3     # 设备状态缓存（秒）
 MAX_CACHE_SIZE = 50
 DEVICE_MONITOR_INTERVAL = 3   # 设备监控间隔（秒）
+
+# 性能监控告警配置（连续超阈值若干次才告警，避免毛刺误报）
+PERF_ALERT_CPU_PERCENT = 80   # 进程 CPU% 告警线（多核设备可比 100% 高）
+PERF_ALERT_MEM_MB = 800       # PSS 内存(MB) 告警线
+PERF_ALERT_STREAK = 3         # 连续多少次采样超阈值才触发告警
 ```
 
 ### 5.3 投屏配置
@@ -300,7 +314,19 @@ dist/
 
 ## 九、版本历史
 
-### v3.0（当前版本）
+### v3.1（当前版本）
+- 🆕 **性能监控引擎重写**：一次采样同时产出进程级 + 线程级 CPU（/proc/<pid>/task/*/stat 差分），内存一次 dumpsys 同时解析 PSS/Java/Native，FPS 用 gfxinfo 累计帧数差分
+- 🆕 **线程级 CPU 表**：Top N 线程瞬时 CPU%，表头可点击排序
+- 🆕 **系统整体模式**：未填包名时用 /proc/stat + /proc/meminfo 差分监控整机
+- 🆕 **智能降级**：/proc 不可读自动回退 dumpsys cpuinfo；CLK_TCK 与 CPU 最大值自动探测
+- 🆕 **告警机制**：进程 CPU%/PSS 连续 N 次超阈值才告警，避免毛刺误报（阈值可配置）
+- 🆕 **采样点回看**：保留最近 600 条采样记录，支持 CSV 导出与文本报告
+- 🆕 **停止自动落盘**：停止监控时自动保存一份 CSV，避免忘记导出丢失数据
+- ✅ **拖拽识别版本号脱离设备依赖**：直接从 APK 内 AndroidManifest.xml（二进制 AXML）解析 versionName/versionCode，不再依赖 adb pm dump
+- ✅ **Tab 切换优化**：switch_tab 改用 tkraise 替代 grid_remove+grid，避免布局重算卡顿
+- ✅ **IP 自动连接**：下拉选择有效 IP 时自动发起连接，无需手动点"立即连接"
+
+### v3.0
 - 🆕 **scrcpy 投屏功能**：集成 scrcpy 工具集，支持屏幕镜像与按键模拟
 - 🆕 **性能监控模块**：实时监控 CPU/内存/FPS/温度，支持快照与报告
 - 🆕 **自适应 LRU 缓存**：根据访问频率智能调整 TTL
@@ -329,5 +355,5 @@ GitHub：https://github.com/Alin-yang/New_Adbtools
 
 ---
 
-**最后更新**: 2026-08-29
-**文档版本**: v3.0
+**最后更新**: 2026-09-29
+**文档版本**: v3.1
