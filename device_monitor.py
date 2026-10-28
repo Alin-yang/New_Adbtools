@@ -4,7 +4,7 @@
 """
 import threading
 import time
-from typing import Callable, Optional, List
+from typing import Callable, List
 from utils import get_connected_devices_cached_safe  # 🆕 安全版：查询失败返回 None
 from config import Config
 
@@ -57,11 +57,6 @@ class DeviceMonitor:
         """
         if callback not in self.callbacks:
             self.callbacks.append(callback)
-
-    def remove_callback(self, callback: Callable):
-        """移除回调函数"""
-        if callback in self.callbacks:
-            self.callbacks.remove(callback)
 
     def _monitor_loop(self):
         """监控循环（在后台线程运行）"""
@@ -211,12 +206,3 @@ class DeviceStatusManager:
                 callback(devices)
             except Exception:
                 pass
-    
-    def add_device_change_callback(self, callback: Callable[[List[str]], None]):
-        """
-        添加设备变化回调
-        
-        Args:
-            callback: 回调函数
-        """
-        self._device_change_callbacks.append(callback)

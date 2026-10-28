@@ -6,37 +6,26 @@ import re
 import time
 from typing import Tuple, Optional, List, Dict
 from config import Config
-
-# 🆕 优化2：设备检测缓存
-_device_cache = {
-    'devices': [],
-    'last_update': 0,
-    'cache_duration': 2.0,  # 缓存 2 秒
-    'query_ok': False       # 上一次查询是否成功（查询失败 ≠ 没有设备）
-}
-
-# 重负载操作（安装/录屏等）期间置 True，暂停设备可达性验证，
-# 避免 adb shell 请求打扰正在传输/安装的设备，反而把设备踢出列表。
-_device_validation_pause_count = 0
-_device_validation_paused = False
-
+from modules.device_query import DeviceQuery
 
 def set_device_validation_paused(paused: bool) -> None:
     """设置是否暂停设备可达性验证（重负载操作期间调用）
 
-    用计数器实现，重复调用 / 嵌套调用不会互相踩踏。
+    重负载操作（安装/录屏等）期间暂停，避免 adb 请求打扰正在传输/安装的设备，
+    反而把设备踢出列表。用计数器实现，重复/嵌套调用不会互相踩踏。
     """
-    global _device_validation_pause_count, _device_validation_paused
-    if paused:
-        _device_validation_pause_count += 1
-    else:
-        _device_validation_pause_count = max(0, _device_validation_pause_count - 1)
-    _device_validation_paused = _device_validation_pause_count > 0
+    DeviceQuery.set_validation_paused(paused)
 
+
+# ============================================================================
+# 设备查询（实现已收敛到 modules/device_query.DeviceQuery）
+# 这里保留同名函数作为兼容转发，调用方可逐个迁移。
+# ⚠️ 关键语义：query_* 系列"失败返回 None"，list_* 系列"失败回退上次结果"。
+#    分不清就会把"查不到"当成"设备没了"，造成误报断连。
+# ============================================================================
 
 def query_connected_devices() -> Optional[List[str]]:
-    """
-    查询已连接设备列表 —— 严格区分「查询失败」与「确实没有设备」
+    """查询已连接设备列表 —— 严格区分「查询失败」与「确实没有设备」
 
     Returns:
         Optional[List[str]]:
@@ -44,107 +33,54 @@ def query_connected_devices() -> Optional[List[str]]:
             - 失败（adb 异常/超时/返回码非 0）：返回 None
               ⚠️ None 表示"查不到"，绝不能当成"没有设备"，否则会误报断连。
     """
-    try:
-        result = subprocess.run(
-            "adb devices", shell=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=Config.DEVICE_QUERY_TIMEOUT
-        )
-        if result.returncode != 0:
-            # adb server 不可用 / 版本冲突等，视为查询失败
-            return None
-        output = result.stdout.decode('utf-8', errors='ignore')
-        devices = []
-        for line in output.splitlines()[1:]:  # 跳过第一行标题
-            # 只检查基本格式，不进行深度验证
-            if '\t' in line and 'device' in line and 'unauthorized' not in line and 'offline' not in line:
-                device_id = line.split('\t')[0].strip()
-                if device_id and device_id != 'List':  # 排除可能的错误输出
-                    devices.append(device_id)
-        return devices
-    except Exception:
-        return None
+    return DeviceQuery.query()
 
 
 def get_connected_devices_cached_safe() -> Optional[List[str]]:
-    """
-    带缓存的设备列表查询（安全版）
+    """带缓存的设备列表查询（安全版）
+
+    ⚠️ 重负载操作（安装/录屏）期间返回 None：设备正忙着收大包时，任何 adb 命令
+    都会和传输抢同一条通道，可能把传输挤断 → 误报「设备已断开」。
+    暂停只影响"监控/验证"这一层，不影响 query_connected_devices 本身。
 
     Returns:
         Optional[List[str]]: 成功返回设备列表；查询失败返回 None（区别于"没有设备"）
     """
-    current_time = time.time()
-
-    # ⚠️ 重负载操作（安装/录屏）期间跳过查询：
-    #    设备正忙着收大包时，任何 adb 命令都会和传输抢同一条通道，
-    #    可能把传输挤断 → 误报「设备已断开」。
-    #    返回 None（= 查不到），调用方（设备监控）会跳过本轮而不是判定为断连。
-    #    ⚠️ 暂停只影响"监控/验证"这一层，不影响 query_connected_devices 本身 ——
-    #    否则 get_connected_devices_parallel 会误以为"没有设备"。
-    if _device_validation_paused:
+    if DeviceQuery.is_validation_paused():
         return None
-
-    # 检查缓存是否有效
-    if (current_time - _device_cache['last_update']) < _device_cache['cache_duration']:
-        if not _device_cache['query_ok']:
-            return None
-        return list(_device_cache['devices'])
-
-    # 缓存过期，重新获取
-    devices = query_connected_devices()
-
-    # 更新缓存
-    _device_cache['last_update'] = current_time
-    if devices is None:
-        # 查询失败：保留上一次的成功结果，标记本次不可信
-        _device_cache['query_ok'] = False
-        return None
-
-    _device_cache['devices'] = devices
-    _device_cache['query_ok'] = True
-    return list(devices)
+    return DeviceQuery.query_cached()
 
 
 def get_connected_devices_cached() -> List[str]:
-    """
-    获取当前连接的所有设备列表（带缓存优化）
+    """获取当前连接的所有设备列表（带缓存优化）
 
     查询失败时回退到上一次成功的结果，避免把"adb 查询失败"当成"没有设备"。
 
     Returns:
         List[str]: 已连接设备的序列号/IP 地址列表
     """
-    devices = get_connected_devices_cached_safe()
-    if devices is not None:
-        return devices
-    # 查询失败：沿用上一次成功的结果
-    return list(_device_cache['devices'])
+    return DeviceQuery.list_cached()
+
 
 def get_connected_devices(mode: str = "auto") -> List[str]:
-    """
-    获取当前连接的所有设备列表（智能版本）
-    
+    """获取当前连接的所有设备列表（智能版本）
+
     Args:
         mode: 检测模式
-            - "auto": 自动选择（单设备用simple，多设备用parallel）
+            - "auto": 自动选择（单设备不验证，多设备才并行验证）
             - "simple": 快速检测，不验证
             - "parallel": 并行验证
             - "full": 完整验证（带深度检查）
-    
+
     Returns:
         List[str]: 已连接设备的序列号/IP 地址列表
     """
     if mode == "auto":
-        # 先快速获取设备列表
-        devices = get_connected_devices_simple()
-        # 如果有多台设备，使用并行验证
-        if len(devices) > 1:
-            return get_connected_devices_parallel()
-        return devices
+        return DeviceQuery.list_devices_auto()
     elif mode == "simple":
-        return get_connected_devices_simple()
+        return DeviceQuery.list_devices(verify=False)
     elif mode == "parallel":
-        return get_connected_devices_parallel()
+        return DeviceQuery.list_devices(verify=True)
     else:  # mode == "full"
         return _get_connected_devices_full()
 
@@ -266,161 +202,20 @@ def parse_getprop_all(output: str) -> Dict[str, str]:
 
 def get_connected_devices_simple() -> List[str]:
     """获取当前连接的所有设备列表（快速版本，不深度验证）
-    
-    用于启动时快速检测，不进行额外的命令验证
-    
+
     Returns:
         List[str]: 已连接设备的序列号/IP 地址列表
     """
-    try:
-        result = subprocess.run(
-            "adb devices", shell=True, check=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=Config.DEVICE_QUERY_TIMEOUT
-        )
-        output = result.stdout.decode('utf-8', errors='ignore')
-        devices = []
-        for line in output.splitlines()[1:]:  # 跳过第一行标题
-            # 只检查基本格式，不进行深度验证
-            if '\t' in line and 'device' in line and 'unauthorized' not in line and 'offline' not in line:
-                device_id = line.split('\t')[0].strip()
-                if device_id and device_id != 'List':
-                    devices.append(device_id)
-        return devices
-    except Exception:
-        return []
+    devices = DeviceQuery.query()
+    return devices if devices is not None else []
 
 def get_connected_devices_parallel() -> List[str]:
-    """并行检测多个设备并验证可达性（优化版）
-
-    使用线程池并行验证设备，提升多设备场景下的检测速度
+    """并行检测多个设备并验证可达性
 
     Returns:
         List[str]: 已连接且可访问的设备列表
     """
-    try:
-        # 先快速获取所有设备列表
-        device_ids = query_connected_devices()
-        if device_ids is None:
-            return []
-
-        if not device_ids:
-            return []
-
-        # 重负载操作（安装/录屏）期间跳过可达性验证：
-        # 设备正忙时 shell 验证必然超时，反而会把设备误判为掉线。
-        if _device_validation_paused:
-            return list(device_ids)
-
-        # 使用线程池并行验证设备可达性
-        import concurrent.futures
-
-        def validate_single_device(device_id):
-            """验证单个设备是否可达
-
-            用 `adb get-state` 而不是 `adb shell echo test`：
-            get-state 是纯 adb server 查询，不会在设备上起进程，
-            耗时 <10ms，也不会和正在传输/安装的任务抢设备通道。
-            """
-            try:
-                validation_result = subprocess.run(
-                    f"adb -s {device_id} get-state", shell=True,
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    timeout=3
-                )
-                if validation_result.returncode != 0:
-                    return None
-                state = validation_result.stdout.decode('utf-8', errors='ignore').strip()
-                return device_id if state == 'device' else None
-            except Exception:
-                return None
-
-        # 并行验证所有设备（最多 5 个并发）
-        validated_devices = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(5, len(device_ids))) as executor:
-            future_to_device = {
-                executor.submit(validate_single_device, device_id): device_id
-                for device_id in device_ids
-            }
-
-            # 收集所有验证通过的设备
-            for future in concurrent.futures.as_completed(future_to_device):
-                try:
-                    result = future.result(timeout=3)
-                    if result:
-                        validated_devices.append(result)
-                except Exception:
-                    # 超时或失败的设备跳过
-                    continue
-
-        return validated_devices
-
-    except Exception:
-        return []
-
-
-def get_unique_physical_devices() -> List[str]:
-    """获取唯一的物理设备列表（合并同一设备的不同连接方式）
-    
-    Returns:
-        List[str]: 唯一物理设备列表
-    """
-    try:
-        result = subprocess.run(
-            "adb devices -l", shell=True, check=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=5
-        )
-        output = result.stdout.decode('utf-8', errors='ignore')
-        
-        # 解析带有详细信息的设备列表
-        device_lines = output.splitlines()[1:]  # 跳过第一行标题
-        
-        unique_devices = {}  # 使用字典来去重，键是物理设备标识
-        
-        for line in device_lines:
-            # 检查行是否包含设备信息，排除模拟器和其他状态
-            if 'device' in line and 'unauthorized' not in line and 'offline' not in line:
-                # 使用更灵活的方式来分割设备ID和属性
-                # 第一个空白字符前的部分通常是设备ID
-                parts = line.split(None, 1)  # 按第一个空白字符分割
-                if parts:
-                    device_id = parts[0].strip()
-                    if not device_id:
-                        continue
-                    
-                    # 验证设备是否真正可访问
-                    try:
-                        validation_result = subprocess.run(
-                            f"adb -s {device_id} shell echo test", shell=True,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            timeout=3
-                        )
-                        if validation_result.returncode != 0:
-                            continue  # 跳过不可访问的设备
-                    except Exception:
-                        continue  # 跳过验证失败的设备
-                    
-                    # 提取设备属性信息
-                    attributes = parts[1] if len(parts) > 1 else ''
-                    
-                    # 尝试从属性中提取序列号等唯一标识符
-                    # 对于网络连接，提取IP地址部分
-                    if ':' in device_id:  # 网络连接
-                        ip_part = device_id.split(':')[0]
-                        # 尝试找到同一IP的USB连接设备作为唯一标识
-                        unique_key = ip_part
-                    else:  # USB连接
-                        unique_key = device_id
-                        
-                    # 如果还没有使用这个唯一键，或者当前设备ID更完整，则保存
-                    if unique_key not in unique_devices or len(device_id) > len(unique_devices[unique_key]):
-                        unique_devices[unique_key] = device_id
-        
-        return list(unique_devices.values())
-    except Exception:
-        # 如果失败，回退到原始方法
-        return get_connected_devices()
+    return DeviceQuery.list_devices(verify=True)
 
 
 def build_adb_command_with_device(command: str, target_ip: Optional[str] = None) -> str:
@@ -542,72 +337,6 @@ def run_adb_command(command: str, retries: int = None, timeout: int = None, targ
                 continue
     
     return last_error, False
-
-
-def run_adb_commands_batch(commands: List[str], target_device: Optional[str] = None, timeout: int = None) -> List[Tuple[str, bool]]:
-    """
-    🆕 优化3：批量执行ADB命令（减少进程创建开销）
-    
-    将多个命令合并到一个 shell 会话中执行，减少 subprocess 创建开销
-    适用于需要连续执行多个相关命令的场景
-    
-    Args:
-        commands: ADB命令列表
-        target_device: 目标设备IP地址
-        timeout: 每个命令的超时时间
-        
-    Returns:
-        List[Tuple[str, bool]]: 每个命令的结果列表 [(output, success), ...]
-    """
-    if not commands:
-        return []
-    
-    if timeout is None:
-        timeout = Config.ADB_COMMAND_TIMEOUT
-    
-    results = []
-    
-    # 如果只有一个命令，直接使用普通方法
-    if len(commands) == 1:
-        result = run_adb_command(commands[0], target_device=target_device, timeout=timeout)
-        return [result]
-    
-    # 🆕 优化：将多个命令合并执行
-    # 方法：使用 adb shell 的批处理模式
-    try:
-        # 构建批处理命令（使用分号分隔）
-        # 注意：这只适用于 shell 命令，不适用于 adb install 等
-        batch_cmd = "; ".join(commands)
-        
-        # 添加设备选择
-        if target_device:
-            batch_cmd = f"adb -s {target_device} shell {batch_cmd}"
-        else:
-            batch_cmd = f"adb shell {batch_cmd}"
-        
-        # 执行批处理命令
-        result = subprocess.run(
-            batch_cmd,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=timeout * len(commands)  # 总超时时间为单个命令超时 * 命令数量
-        )
-        
-        output = result.stdout.decode('utf-8', errors='ignore')
-        success = result.returncode == 0
-        
-        # 将输出按命令数量拆分（简单方式）
-        # 注意：这种方式适用于简单命令，复杂命令可能需要更智能的解析
-        output_lines = output.split('\n')
-        
-        # 简化处理：将所有结果作为一个整体返回
-        results.append((output, success))
-        
-    except Exception as e:
-        results.append((str(e), False))
-    
-    return results
 
 def timestamp_time() -> str:
     """生成时间戳文件名
@@ -808,53 +537,6 @@ def _extract_apk_info_from_zip(apk_path: str) -> dict:
         pass
 
     return result
-
-
-def extract_version_name_from_apk(apk_path: str) -> Optional[str]:
-    """从 APK 文件中提取应用 versionName（本地解析，无需设备连接）
-
-    优先使用 aapt2/aapt 工具，失败时回退到 zipfile + 纯 Python AXML 解析。
-
-    Args:
-        apk_path: APK 文件路径
-
-    Returns:
-        Optional[str]: versionName 字符串，失败时返回 None
-    """
-    if not apk_path or not os.path.exists(apk_path):
-        return None
-
-    # 尝试使用的工具列表（按优先级）
-    tools = ['aapt2', 'aapt']
-    for tool in tools:
-        try:
-            cmd = f'{tool} dump badging "{apk_path}"'
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=10,
-                text=True,
-                encoding='utf-8',
-                errors='ignore'
-            )
-            if result.returncode == 0:
-                # aapt2/aapt 输出: package: name='...' versionCode='...' versionName='...'
-                import re
-                # 优先匹配 versionName='...' 或 versionName="..."
-                m = re.search(r"versionName=['\"]([^'\"]*)['\"]", result.stdout)
-                if m and m.group(1):
-                    return m.group(1)
-        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
-            continue
-
-    # 回退到 zipfile + 纯 Python AXML 解析
-    try:
-        info = _extract_apk_info_from_zip(apk_path)
-        return info.get('versionName')
-    except Exception:
-        return None
 
 
 def extract_apk_info(apk_path: str) -> dict:
@@ -1123,20 +805,6 @@ def _extract_apk_info_from_axml(manifest_data: bytes) -> dict:
     return result
 
 
-def _extract_package_from_axml(manifest_data: bytes) -> Optional[str]:
-    """兼容包装：从 AXML 提取 package 属性（内部调用 _extract_apk_info_from_axml）
-
-    保留以避免破坏既有调用方。
-
-    Args:
-        manifest_data: AndroidManifest.xml 的原始二进制数据
-
-    Returns:
-        Optional[str]: 包名，失败返回 None
-    """
-    return _extract_apk_info_from_axml(manifest_data).get('package')
-
-
 def parse_version_number(version_str: str) -> tuple:
     """解析版本号为可比较的元组
     
@@ -1338,25 +1006,6 @@ def format_file_size(size_bytes: int) -> str:
             return f"{size_bytes:.1f} {unit}"
         size_bytes /= 1024.0
     return f"{size_bytes:.1f} TB"
-
-
-def safe_decode(data: bytes, encoding: str = 'utf-8') -> str:
-    """安全地解码字节数据
-    
-    Args:
-        data: 要解码的字节数据
-        encoding: 编码格式
-        
-    Returns:
-        str: 解码后的字符串
-    """
-    try:
-        return data.decode(encoding)
-    except UnicodeDecodeError:
-        try:
-            return data.decode('gbk', errors='ignore')
-        except UnicodeDecodeError:
-            return data.decode('utf-8', errors='ignore')
 
 
 def get_all_package_versions(target_device: Optional[str] = None) -> Dict[str, str]:

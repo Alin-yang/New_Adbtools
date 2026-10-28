@@ -4,9 +4,9 @@
 """
 import tkinter as tk
 from tkinter import ttk
-from typing import Dict, Any, Callable, List, Tuple
+from typing import List, Tuple
 import logging
-from config import Config, get_text
+from config import Config
 
 
 class LayoutModern:

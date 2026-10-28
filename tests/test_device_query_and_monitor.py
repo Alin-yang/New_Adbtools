@@ -7,6 +7,7 @@ import sys, os, types, subprocess, threading, time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import utils
+from modules.device_query import DeviceQuery
 import config
 
 ok = True
@@ -60,13 +61,13 @@ check("超时 -> None（查询失败）", d is None, d)
 
 print()
 print("=== 2. 缓存版本：查询失败时回退到上一次成功的结果 ===")
-utils._device_cache.update({'devices': [], 'last_update': 0, 'cache_duration': 2.0, 'query_ok': False})
+DeviceQuery.reset_cache()
 subprocess.run = make_run(b"List of devices attached\n192.168.0.26:5555\tdevice\n")
 utils.get_connected_devices_cached_safe()
 check("首次查询成功", utils.get_connected_devices_cached_safe() == ["192.168.0.26:5555"])
 
-# 让缓存过期，然后让查询失败
-utils._device_cache['last_update'] = 0
+# 让缓存过期（保留上次查到的设备列表），然后让查询失败
+DeviceQuery.expire_cache()
 subprocess.run = make_run(b"", rc=1)
 check("安全版：查询失败返回 None", utils.get_connected_devices_cached_safe() is None)
 check("普通版：回退到上一次结果，不当成空列表",

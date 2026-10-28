@@ -26,6 +26,7 @@ TARGETS = [
     'app.py', 'utils.py', 'config.py', 'decorators.py', 'device_monitor.py',
     'cache_manager.py', 'adaptive_cache.py', 'main.py',
     'gui/layout_modern.py', 'modules/performance_monitor.py', 'modules/screen_mirror.py',
+    'modules/device_query.py',
 ]
 
 # 反射调用白名单：这些名字是靠 getattr(app, "名字") 绑定的
@@ -89,24 +90,102 @@ def collect_defs(tree, path, src):
 
 
 def check_dead_code(path, src, tree):
-    """死代码检测"""
-    defs = collect_defs(tree, path, src)
+    """死代码检测（可达性分析）
+
+    ⚠️ 不能只查一层引用：
+    `_send_via_ime` 只被 `_send_char_by_char` 调用，而后者自己也是死的 ——
+    只查一层的话它会被当成"在用"，删了上层它才变成新的死代码。
+    这里做不动点可达性分析：从"入口"出发，标出所有可达的代码，剩下的才是死代码。
+    """
+    defs = collect_defs(tree, path, src)      # [(name, lineno, kind)]
+    names = {d[0] for d in defs}
+    # 引用统计要包含 tests/ —— 测试里引用的也是"在用"
+    #（比如 DeviceQuery.reset_cache 只被测试调用，但它是有意提供的 API）
+    ref_files = list(TARGETS)
+    test_dir = os.path.join(ROOT, 'tests')
+    if os.path.isdir(test_dir):
+        for f in sorted(os.listdir(test_dir)):
+            if f.endswith('.py'):
+                ref_files.append(os.path.join('tests', f))
     all_src = "\n".join(
         io.open(os.path.join(ROOT, f), encoding='utf-8').read()
-        for f in TARGETS if os.path.exists(os.path.join(ROOT, f))
+        for f in ref_files if os.path.exists(os.path.join(ROOT, f))
     )
+
+    # 字符串反射引用（getattr(app, "xxx")）也算入口
+    reflected = {n for n in names
+                 if all_src.count(f'"{n}"') + all_src.count(f"'{n}'") > 0}
+
+    # 建立引用关系：定义 A 的函数体里引用了哪些定义名
+    # ⚠️ key 必须用节点唯一标识，不能用方法名 ——
+    #    多个类里常有同名方法（get/set/update/delete），
+    #    用名字做 key 会互相覆盖，把死代码误判成可达。
+    cls = next((n for n in tree.body if isinstance(n, ast.ClassDef)), None)
+    refs = {}          # node id -> 引用到的名字集合
+    owner = {}         # node id -> 所属类名
+    if cls:
+        for node in ast.walk(cls):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                used = set()
+                for c in ast.walk(node):
+                    if isinstance(c, ast.Name) and c.id in names and c.id != node.name:
+                        used.add(c.id)
+                    elif isinstance(c, ast.Attribute) and c.attr in names:
+                        used.add(c.attr)
+                refs[id(node)] = used
+                owner[id(node)] = node.name
+
+    # 不动点：从"入口"出发逐步扩散
+    # ⚠️ 入口判定要按"被多少个定义引用"算，不能用 "不在 refs 字典里"：
+    #    __init__ 不会被任何定义按名字引用（实例化不算），但它显然是入口。
+    referenced_by = {}
+    for used in refs.values():
+        for u in used:
+            referenced_by[u] = referenced_by.get(u, 0) + 1
+
+    # ---------- 第一步：直接死代码（从未被任何地方按名字引用）----------
+    direct_dead = set()
+    for name, lineno, kind in defs:
+        if name.startswith('__') or name in ('main', 'setup_gui'):
+            continue
+        occurrences = len(re.findall(r'\b' + re.escape(name) + r'\b', all_src))
+        definitions = len(re.findall(r'^\s*(?:def|class)\s+' + re.escape(name) + r'\b',
+                                     all_src, re.M))
+        quoted = all_src.count(f'"{name}"') + all_src.count(f"'{name}'")
+        if occurrences <= definitions and quoted == 0:
+            direct_dead.add(name)
+
+    # ---------- 第二步：传递死代码（只被死代码引用的也是死的）----------
+    # ⚠️ 用"引用者集合"判断，不用不动点可达性分析 ——
+    #    后者会把"被死代码调用过"误当成死代码（比如 update_status：
+    #    死代码里调了它，但它被大量活代码调用，其实是活的）。
+    referrers = {}          # name -> 引用它的定义名集合
+    for nid, used in refs.items():
+        src_name = owner.get(nid)
+        for u in used:
+            referrers.setdefault(u, set()).add(src_name)
+
+    transitive_dead = set()
+    for name in names:
+        if name in direct_dead:
+            continue
+        who = referrers.get(name, set())
+        # 所有引用者都是死代码 -> 它自己也是死的
+        if who and all(r in direct_dead for r in who):
+            transitive_dead.add(name)
+
+    dead = direct_dead | transitive_dead
 
     for name, lineno, kind in defs:
         if name.startswith('__') or name in ('main', 'setup_gui'):
             continue
-        # 文本出现次数（减去定义处本身）
-        occurrences = len(re.findall(r'\b' + re.escape(name) + r'\b', all_src))
-        definitions = len(re.findall(r'^\s*(?:def|class)\s+' + re.escape(name) + r'\b',
-                                     all_src, re.M))
-        # 字符串反射引用（getattr(app, "xxx") / "xxx" 传给回调）
-        quoted = all_src.count(f'"{name}"') + all_src.count(f"'{name}'")
-        if occurrences <= definitions and quoted == 0:
+        if name not in dead:
+            continue
+        if name in direct_dead:
             report(errors, path, lineno, f"死代码：{kind} '{name}' 定义后从未被引用")
+        else:
+            report(errors, path, lineno,
+                   f"死代码：{kind} '{name}' 只被其它死代码引用（传递死代码）")
 
 
 def check_unused_imports(path, src, tree):

@@ -29,18 +29,32 @@ New_Adbtools/
 │   └── layout_modern.py         # 现代化 UI 布局（当前使用）
 ├── modules/
 │   ├── __init__.py
-│   ├── app_manager.py           # 应用管理（安装/卸载/列表）
-│   ├── device_manager.py        # 设备管理
-│   ├── system_manager.py        # 系统管理
+│   ├── device_query.py          # 设备查询统一入口（6 个查询函数的实现都在这）
 │   ├── screen_mirror.py         # 投屏管理（scrcpy 封装）
-│   └── performance_monitor.py   # 性能监控（CPU/内存/FPS/温度）
+│   └── performance_monitor.py   # 性能监控（CPU/内存/FPS/卡顿率）
 ├── tools/
-│   └── scrcpy/                  # scrcpy 工具集（scrcpy.exe/adb.exe/各类 DLL）
-├── ADBTool.spec                 # PyInstaller 打包配置
-├── package.bat / package.ps1    # 打包脚本
+│   ├── scrcpy/                  # scrcpy 工具集（scrcpy.exe/adb.exe/各类 DLL）
+│   ├── lint.py                  # 零依赖代码质量检查（死代码/危险模式）
+│   ├── lint_baseline.txt        # 存量问题基线（只报新增）
+│   └── diagnose_perf.py         # 性能监控真机诊断（采集原始输出对账）
+├── tests/                       # 单元测试（纯 mock，不依赖真机）
+│   ├── test_core_regression.py      # 核心路径回归
+│   ├── test_device_query_and_monitor.py
+│   ├── test_install_flow.py
+│   ├── test_async_and_fixes.py      # 线程安全
+│   ├── test_perf_improvements.py    # 性能
+│   └── test_perf_parsers.py         # 性能监控解析器（各 Android 版本格式）
+├── ADBTool.spec                 # PyInstaller 打包配置（onefile）
+├── ADBTool_onedir.spec          # PyInstaller 打包配置（onedir，启动更快）
+├── package.bat / package.ps1    # 打包脚本（onedir）
+├── package_onefile.bat          # 打包脚本（单文件 exe）
+├── check.bat                    # 一键检查（lint + 全部单元测试）
 ├── run_tool.bat                 # 运行脚本
 └── .gitignore
 ```
+
+> ⚠️ `.bat` 文件必须是 **GBK 编码** —— cmd.exe 按 ANSI 解码 UTF-8 会把命令行拆散，
+> 导致脚本直接坏掉（emoji 也编不进 GBK）。改完记得转码。
 
 ## 二、核心功能模块
 
@@ -229,7 +243,37 @@ IP 下拉框统一显示 USB 序列号和网络 IP，`build_adb_command_with_dev
 ### 4.7 拖拽支持
 通过 `tkinterdnd2` 支持 APK/脚本文件拖拽到输入框，自动提取包名与版本信息。
 
-## 五、配置说明（config.py）
+## 五、开发与质量工具
+
+### 5.1 一键检查
+```bat
+check.bat
+```
+依次跑：代码质量检查 → 6 套单元测试 → 编译检查。任一步失败返回非 0。
+
+### 5.2 代码质量门禁（零依赖）
+```bat
+D://tool//python//python.exe tools\lint.py          # 报告
+D://tool//python//python.exe tools\lint.py --strict  # 有新增问题就返回非 0
+```
+检查项：死代码（含传递死代码）、未使用 import、shell 管道过滤、裸 `except`、
+后台线程里的 `root.after`、超大文件。
+
+存量问题记在 `tools/lint_baseline.txt`，**只报新增的** —— 这样门禁立刻可用，
+又能防止继续劣化。清理完某条后把基线里对应行删掉即可。
+
+> 不用 ruff/flake8：团队里每个人的 Python 路径都不一样，引入外部工具反而跑不起来。
+
+### 5.3 性能监控真机诊断
+```bat
+D://tool//python//python.exe tools\diagnose_perf.py com.你的包名
+```
+采集各条命令的**原始输出**并打印每个解析器的结果，拿回来对账用
+（确认 PSS / 卡顿率 / CPU% 在你的机型上是否解析正确）。
+
+---
+
+## 六、配置说明（config.py）
 
 ### 5.1 路径配置
 ```python
@@ -267,30 +311,39 @@ WINDOW_GEOMETRY = "1078x464"   # 窗口大小
 MIN_WINDOW_SIZE = (1026, 422)  # 最小尺寸
 ```
 
-## 六、打包发布
+## 七、打包发布
 
-### 6.1 打包配置（ADBTool.spec）
+### 7.1 两种打包方式
+| 脚本 | spec | 产物 | 特点 |
+|---|---|---|---|
+| `package.bat` / `package.ps1` | `ADBTool_onedir.spec` | `dist\ADBTool\` 文件夹 | **启动更快**（不需每次解压），分发要整个文件夹 |
+| `package_onefile.bat` | `ADBTool.spec` | `dist\ADBTool.exe` 单文件 | 分发方便，启动时要把内嵌 archive 解压到 `%TEMP%` |
+
+> 实测（1920×1080 机器）：onedir 首帧约 2.2s，onefile 约 3.6s。
+> onefile 首次运行还会被杀软全量扫描，达到 16s。
+
+### 7.2 打包配置要点
 - 入口：`main.py`
-- 包含数据：`gui/`、`modules/`、`config.py`、`decorators.py`、`utils.py`、`cache_manager.py`、`device_monitor.py`、`adaptive_cache.py`
+- 包含数据：`gui/`、`modules/`、`config.py`、`decorators.py`、`utils.py`、
+  `cache_manager.py`、`device_monitor.py`、`adaptive_cache.py`
 - 自动收集 `tools/scrcpy/` 下所有文件
 - 包含 tkinterdnd2 各平台二进制（linux/osx/win × x64/x86/arm64）
-- 输出：单文件无控制台窗口的 `ADBTool.exe`
+- 输出：无控制台窗口的 exe
 
-### 6.2 打包步骤
-```powershell
-# Windows PowerShell
-.\package.ps1
-# 或手动执行
-pyinstaller --onefile --windowed ADBTool.spec
+### 7.3 打包步骤
+```bat
+:: Windows 批处理
+package.bat              :: onedir（推荐）
+package_onefile.bat      :: 单文件 exe
+
+:: 或手动
+D://tool//python//python.exe -m PyInstaller ADBTool_onedir.spec --noconfirm --clean
 ```
 
-### 6.3 打包产物
-```
-dist/
-└── ADBTool.exe    # 独立可执行文件
-```
+> ⚠️ 必须用 `D://tool//python//python.exe` 打包 —— PATH 里的 python 没有
+> tkinter 也没有 psutil。
 
-## 七、常见问题
+## 八、常见问题
 
 ### 7.1 设备不显示
 启动时检测到的设备与 IP 下拉框不同步 → 已通过合并设备检测结果和文件历史、去重后显示解决。
@@ -301,7 +354,7 @@ dist/
 ### 7.3 投屏无法启动
 确认 `tools/scrcpy/scrcpy.exe` 存在；打包后路径会自动从 `_MEIPASS` 解析。
 
-## 八、开发规范
+## 九、开发规范
 
 ### 8.1 代码结构
 - 主逻辑：`app.py`（ADBToolApp 类）
@@ -319,7 +372,7 @@ dist/
 - 开发分支：`new_view`（界面重构 + 新功能）
 - 提交信息：使用中文，描述清晰
 
-## 九、版本历史
+## 十、版本历史
 
 ### v3.1（当前版本）
 - 🆕 **性能监控引擎重写**：一次采样同时产出进程级 + 线程级 CPU（/proc/<pid>/task/*/stat 差分），内存一次 dumpsys 同时解析 PSS/Java/Native，FPS 用 gfxinfo 累计帧数差分
@@ -355,7 +408,7 @@ dist/
 ### v1.0
 - 基础功能实现
 
-## 十、联系方式
+## 十一、联系方式
 
 项目位置：`D:\N_ADBtools\New_Adbtools-test_about\New_Adbtools`
 GitHub：https://github.com/Alin-yang/New_Adbtools

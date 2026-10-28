@@ -6,12 +6,11 @@ import threading
 import psutil
 import subprocess
 import os
-import glob
 import re
 import queue
 import io
 import logging
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple
 from decorators import require_device_connected
 from utils import (
     run_adb_command, timestamp_time,
@@ -27,7 +26,6 @@ from utils import (
     filter_lines,  # 🆕 Python 侧按关键字过滤输出（替代 shell grep）
     parse_getprop_all,  # 🆕 解析全量 getprop 输出（一次拿全部属性）
     get_all_package_versions,  # 🆕 一条命令拿全部包的版本号
-    run_adb_commands_batch  # 🆕 新增批量执行
 )
 from config import Config
 from cache_manager import cache_manager
@@ -108,13 +106,6 @@ class ADBToolApp:
         self._last_status_time = 0
         self._status_throttle_interval = 0.1  # 100ms 节流间隔
                 
-        # 线程池管理：用于并发执行功能操作
-        self._executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=10,  # 增加到 10 个并发线程，提升并发能力
-            thread_name_prefix="ADBTask"
-        )
-        self._running_tasks = {}  # 跟踪正在运行的任务 {future: task_name}
-        
         # 长时间运行任务的独立线程管理（不占用线程池）
         self._long_running_threads = []  # 跟踪日志、录屏等长时间运行的线程
         self._cleanup_interval = 300  # 清理已完成线程的间隔（秒）
@@ -179,9 +170,6 @@ class ADBToolApp:
                     logging.error(f"[窗口关闭] 停止性能监控失败: {e}")
             
             # 关闭线程池（不等待任务完成，快速退出）
-            if hasattr(self, '_executor'):
-                try:
-                    self._executor.shutdown(wait=False)
                     logging.info("[窗口关闭] 线程池已关闭")
                 except Exception as e:
                     logging.error(f"[窗口关闭] 关闭线程池失败: {e}")
@@ -230,25 +218,6 @@ class ADBToolApp:
         except Exception as error:
             error_msg = str(error)
             self.update_status(f"启动设备监控失败：{error_msg}", False)
-        
-    def _async_device_detection_full(self):
-        """完整的异步设备检测（包含 IP 历史记录更新）"""
-        try:
-            # 在主线程中执行完整的设备检测逻辑
-            self._run_in_ui(self._detect_connected_devices_on_startup)
-        except Exception as error:
-            error_msg = str(error)
-            self._run_in_ui(lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
-
-    def _async_device_detection(self):
-        """异步设备检测（简化版本）"""
-        try:
-            connected_devices = get_connected_devices()
-            # 在主线程中更新 UI
-            self._run_in_ui(lambda: self._handle_detected_devices(connected_devices))
-        except Exception as error:
-            error_msg = str(error)
-            self._run_in_ui(lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
 
     def _init_variables(self) -> None:
         """
@@ -390,91 +359,6 @@ class ADBToolApp:
             Config.ensure_directories(self)
         except Exception as e:
             self.update_status(f"创建目录失败：{str(e)}", False)
-    
-    def _detect_connected_devices_on_startup(self):
-        """启动时检测已连接的设备并更新IP历史记录"""
-        try:
-            # 获取当前连接的设备
-            connected_devices = get_connected_devices()
-            
-            if connected_devices:
-                # 提取所有设备（包括 USB 设备和网络 IP）
-                detected_devices = []
-                for device in connected_devices:
-                    if device not in detected_devices:
-                        detected_devices.append(device)
-                            
-                # 将所有设备添加到历史记录中（保持原有顺序，新设备放在前面，统一格式不带端口）
-                for device in detected_devices:
-                    # 统一格式：如果是IP地址则去除端口号，USB设备序列号直接保存
-                    normalized_device = device
-                    if ':' in device and '.' in device:  # IP地址格式（包含冒号和点号）
-                        normalized_device = device.split(':')[0]  # 只保留IP部分
-                    
-                    if normalized_device not in self.ip_history:
-                        self.ip_history.insert(0, normalized_device)
-                                
-                # 限制历史记录数量
-                self.ip_history = self.ip_history[:Config.MAX_IP_HISTORY]
-                            
-                # 调度保存到文件（防抖）
-                self._schedule_history_save()
-                            
-                # 更新下拉框
-                if hasattr(self, 'ip_combobox'):
-                    import logging
-                    logging.info(f"[启动检测] ip_combobox 存在，准备调度 update_ip_ui")
-                    self.update_status("[DEBUG] ip_combobox 存在，准备更新IP", True)
-                    # 【新增】使用 after 而不是 after_idle，确保在主线程中正确执行
-                    first_device = self.ip_history[0] if self.ip_history else None
-                    logging.info(f"[启动检测] first_device={first_device}")
-                    
-                    def update_ip_ui():
-                        """在主线程中更新 IP UI"""
-                        try:
-                            import logging
-                            logging.info(f"[启动检测] 开始更新 IP UI, first_device={first_device}")
-                            # 延迟更新，避免阻塞启动流程
-                            self._safe_update_combobox('ip', self.ip_history)
-                            # 如果输入框为空、只有默认值或没有检测到设备时手动输入的IP，设置第一个检测到的设备
-                            current_value = self.ip_combobox.get().strip()
-                            logging.info(f"[启动检测] 当前 IP 输入框值: '{current_value}', 长度: {len(current_value)}")
-                            
-                            should_update = False
-                            if not current_value:
-                                should_update = True
-                                logging.info("[启动检测] 条件匹配: 输入框为空")
-                            elif current_value == "192.168.":
-                                should_update = True
-                                logging.info("[启动检测] 条件匹配: 默认值 '192.168.'")
-                            elif current_value.startswith("192.168") and len(current_value) < 8:
-                                should_update = True
-                                logging.info(f"[启动检测] 条件匹配: 不完整的IP '{current_value}'")
-                            
-                            if first_device and should_update:
-                                logging.info(f"[启动检测] 正在更新 IP 输入框为: {first_device}")
-                                self.ip_combobox.delete(0, tk.END)
-                                self.ip_combobox.insert(0, first_device)
-                                logging.info(f"[启动检测] IP 输入框已更新，当前值: {self.ip_combobox.get()}")
-                                # 延迟调用 update_connection_status 确保 UI 已更新
-                                self.root.after(100, lambda: self.update_connection_status(first_device))
-                                logging.info(f"[启动检测] 已调度 update_connection_status")
-                            else:
-                                logging.info(f"[启动检测] 跳过更新 (first_device={first_device}, should_update={should_update})")
-                        except Exception as e:
-                            import logging
-                            logging.error(f"[启动检测] 更新 IP UI 失败: {e}", exc_info=True)
-                    
-                    self.root.after(50, update_ip_ui)
-                            
-                # 显示检测结果（显示所有设备）
-                self.update_status(f"启动时检测到 {len(detected_devices)} 台设备：{', '.join(detected_devices)}", True)
-            else:
-                # 没有检测到设备时的提示
-                self.update_status("启动时未检测到已连接的设备", True)
-                
-        except Exception as e:
-            self.update_status(f"启动时设备检测失败: {str(e)}", False)
     
     def _handle_detected_devices(self, devices):
         """处理检测到的设备（增强版 - 同步 IP 输入框）"""
@@ -1511,81 +1395,6 @@ class ADBToolApp:
         except Exception as e:
             import logging
             logging.error(f"[_update_package_info_ui] 更新UI失败：{str(e)}")
-        
-    def execute_task_async(self, task_name: str, method_name: str):
-        """异步执行任务（底层优化版 - 零阻塞）"""
-        if not hasattr(self, method_name):
-            self._run_in_ui(lambda: self.update_status(f"方法不存在：{method_name}", False))
-            return
-            
-        method = getattr(self, method_name)
-            
-        # 长时间运行任务使用独立线程（不占用线程池）
-        long_running_tasks = ['start_logcat', 'stop_logcat', 'start_recording', 'stop_recording']
-            
-        if method_name in long_running_tasks:
-            # 直接创建线程，零开销
-            thread = threading.Thread(
-                target=self._execute_method_async,
-                args=(task_name, method),
-                name=f"AsyncTask-{task_name}-{time.time()}",
-                daemon=True
-            )
-            thread.start()
-        else:
-            # 使用线程池，但通过 after 避免阻塞
-            self._run_in_ui(lambda: self._submit_to_pool(task_name, method))
-        
-    def _submit_to_pool(self, task_name: str, method):
-        """提交到线程池（在 UI 线程之外）"""
-        try:
-            future = self._executor.submit(self._execute_method_async, task_name, method)
-            self._running_tasks[future] = task_name
-            future.add_done_callback(lambda f: self._on_task_complete(f, task_name))
-        except Exception as e:
-            self._run_in_ui(lambda: self.update_status(f"{task_name}提交失败：{str(e)}", False))
-        
-    def _execute_method_async(self, task_name: str, method):
-        """执行方法（精简版）"""
-        try:
-            result = method()
-            return result
-        except Exception as e:
-            self._run_in_ui(lambda: self.update_status(f"{task_name}执行出错：{str(e)}", False, "error"))
-            return None
-        
-    def _cleanup_long_running_threads(self):
-        """清理已完成的长时间运行线程"""
-        current_time = time.time()
-        if current_time - self._last_cleanup_time < self._cleanup_interval:
-            return
-            
-        # 移除已结束的线程
-        self._long_running_threads = [
-            t for t in self._long_running_threads if t.is_alive()
-        ]
-        self._last_cleanup_time = current_time
-        
-    def _task_wrapper(self, task_name: str, method):
-        """任务包装器（极致精简版）"""
-        try:
-            # 执行实际方法（装饰器会处理设备连接验证）
-            result = method()
-            return result
-        except Exception as e:
-            self._run_in_ui(lambda: self.update_status(f"{task_name}执行出错：{str(e)}", False, "error"))
-            return None
-        
-    def _on_task_complete(self, future, task_name: str):
-        """任务完成回调"""
-        if future in self._running_tasks:
-            del self._running_tasks[future]
-        try:
-            result = future.result(timeout=0.1)
-            if result is not None:
-                self.update_status(f"{task_name}完成", True, "success")
-        except Exception:
-            pass
 
     # 状态更新方法
     def update_status(self, message: str, success: bool, msg_type: str = "normal") -> None:
@@ -1983,17 +1792,6 @@ class ADBToolApp:
         # 同步状态缓存
         cache_manager.set_device_status(ip_address, is_connected)
         return is_connected
-
-    def ensure_device_connected(self) -> bool:
-        """设备连接验证"""
-        ip_address = self.get_ip_address()
-        if not ip_address:
-            self.update_status("请输入IP地址", False)
-            return False
-        if not self.check_device_connected(ip_address):
-            self.update_status(f"设备未连接: {ip_address}", False)
-            return False
-        return True
 
     def _run_in_ui(self, func):
         """把 UI 操作调度到主线程执行（后台线程操作 Tk 控件的唯一入口）
@@ -2743,8 +2541,13 @@ class ADBToolApp:
 
     @require_device_connected
     def send_text_input(self):
-        """发送文本输入到设备（只支持数字）"""
-        # 获取输入框内容（主线程读 Tk）
+        """发送文本输入到设备
+
+        ⚠️ `adb shell input text` **只支持 ASCII**（字母/数字/常用符号）。
+        中文必须靠设备上安装的 ADBKeyBoard 之类第三方输入法（走广播通道），
+        `input text` 根本不经过输入法，切换输入法也没用 —— 所以这里给出明确说明，
+        不做无效尝试。
+        """
         if not hasattr(self, 'text_input_entry'):
             self.update_status("文本输入组件未初始化", False)
             return
@@ -2754,21 +2557,37 @@ class ADBToolApp:
             self.update_status("请输入要发送的文本内容", False)
             return
 
-        # 检查是否只包含数字
-        if not text_to_send.isdigit():
+        # 含非 ASCII（中文/全角符号等）-> 明确说明限制与可行方案
+        if not text_to_send.isascii():
             self.update_status(
-                f"⚠ 只支持数字输入\n\n"
-                f"请手动输入：{text_to_send}",
+                "⚠ adb shell input text 不支持中文\n\n"
+                f"检测到非 ASCII 字符：{text_to_send[:30]}\n\n"
+                "可行方案：\n"
+                "1) 在设备上安装 ADBKeyBoard 等支持 ADB 广播的输入法\n"
+                "2) 然后用这条命令发送：\n"
+                f'   adb shell am broadcast -a ADB_INPUT_TEXT --es msg "{text_to_send}"\n'
+                "3) 或者直接输入英文/数字/符号（本工具可自动发送）",
                 True
             )
             return
 
-        # 直接执行 ADB 命令
         self.update_status(f"正在输入：{text_to_send}...", True, "info")
 
         def _work():
             try:
-                output, success = self.run_adb_with_target(f'adb shell input text "{text_to_send}"')
+                # ⚠️ 先看前台有没有焦点窗口 —— 没有焦点时 input text 会静默失败
+                focus_out, focus_ok = self.run_adb_with_target(
+                    "adb shell dumpsys activity activities")
+                if focus_ok and focus_out:
+                    focus_lines = filter_lines(
+                        focus_out, 'mResumedActivity', 'mFocusedApp')
+                    if not focus_lines:
+                        self._update_status_safe(
+                            "⚠ 没有检测到前台应用，请先打开应用并点击输入框再试", False)
+                        return
+
+                output, success = self.run_adb_with_target(
+                    f'adb shell input text "{text_to_send}"')
 
                 if success and not output.strip():
                     self._update_status_safe(f"✓ 输入成功：{text_to_send}", True)
@@ -2778,416 +2597,6 @@ class ADBToolApp:
                 self._update_status_safe(f"出错：{str(e)}", False)
 
         self.run_in_background(_work)
-    
-    def _send_text_simple(self, text: str):
-        """发送数字和字母文本（简单直接）"""
-        import logging
-            
-        try:
-            # 显示正在发送
-            self.update_status(f"正在发送：{text}...", True, "info")
-                
-            # 使用 input text 命令
-            output, success = self.run_adb_with_target(f'adb shell input text "{text}"')
-                
-            if success and not output.strip():
-                # 成功且无错误输出
-                self.update_status(f"✓ 已发送：{text}", True)
-            elif "NullPointerException" in output or "Exception" in output:
-                # 系统限制了 input 命令
-                self.update_status(
-                    f"✗ 发送失败\n\n"
-                    f"原因：设备系统限制了 ADB input 命令\n\n"
-                    f"建议：\n"
-                    f"1. 重新点击输入框，确保光标闪烁\n"
-                    f"2. 切换到系统默认输入法\n"
-                    f"3. 或者重启设备后重试\n\n"
-                    f"错误信息：{output}",
-                    False
-                )
-            else:
-                # 其他错误
-                self.update_status(f"发送失败：{output}", False)
-                    
-        except Exception as e:
-            logging.error(f"文本输入失败：{str(e)}")
-            self.update_status(f"发送过程出错：{str(e)}", False)
-        
-    def _send_numeric_text(self, text: str):
-        """发送数字和符号文本（简单可靠）"""
-        import logging
-            
-        try:
-            # 显示正在发送
-            self.update_status(f"正在发送：{text}...", True, "info")
-                
-            # 使用 input text 命令
-            output, success = self.run_adb_with_target(f'adb shell input text "{text}"')
-                
-            if success and not output.strip():
-                # 成功且无错误输出
-                self.update_status(f"✓ 已发送：{text}", True)
-            elif "NullPointerException" in output or "Exception" in output:
-                # 系统限制了 input 命令
-                self.update_status(
-                    f"✗ 发送失败\n\n"
-                    f"原因：设备系统限制了 ADB input 命令\n\n"
-                    f"建议：\n"
-                    f"1. 重新点击输入框，确保光标闪烁\n"
-                    f"2. 切换到系统默认输入法\n"
-                    f"3. 或者重启设备后重试\n\n"
-                    f"错误信息：{output}",
-                    False
-                )
-            else:
-                # 其他错误
-                self.update_status(f"发送失败：{output}", False)
-                    
-        except Exception as e:
-            logging.error(f"数字输入失败：{str(e)}")
-            self.update_status(f"发送过程出错：{str(e)}", False)
-        
-    def _send_char_by_char(self, text: str):
-        """逐字符发送文本（不破坏输入法状态）"""
-        import logging
-        import time
-            
-        try:
-            # 先测试 input text 命令是否可用
-            test_output, test_success = self.run_adb_with_target('adb shell input text "a"')
-            if not test_success or "NullPointerException" in test_output or "Exception" in test_output:
-                # input text 命令不可用，使用备用方案
-                self._send_via_ime(text)
-                return
-                
-            # 如果测试成功，继续逐字符发送
-            # 不切换输入法，保持用户当前输入法状态
-            # 直接逐字符发送，让输入法自己处理
-                
-            success_count = 0
-            fail_count = 0
-                
-            for i, char in enumerate(text):
-                try:
-                    # 每个字符之间添加短暂延迟，让输入法有时间处理
-                    output, success = self.run_adb_with_target(
-                        f'adb shell input text "{char}"'
-                    )
-                        
-                    if success and "Exception" not in output and "NullPointerException" not in output:
-                        success_count += 1
-                    else:
-                        fail_count += 1
-                        logging.warning(f"字符 '{char}' 输入失败：{output}")
-                        
-                    # 每发送 1 个字符停顿一下，避免输入过快
-                    time.sleep(0.08)
-                            
-                except Exception as char_error:
-                    fail_count += 1
-                    logging.error(f"字符 '{char}' 输入异常：{str(char_error)}")
-                
-            # 显示结果
-            if fail_count == 0:
-                self.update_status(
-                    f"✓ 文本已发送到设备：{text}\n"
-                    f"共发送 {success_count} 个字符",
-                    True
-                )
-            elif fail_count < len(text):
-                self.update_status(
-                    f"⚠ 部分文本发送成功：{text}\n"
-                    f"成功：{success_count}/{len(text)} 个字符\n"
-                    f"提示：某些字符可能不被当前输入法支持",
-                    True
-                )
-            else:
-                self.update_status(
-                    f"✗ 文本发送失败\n"
-                    f"成功：{success_count}/{len(text)} 个字符\n\n"
-                    f"可能原因：\n"
-                    f"1. 输入框未获得焦点\n"
-                    f"2. 当前输入法不支持 ADB 输入\n"
-                    f"3. 设备响应延迟",
-                    False
-                )
-                    
-        except Exception as e:
-            import logging
-            logging.error(f"逐字符输入失败：{str(e)}")
-            self.update_status(
-                f"逐字符输入失败：{str(e)}\n"
-                f"操作建议：\n"
-                f"1. 确保输入框已选中（光标闪烁）\n"
-                f"2. 尝试切换到系统默认输入法\n"
-                f"3. 重新点击输入框后再试",
-                False
-            )
-        
-    def _send_via_ime(self, text: str):
-        """通过 Unicode 编码方式发送文本（真正支持中文的方法）"""
-        import logging
-        import time
-            
-        try:
-            logging.info(f"使用 Unicode 编码方式发送：{text}")
-                
-            # 方法：将每个中文字符转换为 Unicode 编码，然后通过 keyevent 输入
-            # 这是最底层、最可靠的方法，因为直接模拟按键事件
-                
-            success_count = 0
-            fail_count = 0
-                
-            for char in text:
-                try:
-                    # 获取字符的 Unicode 编码
-                    unicode_val = ord(char)
-                        
-                    # 对于 ASCII 字符（0-127），直接输入
-                    if unicode_val < 128:
-                        output, success = self.run_adb_with_target(
-                            f'adb shell input text "{char}"'
-                        )
-                        if success:
-                            success_count += 1
-                        else:
-                            fail_count += 1
-                    else:
-                        # 对于非 ASCII 字符（中文等），使用 Unicode 输入
-                        # 通过 input keyevent 模拟按键
-                        # 格式：KEYCODE_CHAR + Unicode 值
-                            
-                        # 方法 1: 使用文本编辑器的方式 - 直接粘贴
-                        # 先将字符保存到临时文件
-                        temp_file = "/sdcard/input_text.tmp"
-                            
-                        # 使用 echo 写入文件（支持中文）
-                        echo_cmd = f'echo -n "{char}" > {temp_file}'
-                        self.run_adb_with_target(f"adb shell {echo_cmd}")
-                            
-                        # 然后使用 input tap 模拟点击输入框
-                        # 但这需要知道输入框坐标，不可行
-                            
-                        # 方法 2: 使用 am broadcast 直接发送文本
-                        # 这是 Android 系统级的文本输入接口
-                        broadcast_cmd = f'am broadcast -a ADB_INPUT_TEXT --es text "{char}"'
-                        output, success = self.run_adb_with_target(f"adb shell {broadcast_cmd}")
-                            
-                        if success or "result=0" in output.lower():
-                            success_count += 1
-                        else:
-                            # 如果 broadcast 失败，尝试最后的方法
-                            # 使用 settings 命令设置剪贴板
-                            clip_cmd = f'pm grant com.android.shell android.permission.WRITE_SECURE_SETTINGS'
-                            self.run_adb_with_target(f"adb shell {clip_cmd}")
-                                
-                            # 然后设置剪贴板
-                            clip_set = f'content insert --uri content://clipboard --bind text:s:"{char}"'
-                            self.run_adb_with_target(f"adb shell {clip_set}")
-                                
-                            # 模拟粘贴
-                            self.run_adb_with_target("adb shell input keyevent KEYCODE_PASTE")
-                            success_count += 1
-                            fail_count -= 1  # 不算失败
-                        
-                    # 每个字符之间停顿
-                    time.sleep(0.1)
-                            
-                except Exception as char_error:
-                    fail_count += 1
-                    logging.error(f"字符 '{char}' 输入异常：{str(char_error)}")
-                
-            # 显示结果
-            if fail_count == 0:
-                self.update_status(
-                    f"✓ 文本已发送到设备：{text}\n"
-                    f"共发送 {success_count} 个字符",
-                    True
-                )
-            elif fail_count < len(text):
-                self.update_status(
-                    f"⚠ 部分文本发送成功：{text}\n"
-                    f"成功：{success_count}/{len(text)} 个字符",
-                    True
-                )
-            else:
-                # 全部失败，提供最实用的建议
-                self.update_status(
-                    f"✗ 自动输入失败\n\n"
-                    f"原因：\n"
-                    f"您的设备系统版本限制了所有 ADB 自动输入方式\n\n"
-                    f"这是 Android 系统安全策略，不是工具问题\n\n"
-                    f"可行的解决方案：\n"
-                    f"1. 【推荐】手动输入 - 最快速度\n"
-                    f"2. Root 设备后使用自动化工具（如 Auto.js）\n"
-                    f"3. 使用 Android 无障碍服务（需要开发辅助应用）",
-                    False
-                )
-                    
-        except Exception as e:
-            import logging
-            logging.error(f"Unicode 输入失败：{str(e)}")
-            self.update_status(
-                f"Unicode 输入失败：{str(e)}\n\n"
-                f"结论：\n"
-                f"您的设备不支持 ADB 自动文本输入\n\n"
-                f"建议：\n"
-                f"1. 手动在设备上输入文本\n"
-                f"2. 或者考虑使用其他自动化方案",
-                False
-            )
-        
-    def _send_chinese_text(self, text: str):
-        """发送中文文本（使用输入法兼容方式）"""
-        import logging
-        import time
-            
-        try:
-            # 步骤 0: 先检查是否有设备连接
-            devices_output, devices_success = self.run_adb_with_target("adb devices")
-            if not devices_success:
-                self.update_status("设备连接异常，请重新连接设备", False)
-                return
-            
-            # 步骤 1: 检查当前输入法状态
-            ime_output, ime_success = self.run_adb_with_target(
-                "adb shell ime list -s"
-            )
-            
-            if ime_success and ime_output:
-                logging.info(f"可用输入法：{ime_output}")
-                
-                # 获取当前启用的输入法
-                current_ime_output, _ = self.run_adb_with_target("adb shell ime get")
-                if current_ime_output:
-                    logging.info(f"当前输入法：{current_ime_output.strip()}")
-                    
-                # 尝试找到并切换到支持中文的输入法
-                chinese_imes = [
-                    "com.android.inputmethod.pinyin/.PinyinIME",
-                    "com.google.android.inputmethod.pinyin/.AndroidLatinIME",
-                    "com.sohu.inputmethod.sogou/.SogouIME",
-                    "com.baidu.input/.ImeService",
-                    "com.iflytek.inputmethod/.FlyIME",
-                    "com.qq.pinyin/.QQPinyinIME",
-                    "com.google.android.inputmethod.latin/.LatinIME"  # GBoard
-                ]
-                    
-                current_ime = None
-                for ime in chinese_imes:
-                    if ime in ime_output:
-                        current_ime = ime
-                        break
-                    
-                if current_ime:
-                    # 切换到中文输入法
-                    set_ime_output, set_ime_success = self.run_adb_with_target(
-                        f"adb shell ime set {current_ime}"
-                    )
-                    if set_ime_success:
-                        logging.info(f"已切换到输入法：{current_ime}")
-                        time.sleep(0.5)  # 等待输入法切换完成
-                    else:
-                        logging.warning(f"切换输入法失败：{set_ime_output}")
-                else:
-                    logging.warning("未找到支持的中文输入法，将尝试使用默认输入法")
-            else:
-                logging.warning(f"获取输入法列表失败：{ime_output}")
-            
-            # 步骤 2: 检查是否有焦点（通过检查当前聚焦的窗口）
-            # ⚠️ 不能写 `| grep -E '...'`：管道由本机 cmd 解析，用户环境没有 grep 会整条失败；
-            #    且 dumpsys window 输出很大，改用 dumpsys activity activities（体积小得多）
-            focus_output, focus_success = self.run_adb_with_target(
-                "adb shell dumpsys activity activities"
-            )
-            if focus_success and focus_output:
-                focus_lines = filter_lines(focus_output, 'mResumedActivity', 'mFocusedApp')
-                if focus_lines:
-                    logging.info(f"当前焦点窗口：{focus_lines[0].strip()}")
-            
-            # 步骤 3: 逐字符发送文本（使用增强的转义处理）
-            success_count = 0
-            fail_count = 0
-            
-            # 对特殊字符进行转义
-            special_chars = ['"', "'", "\\", "$", "`", "(", ")", "[", "]", "{", "}", "<", ">", "|", "&", ";"]
-            
-            for i, char in enumerate(text):
-                try:
-                    # 对特殊字符进行转义
-                    if char in special_chars:
-                        # 使用 Unicode 编码输入特殊字符
-                        unicode_val = ord(char)
-                        # 使用 input keyevent 模拟输入（对于特殊字符）
-                        char_output, char_success = self.run_adb_with_target(
-                            f'adb shell input text "{char}"'
-                        )
-                    else:
-                        # 普通字符直接输入
-                        char_output, char_success = self.run_adb_with_target(
-                            f'adb shell input text "{char}"'
-                        )
-                    
-                    if char_success:
-                        success_count += 1
-                    else:
-                        fail_count += 1
-                        logging.warning(f"字符 '{char}' 输入失败：{char_output}")
-                    
-                    # 每发送 3 个字符稍作停顿，避免输入过快
-                    if (i + 1) % 3 == 0:
-                        time.sleep(0.15)
-                        
-                except Exception as char_error:
-                    fail_count += 1
-                    logging.error(f"字符 '{char}' 输入异常：{str(char_error)}")
-            
-            # 步骤 4: 显示结果
-            if fail_count == 0:
-                self.update_status(
-                    f"✓ 文本已发送到设备：{text}\n"
-                    f"共发送 {success_count} 个字符\n"
-                    f"提示：如果输入框未显示，请点击输入框后重试",
-                    True
-                )
-            elif fail_count < len(text):
-                self.update_status(
-                    f"⚠ 部分文本发送成功：{text}\n"
-                    f"成功：{success_count}/{len(text)} 个字符\n"
-                    f"可能原因：\n"
-                    f"1. 输入框未获得焦点（需光标闪烁）\n"
-                    f"2. 某些字符不被当前输入法支持\n"
-                    f"3. 设备响应延迟，请稍后重试",
-                    True
-                )
-            else:
-                # 全部失败，提供详细诊断
-                self.update_status(
-                    f"✗ 文本发送失败\n"
-                    f"成功：{success_count}/{len(text)} 个字符\n\n"
-                    f"诊断步骤：\n"
-                    f"1. 确认设备已连接：adb devices\n"
-                    f"2. 打开应用并点击输入框\n"
-                    f"3. 确保光标在输入框中闪烁\n"
-                    f"4. 检查输入法是否为中文\n\n"
-                    f"快速解决：\n"
-                    f"在设备上手动输入一个字测试，\n"
-                    f"如果手动输入正常，请重新点击输入框后再试",
-                    False
-                )
-                
-        except Exception as e:
-            import logging
-            logging.error(f"中文输入失败：{str(e)}")
-            self.update_status(
-                f"中文输入失败：{str(e)}\n"
-                f"操作建议：\n"
-                f"1. 在设备上打开目标应用\n"
-                f"2. 点击输入框使其获得焦点（光标闪烁）\n"
-                f"3. 确保已安装中文输入法（如搜狗、百度等）\n"
-                f"4. 重新尝试发送",
-                False
-            )
     
     @require_device_connected
     def screencap(self):
@@ -4553,129 +3962,6 @@ class ADBToolApp:
         self.status_text.insert(tk.END, "💡 提示：将 <xxx> 替换为实际参数值\n", "info")
         self.status_text.insert(tk.END, "="*70 + "\n", "info")
         self.status_text.see(tk.END)
-    
-    def execute_quick_command(self):
-        """执行快捷命令（支持用户自定义输入）"""
-        try:
-            # 获取输入的命令
-            if not hasattr(self, 'quick_cmd_combobox'):
-                return
-            
-            cmd = self.quick_cmd_combobox.get().strip()
-            if not cmd:
-                self.update_status("⚠️ 请输入 ADB 命令", False)
-                return
-            
-            # 检查是否连接设备
-            target_ip = self.get_ip_address()
-            if not target_ip or target_ip == "192.168.":
-                self.update_status("⚠️ 请先连接设备", False)
-                return
-            
-            # 显示正在执行
-            self.update_status(f"⏳ 正在执行命令：{cmd}\n", True)
-            
-            # 使用后台线程执行（优化：直接创建线程，不使用线程池）
-            import threading
-            thread = threading.Thread(target=lambda: self._execute_quick_command_async(cmd), daemon=True)
-            thread.start()
-            
-            # 保存到历史记录
-            self._save_command_to_history(cmd)
-            
-        except Exception as e:
-            self.update_status(f"❌ 执行命令失败：{str(e)}", False)
-    
-    def _execute_quick_command_async(self, cmd: str):
-        """异步执行快捷命令"""
-        try:
-            # 执行命令
-            output, success = self.run_adb_with_target(cmd)
-            
-            # 在 UI 线程中显示结果
-            if success:
-                result_text = f"✅ 命令执行成功:\n{output}"
-                self._run_in_ui(lambda: self.update_status(result_text, True, "info"))
-            else:
-                result_text = f"❌ 命令执行失败:\n{output}"
-                self._run_in_ui(lambda: self.update_status(result_text, False))
-        except Exception as e:
-            self._run_in_ui(lambda: self.update_status(f"❌ 执行出错：{str(e)}", False))
-    
-    def _save_command_to_history(self, cmd: str):
-        """保存命令到历史记录（优化版）"""
-        try:
-            if not hasattr(self, 'quick_cmd_combobox'):
-                return
-                
-            current_values = list(self.quick_cmd_combobox['values'])
-            
-            # 如果命令已存在，先移除
-            if cmd in current_values:
-                current_values.remove(cmd)
-            
-            # 添加到最前面
-            current_values.insert(0, cmd)
-            
-            # 限制历史记录数量（最多 20 条）
-            if len(current_values) > 20:
-                current_values = current_values[:20]
-            
-            # 延迟更新下拉框，避免阻塞主线程
-            self._run_in_ui(lambda vals=tuple(current_values): self._safe_update_combobox('quick_cmd', vals))
-        except Exception as e:
-            import logging
-            logging.error(f"保存命令历史失败: {e}")
-    
-    def refresh_device_list(self):
-        """刷新设备列表（增强版 - 显示设备信息）"""
-        try:
-            # 执行 adb devices
-            output, success = self.run_adb_command("adb devices")
-            
-            if success and output:
-                # 解析设备列表
-                devices = []
-                lines = output.strip().split('\n')
-                
-                for line in lines[1:]:  # 跳过标题行
-                    if '\t' in line:
-                        parts = line.split('\t')
-                        if len(parts) >= 2:
-                            device_id = parts[0]
-                            status = parts[1]
-                            
-                            if status == 'device':
-                                # 获取设备型号（异步，超时 0.5 秒）
-                                try:
-                                    import subprocess
-                                    result = subprocess.run(
-                                        ['adb', '-s', device_id, 'shell', 'getprop', 'ro.product.model'],
-                                        capture_output=True,
-                                        text=True, encoding='utf-8', errors='replace',
-                                        timeout=0.5
-                                    )
-                                    model = result.stdout.strip()
-                                    if model:
-                                        devices.append(f"{model} - {device_id} ✓")
-                                    else:
-                                        devices.append(f"{device_id} ✓")
-                                except Exception:
-                                    devices.append(f"{device_id} ✓")
-                
-                # 更新 IP 下拉框
-                if hasattr(self, 'ip_combobox'):
-                    current_ip = self.ip_combobox.get()
-                    # 延迟更新，避免阻塞
-                    self._run_in_ui(lambda devs=tuple(devices): self._safe_update_combobox('ip', devs))
-                    
-                    # 尝试恢复当前选择
-                    if current_ip:
-                        self.ip_combobox.set(current_ip)
-                    elif devices:
-                        self.ip_combobox.current(0)
-        except Exception:
-            pass  # 失败不提示
 
     def _setup_drag_drop(self):
         """设置拖拽APK文件和脚本文件功能"""
@@ -4706,7 +3992,6 @@ class ADBToolApp:
         
         # 尝试安装和使用 tkinterdnd2
         try:
-            import tkinterdnd2 as tkdnd
             from tkinterdnd2 import DND_FILES
             
             def on_drop_apk(event):
@@ -4836,31 +4121,6 @@ class ADBToolApp:
                 context_menu.post(event.x_root, event.y_root)
             
             self.apk_entry.bind("<Button-3>", show_context_menu)
-
-    def show_cache_stats(self):
-        """显示缓存统计信息"""
-        stats = cache_manager.get_all_stats()
-        stats_text = "缓存统计信息:\n"
-        for cache_name, cache_stats in stats.items():
-            stats_text += f"\n{cache_name}:\n"
-            stats_text += f"  大小: {cache_stats['size']}/{cache_stats['max_size']}\n"
-            stats_text += f"  超时: {cache_stats['timeout']}秒\n"
-        
-        self.update_status(stats_text, True)
-        
-    def clear_all_caches(self):
-        """清空所有缓存"""
-        result = messagebox.askyesno(
-            "确认清空缓存",
-            "您确定要清空所有缓存吗？\n\n清空后下次查询可能需要更长时间。",
-            icon="question"
-        )
-        
-        if result:
-            cache_manager.clear_all()
-            self.update_status("已清空所有缓存", True)
-        else:
-            self.update_status("已取消清空缓存操作", True)
     
     @require_device_connected
     def open_factory_menu(self):
@@ -5072,22 +4332,6 @@ class ADBToolApp:
     def key_lock(self):
         """模拟锁屏键"""
         self._send_key_event(276, "锁屏键 (LOCK)")
-    
-    def key_media_prev(self):
-        """模拟上一曲"""
-        self._send_key_event(88, "上一曲")
-    
-    def key_media_play(self):
-        """模拟播放/暂停"""
-        self._send_key_event(85, "播放/暂停")
-    
-    def key_media_next(self):
-        """模拟下一曲"""
-        self._send_key_event(87, "下一曲")
-    
-    def key_media_stop(self):
-        """模拟停止"""
-        self._send_key_event(86, "停止")
     
     def _send_key_event(self, keycode: int, key_name: str):
         """

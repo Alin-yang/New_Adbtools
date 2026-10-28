@@ -119,6 +119,7 @@ print()
 print("=" * 72)
 print("=== 7. 安装期间设备查询会被暂停 ===")
 import utils as U
+from modules.device_query import DeviceQuery
 import subprocess as _sp
 
 class _FR:
@@ -134,12 +135,12 @@ _sp.run = _fake_run
 
 try:
     U.set_device_validation_paused(False)
-    U._device_cache['last_update'] = 0
+    DeviceQuery.reset_cache()
     check("未暂停时能查到设备",
           U.get_connected_devices_cached_safe() == ["192.168.0.26:5555"],
           U.get_connected_devices_cached_safe())
 
-    U._device_cache['last_update'] = 0
+    DeviceQuery.reset_cache()
     U.set_device_validation_paused(True)
     # 暂停只作用在"监控/验证"层，不在"查询"层：
     #   - cached_safe（设备监控用）-> None，监控跳过本轮，不会误判断连
@@ -151,7 +152,7 @@ try:
           U.query_connected_devices())
 
     U.set_device_validation_paused(False)
-    U._device_cache['last_update'] = 0
+    DeviceQuery.reset_cache()
     check("恢复后能正常查询",
           U.get_connected_devices_cached_safe() == ["192.168.0.26:5555"],
           U.get_connected_devices_cached_safe())

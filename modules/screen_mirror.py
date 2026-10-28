@@ -293,16 +293,3 @@ class ScreenMirrorManager:
         except Exception:
             pass
         return "Device"
-    
-    def get_mirror_status(self) -> dict:
-        """
-        获取投屏状态
-        
-        Returns:
-            dict: 包含投屏状态信息的字典
-        """
-        return {
-            "is_mirroring": self.is_mirroring,
-            "process_running": self.scrcpy_process is not None and self.scrcpy_process.poll() is None,
-            "pid": self.scrcpy_process.pid if self.scrcpy_process else None,
-        }

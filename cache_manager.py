@@ -30,10 +30,6 @@ class CacheManager:
             base_timeout=Config.CACHE_TIMEOUT * 2  # 系统信息缓存时间更长
         )
     
-    def get_device_status(self, device_id: str) -> Optional[bool]:
-        """获取设备连接状态"""
-        return self.device_cache.get(f"device_status_{device_id}")
-    
     def set_device_status(self, device_id: str, status: bool) -> None:
         """设置设备连接状态"""
         self.device_cache.set(f"device_status_{device_id}", status)
@@ -53,20 +49,6 @@ class CacheManager:
     def set_system_info(self, info_type: str, info: str) -> None:
         """设置系统信息"""
         self.system_cache.set(f"system_{info_type}", info)
-    
-    def clear_all(self) -> None:
-        """清空所有缓存"""
-        self.device_cache.clear()
-        self.package_cache.clear()
-        self.system_cache.clear()
-    
-    def get_all_stats(self) -> Dict[str, Dict[str, Any]]:
-        """获取所有缓存的统计信息"""
-        return {
-            'device_cache': self.device_cache.get_stats(),
-            'package_cache': self.package_cache.get_stats(),
-            'system_cache': self.system_cache.get_stats()
-        }
 
 
 # 全局缓存管理器实例

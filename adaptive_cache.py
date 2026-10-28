@@ -3,7 +3,7 @@
 实现智能 TTL 调整机制，根据访问频率动态优化缓存策略
 """
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional, Tuple
 from collections import OrderedDict
 from config import Config
 
@@ -141,19 +141,6 @@ class AdaptiveLRUCache:
         
         for key in expired_keys:
             del self.cache[key]
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """获取缓存统计信息"""
-        total_access_count = sum(count for _, _, count in self.cache.values())
-        avg_access_count = total_access_count / len(self.cache) if self.cache else 0
-        
-        return {
-            'size': len(self.cache),
-            'max_size': self.max_size,
-            'base_timeout': self.base_timeout,
-            'avg_access_count': round(avg_access_count, 2),
-            'last_cleanup': self.last_cleanup
-        }
 
 
 # 保持向后兼容，原有的 LRUCache 继续使用
@@ -236,12 +223,3 @@ class LRUCache:
         
         for key in expired_keys:
             del self.cache[key]
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """获取缓存统计信息"""
-        return {
-            'size': len(self.cache),
-            'max_size': self.max_size,
-            'timeout': self.timeout,
-            'last_cleanup': self.last_cleanup
-        }

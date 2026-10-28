@@ -10,6 +10,7 @@ import sys, os, subprocess, types, queue, time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import utils
+from modules.device_query import DeviceQuery
 import app as appmod
 import device_monitor
 
@@ -93,7 +94,7 @@ restore()
 print()
 print("=" * 72)
 print("=== 2. 设备查询：失败/空/正常 三态 ===")
-utils._device_cache.update({'devices': [], 'last_update': 0, 'cache_duration': 2.0, 'query_ok': False})
+DeviceQuery.reset_cache()
 
 def r_ok(*a, **kw):
     return FakeProc(b"List of devices attached\n192.168.0.26:5555\tdevice\n")

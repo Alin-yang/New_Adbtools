@@ -6,6 +6,7 @@ import sys, os, io, types, queue, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import app as appmod
+from modules.device_query import DeviceQuery
 import config
 
 ok = True
@@ -78,6 +79,8 @@ def make_stub():
     s._ui_queue = queue.Queue()
     s._ui_pump_scheduled = False
     s.get_ip_address = lambda: "192.168.0.26"
+    s.messages = []
+    s.update_status = lambda msg, success, msg_type="normal": s.messages.append((msg, success))
     for name in ('_run_in_ui', '_schedule_ui_pump', '_pump_ui_queue',
                  '_update_install_status', '_update_status_safe',
                  '_set_progress_mode', '_set_progress_value', '_show_progress', '_hide_progress',
@@ -201,8 +204,8 @@ stub = make_stub()
 subprocess.Popen = fake_popen
 subprocess.run = fake_run
 stub._run_install_with_progress("D:\\work\\app.apk")
-check("安装结束后恢复验证（未残留暂停）", utils._device_validation_pause_count == 0,
-      utils._device_validation_pause_count)
+check("安装结束后恢复验证（未残留暂停）", DeviceQuery._pause_count == 0,
+      DeviceQuery._pause_count)
 
 subprocess.Popen = real_popen
 subprocess.run = real_run

@@ -3,8 +3,6 @@
 统一管理应用的所有配置参数，避免硬编码
 """
 import os
-import sys
-from typing import Dict, Any
 
 class Config:
     """应用配置类"""
@@ -87,15 +85,6 @@ class Config:
     
     # 国际化配置（仅保留中文）
     DEFAULT_LANGUAGE = "zh"
-    
-    @classmethod
-    def get_config_dict(cls) -> Dict[str, Any]:
-        """获取所有配置的字典形式"""
-        config_dict = {}
-        for attr_name in dir(cls):
-            if not attr_name.startswith('_') and not callable(getattr(cls, attr_name)):
-                config_dict[attr_name] = getattr(cls, attr_name)
-        return config_dict
     
     @classmethod
     def get_history_file_path(cls, app_instance=None) -> str:
@@ -201,15 +190,3 @@ UI_TEXTS = {
     "get_package_path": "获取当前包名应用安装路径",
     "show_commands": "功能按键原始执行命令",
 }
-
-def get_text(key: str) -> str:
-    """
-    获取界面文本
-    
-    Args:
-        key: 文本键名
-        
-    Returns:
-        str: 对应的中文文本，如果不存在则返回键名
-    """
-    return UI_TEXTS.get(key, key)
