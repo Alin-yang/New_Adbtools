@@ -45,13 +45,6 @@ def query_connected_devices() -> Optional[List[str]]:
               ⚠️ None 表示"查不到"，绝不能当成"没有设备"，否则会误报断连。
     """
     try:
-        # ⚠️ 重负载操作（安装/录屏）期间跳过查询：
-        #    设备正忙着收大包时，任何 adb 命令都会和传输抢同一条通道，
-        #    可能把传输挤断 → 误报「设备已断开」。
-        #    返回 None（= 查不到），调用方会跳过本轮而不是判定为断连。
-        if _device_validation_paused:
-            return None
-
         result = subprocess.run(
             "adb devices", shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -81,6 +74,15 @@ def get_connected_devices_cached_safe() -> Optional[List[str]]:
         Optional[List[str]]: 成功返回设备列表；查询失败返回 None（区别于"没有设备"）
     """
     current_time = time.time()
+
+    # ⚠️ 重负载操作（安装/录屏）期间跳过查询：
+    #    设备正忙着收大包时，任何 adb 命令都会和传输抢同一条通道，
+    #    可能把传输挤断 → 误报「设备已断开」。
+    #    返回 None（= 查不到），调用方（设备监控）会跳过本轮而不是判定为断连。
+    #    ⚠️ 暂停只影响"监控/验证"这一层，不影响 query_connected_devices 本身 ——
+    #    否则 get_connected_devices_parallel 会误以为"没有设备"。
+    if _device_validation_paused:
+        return None
 
     # 检查缓存是否有效
     if (current_time - _device_cache['last_update']) < _device_cache['cache_duration']:

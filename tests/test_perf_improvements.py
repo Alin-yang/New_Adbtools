@@ -141,10 +141,14 @@ try:
 
     U._device_cache['last_update'] = 0
     U.set_device_validation_paused(True)
-    check("暂停期间 query_connected_devices 返回 None（查不到，不当成断连）",
-          U.query_connected_devices() is None)
-    check("暂停期间缓存查询也返回 None",
+    # 暂停只作用在"监控/验证"层，不在"查询"层：
+    #   - cached_safe（设备监控用）-> None，监控跳过本轮，不会误判断连
+    #   - query_connected_devices  -> 仍能查（查询本身无害）
+    check("暂停期间 cached_safe 返回 None（设备监控会跳过本轮）",
           U.get_connected_devices_cached_safe() is None)
+    check("暂停不影响纯查询（并行验证仍能拿到设备列表）",
+          U.query_connected_devices() == ["192.168.0.26:5555"],
+          U.query_connected_devices())
 
     U.set_device_validation_paused(False)
     U._device_cache['last_update'] = 0
