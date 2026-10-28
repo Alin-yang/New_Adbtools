@@ -3,9 +3,9 @@ chcp 65001 >nul
 echo ================================
 echo ADB Tool Packaging Script (onefile)
 echo ================================
-REM 打单个 exe，方便单文件分发。
-REM ⚠️ onefile 每次启动都要把内嵌 archive 解压到 %%TEMP%%，实测多花约 9.5 秒。
-REM    日常使用建议用 package.bat（onedir），启动快 12 倍。
+REM �򵥸� exe�����㵥�ļ��ַ���
+REM [ע��] onefile ÿ��������Ҫ����Ƕ archive ��ѹ�� %%TEMP%%��ʵ��໨Լ 9.5 �롣
+REM    �ճ�ʹ�ý����� package.bat��onedir���������� 12 ����
 
 set "PYTHON=D:\tool\python\python.exe"
 if not exist "%PYTHON%" set "PYTHON=python"

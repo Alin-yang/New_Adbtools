@@ -3,9 +3,9 @@ chcp 65001 >nul
 echo ================================
 echo ADB Tool Packaging Script (onedir)
 echo ================================
-REM é»˜è®¤æ‰“ onedirï¼šäº§ç‰©æ˜¯ dist\ADBTool\ æ–‡ä»¶å¤¹ï¼Œå¯åŠ¨ä¸éœ€è¦è§£å‹ã€‚
-REM å®æµ‹æ¯” onefile å¿«çº¦ 12 ç§’ï¼ˆonefile æ¯æ¬¡å¯åŠ¨éƒ½è¦æŠŠå†…åµŒ archive è§£å‹åˆ° %TEMP%ï¼‰ã€‚
-REM éœ€è¦å•ä¸ª exe æ–‡ä»¶æ—¶ç”¨ package_onefile.batã€‚
+REM Ä¬ÈÏ´ò onedir£º²úÎïÊÇ dist\ADBTool\ ÎÄ¼ş¼Ğ£¬Æô¶¯²»ĞèÒª½âÑ¹¡£
+REM Êµ²â±È onefile ¿ìÔ¼ 12 Ãë£¨onefile Ã¿´ÎÆô¶¯¶¼Òª°ÑÄÚÇ¶ archive ½âÑ¹µ½ %TEMP%£©¡£
+REM ĞèÒªµ¥¸ö exe ÎÄ¼şÊ±ÓÃ package_onefile.bat¡£
 
 set "PYTHON=D:\tool\python\python.exe"
 if not exist "%PYTHON%" set "PYTHON=python"
@@ -26,7 +26,7 @@ echo.
 echo ================================
 echo Packaging completed!
 echo Executable location: dist\ADBTool\ADBTool.exe
-echo NOTE: åˆ†å‘æ—¶è¯·æŠŠæ•´ä¸ª dist\ADBTool æ–‡ä»¶å¤¹ä¸€èµ·æ‰“åŒ…
+echo NOTE: ·Ö·¢Ê±Çë°ÑÕû¸ö dist\ADBTool ÎÄ¼ş¼ĞÒ»Æğ´ò°ü
 echo ================================
 
 echo.

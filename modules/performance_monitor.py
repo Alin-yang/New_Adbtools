@@ -190,6 +190,12 @@ class PerfParsers:
     def parse_meminfo(output: str) -> Dict[str, Optional[float]]:
         """解析 dumpsys meminfo <pkg>，单位 KB → MB
 
+        ⚠️ 格式随 Android 版本变化，这里要同时兼容：
+          - Android 8+  App Summary 表：`Total PSS:   45678`（首字母大写！）
+          - Android 7-  表格格式     ：`  TOTAL   45678  ...`
+          - Android 10+ 表里多一列 Rss：`Java Heap: 12345   23456`
+            （取第一列 Pss，与 PSS 指标同口径）
+
         Returns:
             {'pss': MB, 'java': MB, 'native': MB}，缺失项为 None
         """
@@ -200,10 +206,14 @@ class PerfParsers:
         java = native = None
         java_m = re.search(r'Java Heap:\s+(\d+)', output)
         native_m = re.search(r'Native Heap:\s+(\d+)', output)
-        pss_m = re.search(r'TOTAL PSS:\s+(\d+)', output)
+        # ⚠️ 必须忽略大小写：真机输出是 "Total PSS:"（首字母大写），
+        #    用全大写的 "TOTAL PSS:" 会永远匹配不上 → PSS 指标一直是空。
+        pss_m = re.search(r'(?i)total\s+pss:\s+(\d+)', output)
         if not pss_m:
-            # 老版本格式："  TOTAL   123456  ..."
-            pss_m = re.search(r'^\s*TOTAL\s+\d*\s*(\d+)', output, re.M)
+            # 老版本表格格式："  TOTAL   123456   67890   4567   ..."
+            # ⚠️ 第一列才是 PSS Total，后面依次是 Private Dirty/Clean/SwapPss。
+            #    正则里不能有 \d*，否则会把第一列吃掉、误取 Private Dirty。
+            pss_m = re.search(r'(?i)^\s*total\s+(\d+)', output, re.M)
         if java_m:
             java = int(java_m.group(1))
         if native_m:

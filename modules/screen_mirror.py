@@ -27,13 +27,15 @@ class ScreenMirrorManager:
         self.is_mirroring = False
         self.mirror_thread: Optional[threading.Thread] = None
         
-    def start_mirroring(self, device_ip: str = None) -> bool:
+    def start_mirroring(self, device_ip: str = None, options: dict = None) -> bool:
         """
         启动投屏
-        
+
         Args:
             device_ip: 设备 IP 地址或序列号，如果为 None 则使用当前选中的设备
-            
+            options: 投屏参数 {'bitrate': '8M', 'max_size': '1920', 'max_fps': '30'}，
+                     None 则用 Config 默认值
+
         Returns:
             bool: 是否成功启动
         """
@@ -64,7 +66,7 @@ class ScreenMirrorManager:
                 return False
             
             # 构建 scrcpy 命令
-            cmd = self._build_scrcpy_command(scrcpy_path, device_ip)
+            cmd = self._build_scrcpy_command(scrcpy_path, device_ip, options)
             
             logging.info(f"[投屏] 启动命令: {' '.join(cmd)}")
             self.app.update_status(f"⏳ 正在启动投屏 ({device_ip})...", True, "info")
@@ -164,28 +166,50 @@ class ScreenMirrorManager:
         logging.warning(f"[投屏] 未找到 scrcpy.exe，已尝试路径: {possible_paths}")
         return None
     
-    def _build_scrcpy_command(self, scrcpy_path: str, device_ip: str) -> list:
+    def _build_scrcpy_command(self, scrcpy_path: str, device_ip: str, options: dict = None) -> list:
         """
         构建 scrcpy 命令
-        
+
         Args:
             scrcpy_path: scrcpy.exe 的路径
             device_ip: 设备 IP 或序列号
-            
+            options: 投屏参数 {'bitrate', 'max_size', 'max_fps'}，None 用 Config 默认值
+
         Returns:
             list: 命令参数列表
         """
+        opts = {
+            'bitrate': Config.SCRCPY_BITRATE,
+            'max_size': Config.SCRCPY_MAX_SIZE,
+            'max_fps': Config.SCRCPY_MAX_FPS,
+        }
+        if options:
+            for k in list(opts):
+                v = options.get(k)
+                # 空值/非法值一律回退默认，避免拼出非法命令行
+                if v is None or str(v).strip() == '':
+                    continue
+                opts[k] = str(v).strip()
+
+        bitrate = opts['bitrate']
+        max_size = opts['max_size']
+        max_fps = opts['max_fps']
+
         cmd = [
             scrcpy_path,
-            "--video-bit-rate", Config.SCRCPY_BITRATE,  # 修改为 --video-bit-rate
-            "--max-size", Config.SCRCPY_MAX_SIZE,
-            "--max-fps", Config.SCRCPY_MAX_FPS,
+            "--video-bit-rate", bitrate,
+            "--max-fps", max_fps,
             "--window-title", f"ADB Tool - {device_ip}",
             "--stay-awake",  # 保持设备唤醒
             # "--turn-screen-off",  # 注释掉：关闭设备屏幕（可选，默认开启）
             "--show-touches",  # 显示触摸点
         ]
-        
+
+        # --max-size 0 表示"不缩放，保持原始分辨率"；
+        # scrcpy 接受 0，但显式传 0 比不传更清晰
+        if max_size and str(max_size) != '0':
+            cmd.extend(["--max-size", str(max_size)])
+
         # 如果指定了设备，添加 -s 参数
         if device_ip:
             # ⚠️ 必须补齐端口：scrcpy 要求 -s 的序列号与 `adb devices` 里完全一致，
@@ -217,8 +241,8 @@ class ScreenMirrorManager:
             
             self.is_mirroring = True
             
-            # 在主线程中更新 UI
-            self.app.root.after(0, lambda: self.app.update_status(
+            # 更新 UI（_run_in_ui 走队列，由主线程执行）
+            self.app._run_in_ui(lambda: self.app.update_status(
                 f"✓ 投屏已启动 - {self._get_device_name_from_cmd(cmd)}", 
                 True
             ))
@@ -237,26 +261,26 @@ class ScreenMirrorManager:
             # 检查退出码
             if returncode == 0:
                 logging.info("[投屏] scrcpy 正常退出")
-                self.app.root.after(0, lambda: self.app.update_status("✓ 投屏已正常结束", True))
+                self.app._run_in_ui(lambda: self.app.update_status("✓ 投屏已正常结束", True))
             else:
                 error_output = stderr.decode('utf-8', errors='ignore') if stderr else ""
                 logging.warning(f"[投屏] scrcpy 异常退出 (returncode: {returncode})")
                 if error_output:
                     logging.warning(f"[投屏] 错误输出: {error_output[:500]}")
-                    # 在主线程中显示错误信息
-                    self.app.root.after(0, lambda msg=error_output[:200]: self.app.update_status(f"✗ 投屏错误: {msg}", False))
-                self.app.root.after(0, lambda: self.app.update_status("⚠ 投屏已断开", False))
+                    # 显示错误信息（走 UI 队列）
+                    self.app._run_in_ui(lambda msg=error_output[:200]: self.app.update_status(f"✗ 投屏错误: {msg}", False))
+                self.app._run_in_ui(lambda: self.app.update_status("⚠ 投屏已断开", False))
                 
         except FileNotFoundError:
             error_msg = "未找到 scrcpy.exe，请确保已下载并放置在 tools/scrcpy/ 目录"
             logging.error(f"[投屏] {error_msg}")
-            self.app.root.after(0, lambda: self.app.update_status(f"✗ {error_msg}", False))
+            self.app._run_in_ui(lambda: self.app.update_status(f"✗ {error_msg}", False))
             self.is_mirroring = False
             
         except Exception as e:
             error_msg = f"启动 scrcpy 失败: {str(e)}"
             logging.error(f"[投屏] {error_msg}", exc_info=True)
-            self.app.root.after(0, lambda msg=error_msg: self.app.update_status(f"✗ {msg}", False))
+            self.app._run_in_ui(lambda msg=error_msg: self.app.update_status(f"✗ {msg}", False))
             self.is_mirroring = False
     
     def _get_device_name_from_cmd(self, cmd: list) -> str:

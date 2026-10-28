@@ -4965,20 +4965,43 @@ class ADBToolApp:
         except Exception as e:
             self.update_status(f"打开 CMD 窗口失败：{str(e)}", False)
     
+    def get_scrcpy_options(self) -> dict:
+        """获取用户在「投屏」Tab 里选择的投屏参数
+
+        Returns:
+            dict: {'bitrate': '8M', 'max_size': '1920', 'max_fps': '30'}
+        """
+        def pick(attr, default):
+            var = getattr(self, attr, None)
+            if var is None:
+                return default
+            try:
+                v = (var.get() or '').strip()
+            except Exception:
+                v = ''
+            return v if v else default
+
+        return {
+            'bitrate': pick('scrcpy_bitrate_var', Config.SCRCPY_BITRATE),
+            'max_size': pick('scrcpy_max_size_var', Config.SCRCPY_MAX_SIZE),
+            'max_fps': pick('scrcpy_max_fps_var', Config.SCRCPY_MAX_FPS),
+        }
+
     def start_screen_mirror(self):
         """启动投屏（使用 scrcpy）"""
         try:
             # 获取设备 IP
             device_ip = self.get_ip_address()
-            
+
             # 初始化投屏管理器（如果尚未初始化）
             if not hasattr(self, 'screen_mirror_manager'):
                 from modules.screen_mirror import ScreenMirrorManager
                 self.screen_mirror_manager = ScreenMirrorManager(self)
-            
-            # 启动投屏
-            self.screen_mirror_manager.start_mirroring(device_ip)
-            
+
+            # 启动投屏（带上用户选择的参数）
+            options = self.get_scrcpy_options()
+            self.screen_mirror_manager.start_mirroring(device_ip, options)
+
         except Exception as e:
             error_msg = f"启动投屏失败: {str(e)}"
             logging.error(f"[投屏] {error_msg}", exc_info=True)

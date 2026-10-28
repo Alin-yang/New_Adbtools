@@ -131,6 +131,20 @@ class Config:
     SCRCPY_BITRATE = "8M"  # 默认码率
     SCRCPY_MAX_SIZE = "1920"  # 最大尺寸
     SCRCPY_MAX_FPS = "30"  # 最大帧率
+
+    # 投屏参数可选项（用户在「投屏」Tab 里选）
+    # ⚠️ 之前这三个值写死在代码里，投屏卡顿/模糊时用户唯一能做的
+    #    就是改代码重新打包 —— 没有任何自救手段。
+    SCRCPY_BITRATE_OPTIONS = ["2M", "4M", "8M", "16M", "24M"]
+    SCRCPY_MAX_SIZE_OPTIONS = ["720", "1080", "1440", "1920", "0"]  # 0 = 保持原始分辨率
+    SCRCPY_MAX_FPS_OPTIONS = ["15", "24", "30", "60"]
+    SCRCPY_SIZE_LABELS = {
+        "720": "720p (标清)",
+        "1080": "1080p (全高清)",
+        "1440": "1440p (2K)",
+        "1920": "1920 (全高清以上)",
+        "0": "原始分辨率 (不缩放)",
+    }
     
     @classmethod
     def ensure_directories(cls, app_instance=None) -> None:

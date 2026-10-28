@@ -579,10 +579,18 @@ class LayoutModern:
         """创建投屏Tab"""
         tab = ttk.Frame(self.content_area, style='Card.TFrame')
         self.tabs['mirror'] = tab
-        
-        tab.columnconfigure(0, weight=1)
+
+        # ⚠️ 改成双列：本 Tab 卡片最多（参数 + 说明 + 4 组按键），
+        #    单列时底部「系统控制」会被窗口裁掉，电源/锁屏按钮点不到。
+        tab.columnconfigure(0, weight=1, uniform="mirrorcols")
+        tab.columnconfigure(1, weight=1, uniform="mirrorcols")
         tab.grid(row=0, column=0, sticky=tk.NSEW)
-        
+
+        # 投屏参数卡片（码率 / 分辨率 / 帧率）
+        # ⚠️ 这三个值以前写死在代码里，投屏卡顿或模糊时用户唯一能做的
+        #    就是改代码重新打包 —— 没有任何自救手段。
+        self._create_mirror_options_card(tab, row=0, col=0)
+
         # 使用说明卡片
         info_card = ttk.LabelFrame(
             tab,
@@ -590,15 +598,14 @@ class LayoutModern:
             style='Card.TLabelframe',
             padding=(12, 6)
         )
-        info_card.grid(row=0, column=0, sticky=tk.EW, padx=6, pady=6)
+        info_card.grid(row=1, column=0, sticky=tk.EW, padx=6, pady=(0, 6))
 
         # 说明文字压到 4 行：本 Tab 内容最多，文字一多就会把底部的
         # 「系统控制」卡片顶出窗口（电源/锁屏按钮点不到）
         info_text = (
             "🔹 scrcpy 投屏已集成，支持点击/滑动等完整交互，低延迟（<100ms）\n"
-            "🔹 点击“启动投屏”即可镜像手机或 TV 屏幕\n"
-            "🔹 下方按键可模拟操作设备（方向键 / 系统键 / 音量电源）\n"
-            "🔹 投屏时建议关闭设备省电模式，避免 WiFi 休眠断流"
+            "🔹 点击“启动投屏”即可镜像手机或 TV 屏幕；下方按键可模拟操作设备\n"
+            "🔹 投屏卡顿？先降码率/分辨率；投屏时建议关闭设备省电模式"
         )
         info_label = ttk.Label(
             info_card,
@@ -619,7 +626,7 @@ class LayoutModern:
                 ("🖥️ 启动投屏", "start_screen_mirror", "primary"),
                 ("⏹️ 停止投屏", "stop_screen_mirror", "danger"),
             ],
-            row=1, col=0
+            row=2, col=0
         )
         
         # 按键模拟卡片
@@ -633,7 +640,7 @@ class LayoutModern:
                 ("➡️ 右", "key_right", "secondary"),
                 ("✅ 确认", "key_enter", "primary"),
             ],
-            row=2, col=0
+            row=2, col=1
         )
         
         # 系统按键卡片（分两行）
@@ -660,7 +667,7 @@ class LayoutModern:
                 ("⏻ 电源", "key_power", "danger"),
                 ("🔒 锁屏", "key_lock", "secondary"),
             ],
-            row=4, col=0
+            row=3, col=1
         )
     
     def create_advanced_tab(self) -> None:
@@ -972,6 +979,53 @@ class LayoutModern:
         self.app.perf_thread_tree.tag_configure('odd', background='#F7F9FC')
         self.app.perf_thread_tree.tag_configure('even', background='#FFFFFF')
     
+    def _create_mirror_options_card(self, parent, row: int, col: int) -> None:
+        """创建投屏参数卡片（码率 / 分辨率 / 帧率）
+
+        ⚠️ 这三个参数以前写死在代码里，投屏卡顿、模糊、掉帧时
+        用户唯一能做的就是改代码重新打包 —— 没有任何自救手段。
+        """
+        card = ttk.LabelFrame(
+            parent,
+            text="⚙️ 投屏参数（下次启动生效）",
+            style='Card.TLabelframe',
+            padding=(10, 6)
+        )
+        card.grid(row=row, column=col, columnspan=2, sticky=tk.EW, padx=6, pady=(6, 3))
+        parent.columnconfigure(col, weight=1)
+
+        row_frame = ttk.Frame(card, style='Card.TFrame')
+        row_frame.pack(fill=tk.X)
+
+        def add_combo(parent_row, label, options, default, attr, width=8):
+            ttk.Label(
+                parent_row, text=label, font=('Microsoft YaHei UI', 9),
+                background=self.COLORS["bg_card"]
+            ).pack(side=tk.LEFT, padx=(0, 4))
+
+            var = tk.StringVar(value=default)
+            combo = ttk.Combobox(
+                parent_row, textvariable=var, values=options, width=width,
+                font=('Microsoft YaHei UI', 9), state="readonly")
+            combo.pack(side=tk.LEFT, padx=(0, 14))
+            setattr(self.app, attr, var)
+            return var
+
+        add_combo(row_frame, "码率:", Config.SCRCPY_BITRATE_OPTIONS,
+                  Config.SCRCPY_BITRATE, "scrcpy_bitrate_var", width=6)
+        add_combo(row_frame, "帧率:", Config.SCRCPY_MAX_FPS_OPTIONS,
+                  Config.SCRCPY_MAX_FPS, "scrcpy_max_fps_var", width=5)
+        add_combo(row_frame, "分辨率:", Config.SCRCPY_MAX_SIZE_OPTIONS,
+                  Config.SCRCPY_MAX_SIZE, "scrcpy_max_size_var", width=7)
+
+        ttk.Label(
+            row_frame,
+            text="💡 投屏卡顿/模糊时：先降码率，再降分辨率（WiFi 下建议 4M + 1080p）",
+            font=('Microsoft YaHei UI', 8),
+            background=self.COLORS["bg_card"],
+            foreground=self.COLORS["text_secondary"]
+        ).pack(side=tk.LEFT, padx=(4, 0))
+
     def _create_card(self, parent, title: str, buttons: List[Tuple], row: int, col: int, colspan: int = 1) -> None:
         """创建功能卡片"""
         card = ttk.LabelFrame(

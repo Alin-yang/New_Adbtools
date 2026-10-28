@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [test_about, master, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    # 项目是 Windows 专属（scrcpy.exe、cmd 语法、tkinterdnd2）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install psutil pyinstaller
+
+      - name: 代码质量检查（lint，有新增问题就失败）
+        run: python tools/lint.py --strict
+
+      - name: 单元测试
+        run: |
+          python tests/test_core_regression.py
+          python tests/test_device_query_and_monitor.py
+          python tests/test_install_flow.py
+          python tests/test_async_and_fixes.py
+          python tests/test_perf_improvements.py
+          python tests/test_perf_parsers.py
+
+      - name: 编译检查
+        run: |
+          python -m compileall -q app.py utils.py config.py decorators.py device_monitor.py main.py gui modules tools
+
+      # exe 体积大、构建慢，不在每次 push 都跑；需要时手动触发或打 tag
+      # - name: 打包
+      #   run: python -m PyInstaller ADBTool.spec --noconfirm --clean

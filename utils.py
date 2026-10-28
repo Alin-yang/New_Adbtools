@@ -455,8 +455,15 @@ def build_adb_command_with_device(command: str, target_ip: Optional[str] = None)
             return f'adb -s {target_ip} {command[3:]}'
     
     # 如果没有指定目标IP，才检测设备数量
-    devices = get_connected_devices()
-    
+    # ⚠️ 必须用缓存版：这条路径**每条命令**都会走一次。
+    #    原来用 get_connected_devices()（auto 模式）—— 每条命令都跑一次 adb devices，
+    #    多设备时还要每台再跑一次 get-state。高频调用时开销极大
+    #    （一次 package_list 的兜底路径就是几百次）。
+    devices = get_connected_devices_cached_safe()
+    if devices is None:
+        # 查询失败 → 沿用上一次成功的结果，别当成"没有设备"
+        devices = get_connected_devices_cached()
+
     # 只有检测到多台设备时才需要指定（使用第一台）
     if len(devices) > 1:
         if devices:
@@ -507,16 +514,23 @@ def run_adb_command(command: str, retries: int = None, timeout: int = None, targ
                 continue
                 
         except subprocess.CalledProcessError as e:
+            # ⚠️ 必须用 utf-8：ADB 输出的是 UTF-8，用 GBK 解码会乱码
+            #    （stdout 早就改成 utf-8 了，stderr 这里漏了）。
+            #    用 replace 而不是 ignore：ignore 会静默丢字节，错误信息缺字。
             try:
-                error_output = e.stderr.decode('gbk', errors='ignore')
-                last_error = f"Command failed with error: {error_output}"
-            except UnicodeDecodeError:
-                last_error = "Command failed and unable to decode error output."
-            
-            # 某些错误不需要重试
-            if "device not found" in last_error.lower() or "offline" in last_error.lower():
+                error_output = e.stderr.decode('utf-8', errors='replace')
+            except Exception:
+                error_output = "Command failed and unable to decode error output."
+            last_error = f"Command failed with error: {error_output}"
+
+            # 某些错误不需要重试（重试也没用，只会白等）
+            # ⚠️ 要同时认中英文：部分设备的 adb 输出是中文的
+            _fatal_markers = ("device not found", "no devices/emulators found",
+                              "offline", "未找到设备", "设备未找到", "离线", "没有设备")
+            _low = last_error.lower()
+            if any(m in _low for m in _fatal_markers):
                 break
-                
+
             if attempt < retries - 1:
                 time.sleep(1)  # 重试前等待1秒
                 continue
