@@ -271,6 +271,107 @@ def build_adb_command_with_device(command: str, target_ip: Optional[str] = None)
     return command
 
 
+def get_installed_version_code(package_name: str, target_device: Optional[str] = None) -> Optional[int]:
+    """查询设备上已安装包的 versionCode
+
+    用于安装后的结果校验 —— 有些定制 ROM 的 `adb install` 会**实际安装成功**
+    但返回非 0 退出码（设备端输出里有 Success），只看返回码会误报失败。
+    以设备上的真实版本号为准才靠谱。
+
+    Args:
+        package_name: 包名
+        target_device: 目标设备（IP 或序列号）
+
+    Returns:
+        Optional[int]: 已安装的 versionCode；包未安装/查询失败时返回 None
+    """
+    if not package_name:
+        return None
+
+    # pm list packages 不带版本号，用 dumpsys 取
+    cmd = f"adb shell dumpsys package {package_name}"
+    out, ok = run_adb_command(cmd, retries=1, timeout=10, target_device=target_device)
+    if not ok or not out:
+        return None
+
+    # 输出形如 "    versionCode=223229 minSdk=16 targetSdk=26"
+    match = re.search(r'versionCode=(\d+)', out)
+    if match:
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+def get_apk_version_code(apk_path: str) -> Optional[int]:
+    """读取本地 APK 的 versionCode（纯本地解析，不依赖 aapt/设备）
+
+    用于安装后比对：若设备上的 versionCode 已 >= APK 的 versionCode，
+    说明安装确实成功了（哪怕命令返回码非 0）。
+
+    Args:
+        apk_path: APK 路径
+
+    Returns:
+        Optional[int]: versionCode；解析失败时返回 None
+    """
+    if not apk_path or not os.path.exists(apk_path):
+        return None
+    try:
+        info = _extract_apk_info_from_zip(apk_path)
+        code = info.get('versionCode')
+        return int(code) if code is not None else None
+    except Exception:
+        return None
+
+
+def verify_install_result(apk_path: str, package_name: Optional[str],
+                          target_device: Optional[str] = None) -> Tuple[bool, str]:
+    """校验安装是否真的成功（以设备端事实为准，而非命令返回码）
+
+    ⚠️ 背景：部分定制 ROM（如 TCL 的 com.tcl.guard）上，`adb install`
+    会输出 "install apk has be enabled from pm by user!" + "Success"，
+    实际安装成功，但 adb 客户端仍以退出码 1 结束（"Get install_switch_flag: 1"）。
+    只看 returncode 会把成功误报成失败。
+
+    Args:
+        apk_path: 本地 APK 路径
+        package_name: 包名（为 None 时会尝试从 APK 解析）
+        target_device: 目标设备
+
+    Returns:
+        Tuple[bool, str]: (是否已安装成功, 说明文字)
+    """
+    # 包名兜底：调用方没给就从 APK 里解析
+    if not package_name:
+        try:
+            package_name = extract_package_name_from_apk(apk_path)
+        except Exception:
+            package_name = None
+
+    if not package_name:
+        return False, "无法确定包名，无法校验安装结果"
+
+    device_code = get_installed_version_code(package_name, target_device)
+    if device_code is None:
+        return False, f"设备上未找到 {package_name}"
+
+    apk_code = get_apk_version_code(apk_path)
+
+    # 设备版本 >= APK 版本 → 安装成功（含同版本重装的情况）
+    if apk_code is None:
+        return True, f"已安装 {package_name}（versionCode={device_code}）"
+
+    if device_code >= apk_code:
+        return True, f"已安装 {package_name}（versionCode={device_code}）"
+
+    return False, (
+        f"设备上 {package_name} 的 versionCode={device_code}，"
+        f"低于待装的 {apk_code}，安装未生效"
+    )
+
+
 def run_adb_command(command: str, retries: int = None, timeout: int = None, target_device: Optional[str] = None) -> Tuple[str, bool]:
     """执行ADB命令并返回结果（支持多设备）
     

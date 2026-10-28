@@ -26,6 +26,7 @@ from utils import (
     filter_lines,  # 🆕 Python 侧按关键字过滤输出（替代 shell grep）
     parse_getprop_all,  # 🆕 解析全量 getprop 输出（一次拿全部属性）
     get_all_package_versions,  # 🆕 一条命令拿全部包的版本号
+    verify_install_result,  # 🆕 安装后用设备端版本号校验真实结果
 )
 from config import Config
 from cache_manager import cache_manager
@@ -1989,7 +1990,21 @@ class ADBToolApp:
             self._update_status_safe(f"安装失败\n{message}", False)
 
     def _install_with_retry(self, apk_path, apk_size, target_ip):
-        """安装主流程：优先 push + pm install（真实进度），失败回退 adb install"""
+        """安装主流程：优先 push + pm install（真实进度），失败回退 adb install
+
+        ⚠️ 关键：某些定制 ROM（TCL 的 com.tcl.guard 等）上，`adb install`
+        会**实际安装成功**（设备端输出 "install apk has been enabled from pm
+        by user!" + "Success"），但 adb 客户端仍以退出码 1 结束
+        （"Get install_switch_flag: 1"）。只看 returncode 会把成功误报成失败。
+        所以两条路径结束后都要用设备端事实校验一遍。
+        """
+        # 提前取包名（安装后要靠它校验）
+        package_name = None
+        try:
+            package_name = extract_package_name_from_apk(apk_path)
+        except Exception:
+            package_name = None
+
         last_message = ""
         for attempt in range(1, Config.INSTALL_RETRIES + 1):
             if attempt > 1:
@@ -2012,7 +2027,68 @@ class ADBToolApp:
                 return True, message
             last_message = message
 
+            # ⚠️ 命令都"失败"了，但设备端可能其实装成功了（定制 ROM 的坑）
+            #    用设备端事实校验：设备上的 versionCode 是否已更新
+            self._update_install_status(
+                "命令返回失败，正在核对设备上的实际安装状态..."
+            )
+            verified, verify_msg = verify_install_result(
+                apk_path, package_name, target_ip
+            )
+            if verified:
+                self._update_install_status(
+                    f"核对结果：{verify_msg}（命令返回码不可信，以设备实际状态为准）"
+                )
+                return True, f"安装成功（{verify_msg}；命令返回码异常但实际已安装）"
+            last_message = f"{last_message}\n核对设备状态：{verify_msg}"
+
         return False, last_message
+
+    def _check_remote_file_readable(self, remote_path: str, target_ip: str = None) -> Tuple[bool, str]:
+        """检查设备端文件是否能被 shell 读取（用于 push 安装路径的前置校验）
+
+        某些定制 ROM 装了安全管控软件（如 TCL 的 com.tcl.guard），
+        会禁止 shell 用户读取 /data/local/tmp 下的文件 —— 此时
+        `adb push` 仍然显示成功，但 `pm install` 会报
+        "Error: Unable to open file"，白白浪费一次完整传输。
+
+        Args:
+            remote_path: 设备端文件路径
+            target_ip: 目标设备
+
+        Returns:
+            Tuple[bool, str]: (是否可读, 说明文字)
+        """
+        from utils import build_adb_command_with_device
+
+        cmd = build_adb_command_with_device(
+            f'adb shell "head -c 4 {remote_path} > /dev/null && echo READABLE"',
+            target_ip
+        )
+        try:
+            result = subprocess.run(
+                cmd, shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding='utf-8', errors='replace',
+                timeout=15
+            )
+        except subprocess.TimeoutExpired:
+            return False, "读取检查超时"
+        except Exception as e:
+            return False, f"读取检查失败: {e}"
+
+        output = (result.stdout or "").strip()
+        if "READABLE" in output:
+            return True, "可读"
+
+        # 提取最有信息量的一行（Permission denied / No such file 等）
+        detail = ""
+        for line in output.splitlines():
+            line = line.strip()
+            if line and line != "READABLE":
+                detail = line
+                break
+        return False, detail or "设备拒绝读取"
 
     def _install_via_push_pm(self, apk_path: str, apk_size: int, target_ip: str = None) -> Tuple[bool, str]:
         """主安装路径：adb push 到设备临时目录 + pm install 安装。
@@ -2095,6 +2171,17 @@ class ADBToolApp:
             detail = push_out[-300:] if push_out else "无输出"
             return False, f"传输失败: {detail}"
 
+        # ⚠️ 可读性预检：部分定制 ROM（TCL 的 com.tcl.guard 等）会拦截 shell
+        #    对 /data/local/tmp 的读取 —— push 显示"成功"但设备端 pm 打不开文件
+        #    （"Error: Unable to open file" / "Permission denied"）。
+        #    与其白跑一次 pm install 再失败，不如现在就识别出来直接走 adb install。
+        readable, read_detail = self._check_remote_file_readable(remote_tmp, target_ip)
+        if not readable:
+            self._update_install_status(
+                f"设备禁止 shell 读取 {remote_tmp}（{read_detail}），改用 adb install"
+            )
+            return False, f"设备端文件不可读: {read_detail}"
+
         # 传输完成 → 设备端安装（要解包 + dexopt，耗时较长且没有进度输出）
         self._set_progress_value(96)
         self._update_install_status(
@@ -2168,6 +2255,7 @@ class ADBToolApp:
         self._set_progress_value(5)
 
         lines = []
+        saw_device_success = False   # 设备端是否打印了 Success
         started_at = time.time()
         last_tick = started_at
         try:
@@ -2204,11 +2292,20 @@ class ADBToolApp:
 
                 if "Performing Streamed Install" in stripped:
                     self._update_install_status("安装开始，正在传输数据...")
-                elif "Success" in stripped:
-                    self._update_install_status("安装成功")
+                elif stripped == "Success" or stripped.endswith(" Success"):
+                    # ⚠️ 设备端明确打了 Success —— 这才是真实的成功信号。
+                    #    某些定制 ROM（TCL com.tcl.guard 等）会让 adb 客户端
+                    #    在安装成功后仍以退出码 1 结束（"Get install_switch_flag: 1"），
+                    #    此时只看 returncode 会把成功误报成失败。
+                    saw_device_success = True
+                    self._update_install_status("设备端已确认安装成功")
                     self._set_progress_value(100)
                 elif "Failure" in stripped:
                     self._update_install_status(f"安装失败: {stripped}")
+                elif "install_switch_flag" in stripped:
+                    self._update_install_status(
+                        "设备的安全开关拦截了 ADB 安装（install_switch_flag）"
+                    )
                 else:
                     self._update_install_status(stripped)
 
@@ -2230,6 +2327,18 @@ class ADBToolApp:
         if process.returncode == 0:
             self._set_progress_value(100)
             return True, "安装成功（adb install）"
+
+        # ⚠️ 返回码非 0，但设备端打了 Success —— 定制 ROM 的已知行为：
+        #    安装实际成功，只是 adb 客户端的退出码不可信。
+        #    先按成功上报，最终由 _install_with_retry 用设备端版本号复核。
+        if saw_device_success:
+            detail = "\n".join(lines[-5:]) if lines else "无输出"
+            self._set_progress_value(100)
+            return True, (
+                f"安装成功（adb install，设备端已确认）\n"
+                f"注：adb 退出码为 {process.returncode}，属设备安全开关误报\n{detail}"
+            )
+
         detail = "\n".join(lines[-5:]) if lines else "无输出"
         return False, f"安装失败 (code {process.returncode})\n{detail}"
 

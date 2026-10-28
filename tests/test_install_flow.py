@@ -85,7 +85,8 @@ def make_stub():
                  '_update_install_status', '_update_status_safe',
                  '_set_progress_mode', '_set_progress_value', '_show_progress', '_hide_progress',
                  '_install_with_retry', '_install_via_push_pm', '_run_pm_install',
-                 '_run_adb_capture', '_install_via_adb_install', '_run_install_with_progress'):
+                 '_run_adb_capture', '_install_via_adb_install', '_run_install_with_progress',
+                 '_check_remote_file_readable'):
         setattr(s, name, getattr(appmod.ADBToolApp, name).__get__(s))
     s._kill_process = appmod.ADBToolApp.__dict__['_kill_process'].__func__
     return s
@@ -118,6 +119,9 @@ def fake_run(cmd, **kw):
     cmds.append(cmd)
     if "pm install" in cmd:
         return FakeResult("Success\n", 0)
+    if "READABLE" in cmd:
+        # 设备端文件可读 → push 路径继续
+        return FakeResult("READABLE\n", 0)
     if "rm -f" in cmd:
         return FakeResult("", 0)
     return FakeResult("", 0)
@@ -137,6 +141,8 @@ check("push 路径带中文且被引号包裹", any('"D:\\work\\适配\\16.11' i
 check("pm install 带 -s 与临时路径",
       any("adb -s 192.168.0.26:5555 shell pm install -r -d /data/local/tmp/_adbtool_install.apk" in c for c in cmds), cmds)
 check("清理了设备端临时文件", any("rm -f /data/local/tmp/_adbtool_install.apk" in c for c in cmds), cmds)
+check("push 后做了设备端可读性预检",
+      any("READABLE" in c for c in cmds), cmds)
 
 check("显示真实百分比 45%", any("45%" in m for m in msgs), msgs)
 check("显示传输量", any("43.28MB" in m and "96.20MB" in m for m in msgs), msgs)
@@ -161,6 +167,8 @@ def fake_run2(cmd, **kw):
     cmds2.append(cmd)
     if "pm install" in cmd:
         return FakeResult("Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE]\n", 1)
+    if "READABLE" in cmd:
+        return FakeResult("READABLE\n", 0)
     return FakeResult("", 0)
 
 subprocess.Popen = fake_popen2
@@ -207,9 +215,66 @@ stub._run_install_with_progress("D:\\work\\app.apk")
 check("安装结束后恢复验证（未残留暂停）", DeviceQuery._pause_count == 0,
       DeviceQuery._pause_count)
 
+print()
+print("=== E. 定制 ROM：adb install 返回码 1 但设备端打了 Success ===")
+# 复现真机问题（TCL com.tcl.guard）：
+#   adb install 实际安装成功，设备端输出 "install apk has been enabled from
+#   pm by user!" + "Success"，但 adb 客户端退出码是 1。
+#   旧实现只看 returncode → 误报失败。
+stub = make_stub()
+cmds4 = []
+
+def fake_popen4(cmd, **kw):
+    cmds4.append(cmd)
+    if "push" in cmd:
+        return FakeProc(PUSH_LINES, rc=0)
+    if "install" in cmd:
+        return FakeProc([
+            "Performing Streamed Install\n",
+            "adb.exe: failed to install xxx.apk: Get install_switch_flag: 1\n",
+            "install apk has be enabled from pm by user!\n",
+            "Success\n",
+        ], rc=1)          # ← 关键：退出码 1
+    return FakeProc([], rc=0)
+
+def fake_run4(cmd, **kw):
+    cmds4.append(cmd)
+    if "pm install" in cmd:
+        # pm 路径失败（设备拒绝）→ 才会回退到 adb install
+        return FakeResult("Failure [INSTALL_FAILED_OLDER_SDK]\n", 1)
+    if "READABLE" in cmd:
+        return FakeResult("READABLE\n", 0)
+    if "dumpsys package" in cmd:
+        # 设备端确实装上了：versionCode 已更新
+        return FakeResult("    versionCode=999999 minSdk=16 targetSdk=26\n", 0)
+    if "rm -f" in cmd:
+        return FakeResult("", 0)
+    return FakeResult("", 0)
+
+subprocess.Popen = fake_popen4
+subprocess.run = fake_run4
+os.path.getsize = lambda p: 100_922_880
+
+# 让包名提取可控：真实 APK 不存在时 verify 会拿不到包名，这里 mock 掉
+import utils as _U
+_real_extract = _U.extract_package_name_from_apk
+_U.extract_package_name_from_apk = lambda p: "com.example.app"
+_U.get_apk_version_code = lambda p: 999999
+
+stub._run_install_with_progress("D:\\work\\app.apk")
+
+msgs4 = [t for t, _ in stub.status_text.lines]
+check("设备端 Success 被识别为成功信号",
+      any("设备端已确认安装成功" in m for m in msgs4), msgs4)
+check("不再误报失败（没有 code 1 的失败结论）",
+      not any("安装失败 (code 1)" in m for m in msgs4), msgs4)
+check("提示了退出码不可信的原因",
+      any("退出码" in m and "误报" in m for m in msgs4), msgs4)
+
 subprocess.Popen = real_popen
 subprocess.run = real_run
 os.path.getsize = real_getsize
+_U.extract_package_name_from_apk = _real_extract
 
 print()
 print("=" * 60)

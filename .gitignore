@@ -87,6 +87,9 @@ celerybeat.pid
 # mypy
 .mypy_cache/
 
+# WorkBuddy 本地数据（记忆目录，不入库）
+.workbuddy/
+
 # ADB Tool 特定文件
 # 调试日志
 logs/
