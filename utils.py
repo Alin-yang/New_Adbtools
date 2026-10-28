@@ -45,6 +45,13 @@ def query_connected_devices() -> Optional[List[str]]:
               ⚠️ None 表示"查不到"，绝不能当成"没有设备"，否则会误报断连。
     """
     try:
+        # ⚠️ 重负载操作（安装/录屏）期间跳过查询：
+        #    设备正忙着收大包时，任何 adb 命令都会和传输抢同一条通道，
+        #    可能把传输挤断 → 误报「设备已断开」。
+        #    返回 None（= 查不到），调用方会跳过本轮而不是判定为断连。
+        if _device_validation_paused:
+            return None
+
         result = subprocess.run(
             "adb devices", shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -1500,7 +1507,6 @@ def get_user_defined_log_path(app_instance=None) -> str:
 
     # 如果无法获取用户路径，返回默认路径
     return Config.get_actual_path(Config.DEFAULT_LOG_PATH)
-
 
 def is_valid_package_name(pkg_name: str) -> bool:
     """验证包名格式是否正确

@@ -117,7 +117,47 @@ check("去掉了周期性 fsync", "os.fsync(f.fileno())" not in src.split("def _
 
 print()
 print("=" * 72)
-print("=== 7. 状态栏高频输出的实际开销 ===")
+print("=== 7. 安装期间设备查询会被暂停 ===")
+import utils as U
+import subprocess as _sp
+
+class _FR:
+    def __init__(self, out=b"", rc=0):
+        self.stdout = out; self.stderr = b""; self.returncode = rc
+
+_real_run = _sp.run
+def _fake_run(cmd, *a, **kw):
+    if "adb devices" in str(cmd):
+        return _FR(b"List of devices attached\n192.168.0.26:5555\tdevice\n")
+    return _FR(b"")
+_sp.run = _fake_run
+
+try:
+    U.set_device_validation_paused(False)
+    U._device_cache['last_update'] = 0
+    check("未暂停时能查到设备",
+          U.get_connected_devices_cached_safe() == ["192.168.0.26:5555"],
+          U.get_connected_devices_cached_safe())
+
+    U._device_cache['last_update'] = 0
+    U.set_device_validation_paused(True)
+    check("暂停期间 query_connected_devices 返回 None（查不到，不当成断连）",
+          U.query_connected_devices() is None)
+    check("暂停期间缓存查询也返回 None",
+          U.get_connected_devices_cached_safe() is None)
+
+    U.set_device_validation_paused(False)
+    U._device_cache['last_update'] = 0
+    check("恢复后能正常查询",
+          U.get_connected_devices_cached_safe() == ["192.168.0.26:5555"],
+          U.get_connected_devices_cached_safe())
+finally:
+    _sp.run = _real_run
+    U.set_device_validation_paused(False)
+
+print()
+print("=" * 72)
+print("=== 8. 状态栏高频输出的实际开销 ===")
 import tkinter as tk
 from tkinter import ttk
 
