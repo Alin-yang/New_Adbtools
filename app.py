@@ -7,6 +7,7 @@ import psutil
 import subprocess
 import os
 import glob
+import re
 import logging
 from typing import Optional, Tuple, Dict, Any
 from decorators import require_device_connected
@@ -19,6 +20,8 @@ from utils import (
     get_connected_devices, get_connected_devices_simple,
     extract_package_name_from_apk, get_connected_devices_parallel,
     get_connected_devices_cached,  # 🆕 新增缓存版本
+    get_connected_devices_cached_safe,  # 🆕 安全版：查询失败返回 None
+    set_device_validation_paused,  # 🆕 重负载操作期间暂停设备可达性验证
     run_adb_commands_batch  # 🆕 新增批量执行
 )
 from config import Config
@@ -30,6 +33,11 @@ from modules.performance_monitor import PerformanceMonitor
 # 配置日志输出（使用轮转日志处理器）
 from logging.handlers import RotatingFileHandler
 import os
+
+# adb push 进度输出格式: "[ 45%] /data/local/tmp/x.apk: 45%"
+_PUSH_PERCENT_RE = re.compile(r'(\d{1,3})\s*%')
+# 传输量格式: "12.34MB/96.20MB"
+_PUSH_SIZE_RE = re.compile(r'([\d.]+\s*[KMGT]?B)\s*/\s*([\d.]+\s*[KMGT]?B)', re.IGNORECASE)
 
 # 获取用户定义的日志路径
 log_dir = Config.get_actual_path(Config.DEFAULT_LOG_PATH)
@@ -628,17 +636,26 @@ class ADBToolApp:
         self.update_connection_status()
         self.show_current_device_status(force_display=True)
 
-    def update_connection_status(self, ip_address: Optional[str] = None):
-        """更新连接状态标签（支持 USB 设备）"""
+    def update_connection_status(self, ip_address: Optional[str] = None, devices=None):
+        """更新连接状态标签（支持 USB 设备）
+
+        Args:
+            ip_address: 目标设备 IP/序列号，None 表示取输入框当前值
+            devices: 已知的设备列表；传 None 时自行查询（查询失败则保持显示不变）
+        """
         if not hasattr(self, 'connection_status_label'):
             return
-            
+
         if not ip_address:
             ip_address = self.get_ip_address()
-            
-        # 获取所有已连接设备
-        devices = get_connected_devices()
-        
+
+        if devices is None:
+            # 使用缓存版查询（2 秒缓存），避免每次都 spawn adb 进程
+            # 查询失败返回 None —— 此时保持现有显示不变，避免把"查不到"显示成"未连接"
+            devices = get_connected_devices_cached_safe()
+            if devices is None:
+                return
+
         # 【新增】更新设备数量标签
         if hasattr(self, 'device_count_label'):
             device_count = len(devices)
@@ -1231,7 +1248,8 @@ class ADBToolApp:
                 return
         
         # 强制刷新设备列表，确保获取最新状态
-        all_devices = get_connected_devices()
+        # 用缓存版：查询失败时回退到上一次结果，不会误判为"没有设备"
+        all_devices = get_connected_devices_cached()
         
         # 构造状态信息
         status_info = f"📱 设备状态: 已连接 {len(all_devices)} 台设备"
@@ -1894,16 +1912,77 @@ class ADBToolApp:
             return False
         return True
 
+    def _run_in_ui(self, func):
+        """把 UI 操作调度到主线程执行（后台线程操作 Tk 控件的唯一入口）"""
+        try:
+            self.root.after(0, func)
+            return
+        except Exception:
+            pass
+        try:
+            func()
+        except Exception:
+            pass
+
+    def _update_status_safe(self, message, success: bool):
+        """跨线程安全的状态栏更新（后台线程调用）"""
+        self._run_in_ui(lambda: self.update_status(message, success))
+
     def _show_progress(self):
-        """显示进度条动画"""
-        self.progress.pack(fill=tk.X, pady=5)
-        self.progress.start()
+        """显示进度条动画（线程安全）"""
+        def _do():
+            try:
+                self.progress.pack(fill=tk.X, pady=5)
+                self.progress.start(12)
+            except Exception:
+                pass
+        self._run_in_ui(_do)
 
     def _hide_progress(self):
-        """隐藏进度条"""
-        self.progress.stop()
-        self.progress.pack_forget()
+        """隐藏进度条（线程安全）"""
+        def _do():
+            try:
+                self.progress.stop()
+                self.progress.pack_forget()
+            except Exception:
+                pass
+        self._run_in_ui(_do)
 
+    def _set_progress_mode(self, mode: str):
+        """设置进度条模式（线程安全）"""
+        def _do():
+            try:
+                if mode == "determinate":
+                    # 从 indeterminate 切过来前先停掉动画，否则 ttk 会打架
+                    self.progress.stop()
+                self.progress["mode"] = mode
+                self.progress["maximum"] = 100
+            except Exception:
+                pass
+        self._run_in_ui(_do)
+
+    def _set_progress_value(self, value: int):
+        """设置进度条数值（线程安全）"""
+        def _do():
+            try:
+                self.progress["value"] = value
+            except Exception:
+                pass
+        self._run_in_ui(_do)
+
+    @staticmethod
+    def _kill_process(process):
+        """强制结束子进程（不阻塞调用线程）"""
+        try:
+            if process is None or process.poll() is not None:
+                return
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except Exception:
+                process.kill()
+        except Exception:
+            pass
 
     @require_device_connected
     def force_install(self):
@@ -1911,6 +1990,10 @@ class ADBToolApp:
         apk_path = self.apk_entry.get()
         if not apk_path:
             self.update_status("请选择APK文件", False)
+            return
+
+        if not os.path.isfile(apk_path):
+            self.update_status(f"APK 文件不存在: {apk_path}", False)
             return
 
         # 显示进度条
@@ -1926,34 +2009,230 @@ class ADBToolApp:
         install_thread.start()
 
     def _run_install_with_progress(self, apk_path):
-        """实际执行安装并捕获输出"""
+        """执行安装（主路径 push + pm install，失败回退 adb install）"""
+        target_ip = self.get_ip_address()
+
         try:
-            # 获取目标设备 IP
-            target_ip = self.get_ip_address()
-                
-            # 调试日志
-            self._update_install_status(f"[调试] 开始安装，APK 路径：{apk_path}, 目标设备：{target_ip}")
-                
-            # 获取所有已连接设备并构建支持多设备的安装命令
-            from utils import build_adb_command_with_device
-                
-            # 获取 APK 大小用于计算进度
             apk_size = os.path.getsize(apk_path)
-            current_size = 0
-                
-            # 构建支持多设备的安装命令
-            install_cmd = f"adb install -r -d \"{apk_path}\""
-            install_cmd = build_adb_command_with_device(install_cmd, target_ip)
-                
-            # 显示调试信息
-            self._update_install_status(f"[调试] 安装命令：{install_cmd}")
-            
-            # 显示当前操作的设备信息
-            if target_ip:
-                self._update_install_status(f"正在向设备 {target_ip} 安装应用...")
-            else:
-                self._update_install_status("正在安装应用...")
-            
+        except OSError as e:
+            self._update_install_status(f"读取 APK 失败: {e}")
+            self._hide_progress()
+            return
+
+        self._update_install_status(
+            f"[调试] 开始安装，APK 路径：{apk_path}, 目标设备：{target_ip}"
+        )
+        self._update_install_status(
+            f"[调试] APK 大小：{format_file_size(apk_size)}"
+        )
+
+        # 安装期间暂停设备可达性验证：
+        # 设备正忙着收大包时，adb shell 验证必然超时，反而会把设备踢出设备列表
+        set_device_validation_paused(True)
+        try:
+            ok, message = self._install_with_retry(apk_path, apk_size, target_ip)
+        finally:
+            set_device_validation_paused(False)
+
+        self._set_progress_mode("indeterminate")
+        self._hide_progress()
+
+        if ok:
+            file_size = format_file_size(apk_size)
+            apk_name = os.path.basename(apk_path)
+            self._update_install_status(message)
+            self._update_status_safe(
+                f"安装完成\n文件: {apk_name}\n大小: {file_size}\n"
+                f"目标设备: {target_ip if target_ip else '未知'}",
+                True
+            )
+        else:
+            self._update_install_status(message)
+            self._update_status_safe(f"安装失败\n{message}", False)
+
+    def _install_with_retry(self, apk_path, apk_size, target_ip):
+        """安装主流程：优先 push + pm install（真实进度），失败回退 adb install"""
+        last_message = ""
+        for attempt in range(1, Config.INSTALL_RETRIES + 1):
+            if attempt > 1:
+                self._update_install_status(
+                    f"第 {attempt}/{Config.INSTALL_RETRIES} 次尝试（间隔 2 秒）..."
+                )
+                time.sleep(2)
+
+            ok, message = self._install_via_push_pm(apk_path, apk_size, target_ip)
+            if ok:
+                return True, message
+            last_message = message
+
+            # push 方式失败（网络抖动 / 设备拒绝等）→ 换 adb install 再试一次
+            self._update_install_status(
+                f"push 方式未成功（{message}），回退到 adb install ..."
+            )
+            ok, message = self._install_via_adb_install(apk_path, apk_size, target_ip)
+            if ok:
+                return True, message
+            last_message = message
+
+        return False, last_message
+
+    def _install_via_push_pm(self, apk_path: str, apk_size: int, target_ip: str = None) -> Tuple[bool, str]:
+        """主安装路径：adb push 到设备临时目录 + pm install 安装。
+
+        相比 `adb install` 的优势：
+          1. `adb push` 会输出真实百分比进度（写在 stderr，实时到达），可以展示；
+          2. 手动指定临时文件名，绕过 adb install 内部生成设备端路径的 bug；
+          3. 能把「传输」与「设备端安装」分成两个阶段分别提示，不再全程黑箱。
+        """
+        from utils import build_adb_command_with_device
+
+        remote_tmp = Config.INSTALL_REMOTE_TMP
+        push_cmd = build_adb_command_with_device(
+            f'adb push "{apk_path}" {remote_tmp}', target_ip
+        )
+
+        self._update_install_status(
+            f"正在传输 APK 到设备（{format_file_size(apk_size)}）..."
+        )
+        self._set_progress_mode("determinate")
+        self._set_progress_value(0)
+
+        push_lines = []
+        percent = 0
+        size_text = ""
+        try:
+            process = subprocess.Popen(
+                push_cmd,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True, encoding='utf-8', errors='replace'
+            )
+        except Exception as e:
+            self._set_progress_mode("indeterminate")
+            self._hide_progress()
+            return False, f"启动传输进程失败: {e}"
+
+        deadline = time.time() + Config.INSTALL_TIMEOUT
+        try:
+            while True:
+                if time.time() > deadline:
+                    self._kill_process(process)
+                    return False, f"传输超时（超过 {Config.INSTALL_TIMEOUT} 秒）"
+
+                output = process.stdout.readline()
+                if output == '':
+                    if process.poll() is not None:
+                        break
+                    # 管道已关闭但进程还没退出，短暂等待后继续
+                    time.sleep(0.05)
+                    continue
+
+                stripped = output.strip()
+                if not stripped:
+                    continue
+                push_lines.append(stripped)
+
+                # adb push 进度格式: "[ 45%] /data/local/tmp/x.apk: 45%"
+                match = _PUSH_PERCENT_RE.search(stripped)
+                if match:
+                    percent = int(match.group(1))
+                    self._set_progress_value(min(95, percent))
+                    size_match = _PUSH_SIZE_RE.search(stripped)
+                    if size_match:
+                        size_text = f"{size_match.group(1)} / {size_match.group(2)}"
+                    self._update_install_status(
+                        f"正在传输... {percent}%"
+                        + (f"（{size_text}）" if size_text else "")
+                    )
+                elif "file pushed" in stripped:
+                    self._set_progress_value(95)
+            process.wait(timeout=30)
+        except Exception as e:
+            self._kill_process(process)
+            return False, f"传输异常: {e}"
+
+        push_out = "\n".join(push_lines)
+        if process.returncode != 0 and "1 file pushed" not in push_out:
+            detail = push_out[-300:] if push_out else "无输出"
+            return False, f"传输失败: {detail}"
+
+        # 传输完成 → 设备端安装（要解包 + dexopt，耗时较长且没有进度输出）
+        self._set_progress_value(96)
+        self._update_install_status(
+            "传输完成，正在设备端安装（需要解包与优化，可能耗时 30~90 秒）..."
+        )
+
+        pm_out, pm_ok = self._run_pm_install(remote_tmp, target_ip)
+
+        # 清理设备端临时文件（无论成败）
+        try:
+            self._run_adb_capture(
+                build_adb_command_with_device(f"adb shell rm -f {remote_tmp}", target_ip),
+                timeout=30
+            )
+        except Exception:
+            pass
+
+        if pm_ok and "Success" in pm_out:
+            self._set_progress_value(100)
+            return True, "安装成功（push + pm install）"
+        detail = pm_out.strip() if pm_out else "无输出"
+        return False, f"pm install 失败: {detail[-300:]}"
+
+    def _run_pm_install(self, remote_tmp: str, target_ip: str = None) -> Tuple[str, bool]:
+        """在设备端执行 pm install（合并 stdout/stderr，保留 Failure 原因）"""
+        from utils import build_adb_command_with_device
+        pm_cmd = build_adb_command_with_device(
+            f"adb shell pm install -r -d {remote_tmp}", target_ip
+        )
+        try:
+            result = subprocess.run(
+                pm_cmd, shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding='utf-8', errors='replace',
+                timeout=Config.INSTALL_TIMEOUT
+            )
+        except subprocess.TimeoutExpired:
+            return "pm install 超时", False
+        except Exception as e:
+            return str(e), False
+
+        output = result.stdout or ""
+        return output, (result.returncode == 0 and "Success" in output)
+
+    def _run_adb_capture(self, cmd: str, timeout: int = 30) -> str:
+        """执行一条 adb 命令并返回合并后的输出"""
+        result = subprocess.run(
+            cmd, shell=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding='utf-8', errors='replace',
+            timeout=timeout
+        )
+        return result.stdout or ""
+
+    def _install_via_adb_install(self, apk_path: str, apk_size: int, target_ip: str = None) -> Tuple[bool, str]:
+        """回退安装路径：直接 `adb install`（部分设备上比 push+pm 更可靠）。
+
+        注意：adb install 不输出百分比，所以这里用固定间隔的心跳提示兜底，
+        避免长时间"看起来卡住不动"。
+        """
+        from utils import build_adb_command_with_device
+
+        install_cmd = build_adb_command_with_device(
+            f'adb install -r -d "{apk_path}"', target_ip
+        )
+        self._update_install_status(f"[调试] 安装命令：{install_cmd}")
+        self._update_install_status(
+            "正在通过 adb install 安装（该方式无进度显示，请稍候）..."
+        )
+        self._set_progress_mode("determinate")
+        self._set_progress_value(5)
+
+        lines = []
+        started_at = time.time()
+        last_tick = started_at
+        try:
             process = subprocess.Popen(
                 install_cmd,
                 shell=True,
@@ -1961,163 +2240,60 @@ class ADBToolApp:
                 stderr=subprocess.STDOUT,
                 text=True, encoding='utf-8', errors='replace'
             )
-
-            # 定义需要过滤的关键词
-            filter_keywords = ["Performing Streamed Install"]
-            installing_started = False
-
-            # 实时捕获输出
-            full_output = []  # 保存所有输出用于调试
-            while True:
-                output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
-                    break
-                if output:
-                    full_output.append(output)  # 保存输出
-                    stripped_output = output.strip()
-                    
-                    # 检测安装开始
-                    if "Performing Streamed Install" in stripped_output:
-                        installing_started = True
-                        self.progress["mode"] = "determinate"
-                        self.progress["maximum"] = 100
-                        self.progress["value"] = 0
-                        current_size = 0
-                        self._update_install_status("安装开始，正在传输数据...")
-                        continue
-
-                    # 更新进度
-                    if installing_started:
-                        # 估算进度
-                        current_size += len(output)  # 增加已处理的数据大小
-                        progress = min(95, int((current_size / apk_size) * 100))
-                        self.progress["value"] = progress
-                        
-                        # 显示传输进度和流量信息
-                        transferred = format_file_size(current_size)
-                        total = format_file_size(apk_size)
-                        self._update_install_status(f"正在传输... {progress}% ({transferred} / {total})")
-                        
-                        if "Success" in stripped_output:
-                            self.progress["value"] = 100
-                            self._update_install_status("安装成功")
-                        elif "Failure" in stripped_output:
-                            self._update_install_status(f"安装失败: {stripped_output}")
-                        elif not any(keyword in stripped_output for keyword in filter_keywords):
-                            # 只有在不是过滤关键词时才显示详细输出
-                            if stripped_output:
-                                self._update_install_status(stripped_output)
-
-            # 获取最终结果
-            return_code = process.poll()
-            success = return_code == 0
-            
-            # 重置进度条模式
-            self.progress["mode"] = "indeterminate"
-            self._hide_progress()
-            
-            # 构建详细的错误信息
-            if not success:
-                error_detail = "\\n".join(full_output[-5:]) if full_output else "无输出"  # 显示最后5行
-                # 回退：adb install 失败且错误像设备端 push 路径 bug（如 "Is a directory"）时，
-                # 改用 push + pm install 两步式，手动指定临时文件名绕过 adb install 的路径生成
-                if ("Is a directory" in error_detail) or ("failed to copy" in error_detail):
-                    fb_ok, fb_msg = self._install_via_push_pm(apk_path, apk_size, target_ip)
-                    if fb_ok:
-                        self._update_install_status(fb_msg)
-                        self.progress["mode"] = "indeterminate"
-                        self._hide_progress()
-                        file_size = format_file_size(os.path.getsize(apk_path))
-                        self.update_status(f"安装完成（回退模式）\\n文件: {os.path.basename(apk_path)}\\n大小: {file_size}\\n目标设备: {target_ip if target_ip else '未知'}", True)
-                        return
-                    error_detail = f"{error_detail}\\n\\n回退安装也失败:\\n{fb_msg}"
-                final_output = f"安装失败 (code {return_code})\\n详细信息:\\n{error_detail}"
-            else:
-                final_output = "安装成功"
-            
-            self._update_install_status(final_output)
-            
-            # 如果安装成功，显示APK信息
-            if success:
-                file_size = format_file_size(os.path.getsize(apk_path))
-                apk_name = os.path.basename(apk_path)
-                self.update_status(f"安装完成\\n文件: {apk_name}\\n大小: {file_size}\\n目标设备: {target_ip if target_ip else '未知'}", True)
-            
         except Exception as e:
-            self._update_install_status(f"安装过程出错: {str(e)}")
+            self._set_progress_mode("indeterminate")
             self._hide_progress()
+            return False, f"启动安装进程失败: {e}"
 
-    def _install_via_push_pm(self, apk_path: str, apk_size: int, target_ip: str = None) -> Tuple[bool, str]:
-        """adb install 失败时的回退安装方式：手动 push + pm install 两步式（带进度）。
-
-        绕过 adb install 内部生成设备端临时路径的 bug
-        （如目标 '/data/local/tmp/./.' → remote Is a directory），
-        改用手动指定的明确临时文件名，并复用与正常安装一致的进度展示。
-        """
-        from utils import build_adb_command_with_device
-        remote_tmp = "/data/local/tmp/_adbtool_install.apk"
-        self._update_install_status("尝试回退安装方式（push + pm install）...")
-
-        # 1. push APK 到设备指定临时文件名（避开 adb install 的路径生成）
-        push_cmd = build_adb_command_with_device(f'adb push "{apk_path}" {remote_tmp}', target_ip)
-
-        # 进度条：复用正常安装的估算方式（按已读输出量占 APK 大小比例）
-        self.progress["mode"] = "determinate"
-        self.progress["maximum"] = 100
-        self.progress["value"] = 0
-        current_size = 0
-        push_out_lines = []
-        push_ok = False
+        deadline = started_at + Config.INSTALL_TIMEOUT
         try:
-            process = subprocess.Popen(
-                push_cmd,
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding='utf-8',
-                errors='replace'
-            )
             while True:
-                output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
-                    break
-                if output:
-                    stripped_output = output.strip()
-                    push_out_lines.append(output)
-                    current_size += len(output)
-                    progress = min(95, int((current_size / apk_size) * 100)) if apk_size else 0
-                    self.progress["value"] = progress
-                    transferred = format_file_size(current_size)
-                    total = format_file_size(apk_size)
-                    self._update_install_status(f"回退安装 正在传输... {progress}% ({transferred} / {total})")
-            process.wait()
-            push_ok = process.returncode == 0
-        except Exception as e:
-            self.progress["mode"] = "indeterminate"
-            self._hide_progress()
-            return False, f"回退 push 异常: {str(e)}"
+                if time.time() > deadline:
+                    self._kill_process(process)
+                    return False, f"安装超时（超过 {Config.INSTALL_TIMEOUT} 秒）"
 
-        self.progress["mode"] = "indeterminate"
+                output = process.stdout.readline()
+                if output == '':
+                    if process.poll() is not None:
+                        break
+                    time.sleep(0.05)
+                    continue
+
+                stripped = output.strip()
+                if not stripped:
+                    continue
+                lines.append(stripped)
+
+                if "Performing Streamed Install" in stripped:
+                    self._update_install_status("安装开始，正在传输数据...")
+                elif "Success" in stripped:
+                    self._update_install_status("安装成功")
+                    self._set_progress_value(100)
+                elif "Failure" in stripped:
+                    self._update_install_status(f"安装失败: {stripped}")
+                else:
+                    self._update_install_status(stripped)
+
+                # 心跳：长时间没有新输出时提示还在跑，避免看起来像卡死
+                now = time.time()
+                if now - last_tick >= Config.INSTALL_HEARTBEAT:
+                    last_tick = now
+                    self._update_install_status(
+                        f"仍在安装中... 已用 {int(now - started_at)} 秒"
+                    )
+            process.wait(timeout=30)
+        except Exception as e:
+            self._kill_process(process)
+            return False, f"安装异常: {e}"
+
+        self._set_progress_mode("indeterminate")
         self._hide_progress()
 
-        push_out = "".join(push_out_lines)
-        # adb push 成功通常输出 "1 file pushed"
-        if not push_ok and "1 file pushed" not in push_out:
-            return False, f"回退 push 失败: {push_out}"
-
-        # 2. pm install（较快，无需进度）
-        self._update_install_status("回退安装 正在执行 pm install...")
-        pm_out, _ = self.run_adb_with_target(f"adb shell pm install -r -d {remote_tmp}", timeout=120)
-        # 3. 清理设备临时文件（无论成败）
-        try:
-            self.run_adb_with_target(f"adb shell rm -f {remote_tmp}")
-        except Exception:
-            pass
-        if "Success" in pm_out:
-            self.progress["value"] = 100
-            return True, "安装成功（回退模式：push + pm install）"
-        return False, f"回退 pm install 失败: {pm_out}"
+        if process.returncode == 0:
+            self._set_progress_value(100)
+            return True, "安装成功（adb install）"
+        detail = "\n".join(lines[-5:]) if lines else "无输出"
+        return False, f"安装失败 (code {process.returncode})\n{detail}"
 
     def _update_operation_status(self, operation: str, status: str, details: str = "", msg_type: str = "info"):
         """更新操作状态显示（统一格式 - 零阻塞优化）
@@ -2151,15 +2327,19 @@ class ADBToolApp:
         # ✅ 移除 update_idletasks，避免阻塞
     
     def _update_install_status(self, message):
-        """更新安装状态（优化版）"""
-        if "成功" in message:
-            self.status_text.insert(tk.END, f"\n{message}\n", "success")
-        elif "失败" in message or "错误" in message:
-            self.status_text.insert(tk.END, f"\n{message}\n", "error")
-        else:
-            # 一般进度信息使用info标签
-            self.status_text.insert(tk.END, f"\n{message}\n", "info")
-        self.status_text.see(tk.END)
+        """更新安装状态（线程安全：自动切回主线程执行）"""
+        def _do():
+            if "成功" in message:
+                self.status_text.insert(tk.END, f"\n{message}\n", "success")
+            elif "失败" in message or "错误" in message:
+                self.status_text.insert(tk.END, f"\n{message}\n", "error")
+            else:
+                # 一般进度信息使用info标签
+                self.status_text.insert(tk.END, f"\n{message}\n", "info")
+            self.status_text.see(tk.END)
+
+        # 安装在后台线程里跑，Tk 控件必须在主线程操作
+        self._run_in_ui(_do)
 
     @require_device_connected
     def uninstall(self):

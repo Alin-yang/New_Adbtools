@@ -77,14 +77,21 @@ def force_install(self): ...
 
 **实现逻辑**:
 ```python
-# 带进度的安装（后台线程 + 实时输出捕获）
-def _run_install_with_progress(self, apk_path):
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, ...)
+# 安装主路径：adb push（真实百分比进度）+ pm install，失败回退 adb install
+def _install_via_push_pm(self, apk_path, apk_size, target_ip):
+    process = subprocess.Popen(push_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, ...)
     while True:
         output = process.stdout.readline()
-        # 解析 "Performing Streamed Install" 计算进度百分比
-        self.app.root.after(0, self._update_install_status, message)
+        # 解析 "[ 45%] /data/local/tmp/x.apk: 45% (43.28MB/96.20MB)" 计算真实进度
+        self._update_install_status(f"正在传输... {percent}%（{size_text}）")
 ```
+
+要点：
+- **主路径用 `adb push` + `pm install`**：push 的百分比写在 stderr（实时到达），能显示真实进度；
+  `adb install` 不吐进度，是回退路径。
+- 传输与设备端安装（解包 + dexopt）分两个阶段提示，后者可能耗时 30~90 秒。
+- 安装期间**暂停设备可达性验证**，避免 `adb shell` 打扰正在传输的设备。
+- 全程 15 分钟超时保护，失败自动重试；UI 更新统一回主线程（`root.after(0, ...)`）。
 
 ### 2.3 日志录屏模块（📋 日志录屏）
 **功能卡片**:

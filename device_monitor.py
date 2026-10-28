@@ -5,17 +5,17 @@
 import threading
 import time
 from typing import Callable, Optional, List
-from utils import get_connected_devices_cached  # 🆕 使用缓存版本
+from utils import get_connected_devices_cached_safe  # 🆕 安全版：查询失败返回 None
 from config import Config
 
 
 class DeviceMonitor:
     """设备状态监控器，提供实时设备连接状态更新"""
-    
+
     def __init__(self, app):
         """
         初始化设备监控器
-        
+
         Args:
             app: 主应用实例
         """
@@ -24,92 +24,122 @@ class DeviceMonitor:
         self.monitor_thread = None
         self.check_interval = Config.DEVICE_MONITOR_INTERVAL  # 从配置读取检查间隔
         self.callbacks = []  # 状态变化回调函数列表
-    
+        self.disconnect_streak = Config.DEVICE_DISCONNECT_STREAK  # 连续空快照几次才判定断连
+        self._was_disconnected = False  # 上一次是否处于"已断开"状态（用于恢复提示）
+
     def start_monitoring(self):
         """启动后台设备监控"""
         if self.monitoring:
             return
-        
+
         self.monitoring = True
         self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self.monitor_thread.start()
-        
+
         if self.app:
             self.app.update_status("设备监控已启动", True)
-    
+
     def stop_monitoring(self):
         """停止设备监控"""
         self.monitoring = False
         if self.monitor_thread:
             self.monitor_thread.join(timeout=5)
-        
+
         if self.app:
             self.app.update_status("设备监控已停止", True)
-    
+
     def add_callback(self, callback: Callable[[List[str]], None]):
         """
         添加设备状态变化回调
-        
+
         Args:
             callback: 回调函数，接收设备列表参数
         """
         if callback not in self.callbacks:
             self.callbacks.append(callback)
-    
+
     def remove_callback(self, callback: Callable):
         """移除回调函数"""
         if callback in self.callbacks:
             self.callbacks.remove(callback)
-    
+
     def _monitor_loop(self):
         """监控循环（在后台线程运行）"""
         last_devices = []
-        
+        empty_streak = 0  # 连续空快照计数（去抖）
+
         while self.monitoring:
             try:
-                # 🆕 优化2：使用缓存版本快速获取设备列表
-                current_devices = get_connected_devices_cached()
-                
+                # 🆕 使用安全缓存版：查询失败返回 None
+                # None = "查不到"，不等于 "没有设备" —— 本轮直接跳过，绝不误报
+                current_devices = get_connected_devices_cached_safe()
+
+                if current_devices is None:
+                    # adb 查询失败/超时：保持上一轮状态不变，等待下一轮
+                    time.sleep(self.check_interval)
+                    continue
+
+                # 去抖：单次空快照多半是 adb 查询抖动（安装大包时尤其明显），
+                # 连续 N 次为空才认定为设备真的断开
+                if not current_devices:
+                    empty_streak += 1
+                else:
+                    empty_streak = 0
+
+                if not current_devices and empty_streak < self.disconnect_streak:
+                    # 还没到确认阈值：视为设备列表未变化，不触发任何回调
+                    stable_devices = last_devices
+                else:
+                    stable_devices = current_devices
+
                 # 检测设备列表变化
-                if set(current_devices) != set(last_devices):
+                if set(stable_devices) != set(last_devices):
                     # 设备列表发生变化，触发回调
                     for callback in self.callbacks:
                         try:
                             # 在主线程中执行回调
                             if self.app:
-                                self.app.root.after(0, lambda d=current_devices: callback(d))
+                                self.app.root.after(0, lambda d=list(stable_devices): callback(d))
                             else:
-                                callback(current_devices)
-                        except Exception as e:
+                                callback(list(stable_devices))
+                        except Exception:
                             # 回调执行失败不影响其他回调
                             pass
-                    
-                    # 更新 UI 显示（使用防抖）
+
+                    # 更新 UI 显示
                     if self.app:
-                        self.app.root.after(0, lambda: self._update_device_status_ui(current_devices))
-                    
-                    last_devices = current_devices
-                
+                        self.app.root.after(
+                            0, lambda d=list(stable_devices): self._update_device_status_ui(d)
+                        )
+
+                    last_devices = list(stable_devices)
+
                 # 等待下一次检查
                 time.sleep(self.check_interval)
-                
-            except Exception as e:
+
+            except Exception:
                 # 监控出错不中断循环
                 time.sleep(self.check_interval)
-    
+
     def _update_device_status_ui(self, devices: List[str]):
         """在 UI 上更新设备状态"""
         if not self.app or not hasattr(self.app, 'update_connection_status'):
             return
-        
-        # 更新连接状态标签
-        self.app.update_connection_status()
-        
-        # 如果当前没有设备但之前有，提示用户
-        if not devices and hasattr(self.app, '_last_displayed_ip') and self.app._last_displayed_ip:
-            self.app.update_status("⚠️ 所有设备已断开连接", False)
-        elif devices and not hasattr(self.app, '_last_displayed_ip') or not self.app._last_displayed_ip:
-            self.app.update_status(f"📱 检测到 {len(devices)} 台设备连接", True)
+
+        # 更新连接状态标签（复用本次已查到的设备列表，不再重复 spawn adb）
+        self.app.update_connection_status(devices=list(devices))
+
+        # 断连 / 恢复提示
+        if not devices:
+            if getattr(self.app, '_last_displayed_ip', ''):
+                # 断连是"警告"级别而非"错误"级别，避免和真正的命令失败混淆
+                self.app.update_status("⚠️ 所有设备已断开连接", False, "warning")
+                self._was_disconnected = True
+        else:
+            if self._was_disconnected:
+                # ⚠️ 修复：原来因运算符优先级问题，设备恢复时永远不提示
+                self.app.update_status(f"📱 设备已恢复连接（{len(devices)} 台）", True, "success")
+            self._was_disconnected = False
 
 
 class DeviceStatusManager:

@@ -10,32 +10,105 @@ from config import Config
 _device_cache = {
     'devices': [],
     'last_update': 0,
-    'cache_duration': 2.0  # 缓存 2 秒
+    'cache_duration': 2.0,  # 缓存 2 秒
+    'query_ok': False       # 上一次查询是否成功（查询失败 ≠ 没有设备）
 }
+
+# 重负载操作（安装/录屏等）期间置 True，暂停设备可达性验证，
+# 避免 adb shell 请求打扰正在传输/安装的设备，反而把设备踢出列表。
+_device_validation_pause_count = 0
+_device_validation_paused = False
+
+
+def set_device_validation_paused(paused: bool) -> None:
+    """设置是否暂停设备可达性验证（重负载操作期间调用）
+
+    用计数器实现，重复调用 / 嵌套调用不会互相踩踏。
+    """
+    global _device_validation_pause_count, _device_validation_paused
+    if paused:
+        _device_validation_pause_count += 1
+    else:
+        _device_validation_pause_count = max(0, _device_validation_pause_count - 1)
+    _device_validation_paused = _device_validation_pause_count > 0
+
+
+def query_connected_devices() -> Optional[List[str]]:
+    """
+    查询已连接设备列表 —— 严格区分「查询失败」与「确实没有设备」
+
+    Returns:
+        Optional[List[str]]:
+            - 成功：返回设备列表（没有设备时是空列表 []）
+            - 失败（adb 异常/超时/返回码非 0）：返回 None
+              ⚠️ None 表示"查不到"，绝不能当成"没有设备"，否则会误报断连。
+    """
+    try:
+        result = subprocess.run(
+            "adb devices", shell=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=Config.DEVICE_QUERY_TIMEOUT
+        )
+        if result.returncode != 0:
+            # adb server 不可用 / 版本冲突等，视为查询失败
+            return None
+        output = result.stdout.decode('utf-8', errors='ignore')
+        devices = []
+        for line in output.splitlines()[1:]:  # 跳过第一行标题
+            # 只检查基本格式，不进行深度验证
+            if '\t' in line and 'device' in line and 'unauthorized' not in line and 'offline' not in line:
+                device_id = line.split('\t')[0].strip()
+                if device_id and device_id != 'List':  # 排除可能的错误输出
+                    devices.append(device_id)
+        return devices
+    except Exception:
+        return None
+
+
+def get_connected_devices_cached_safe() -> Optional[List[str]]:
+    """
+    带缓存的设备列表查询（安全版）
+
+    Returns:
+        Optional[List[str]]: 成功返回设备列表；查询失败返回 None（区别于"没有设备"）
+    """
+    current_time = time.time()
+
+    # 检查缓存是否有效
+    if (current_time - _device_cache['last_update']) < _device_cache['cache_duration']:
+        if not _device_cache['query_ok']:
+            return None
+        return list(_device_cache['devices'])
+
+    # 缓存过期，重新获取
+    devices = query_connected_devices()
+
+    # 更新缓存
+    _device_cache['last_update'] = current_time
+    if devices is None:
+        # 查询失败：保留上一次的成功结果，标记本次不可信
+        _device_cache['query_ok'] = False
+        return None
+
+    _device_cache['devices'] = devices
+    _device_cache['query_ok'] = True
+    return list(devices)
+
 
 def get_connected_devices_cached() -> List[str]:
     """
     获取当前连接的所有设备列表（带缓存优化）
-    
-    使用缓存机制减少频繁的 adb devices 调用
-    
+
+    查询失败时回退到上一次成功的结果，避免把"adb 查询失败"当成"没有设备"。
+
     Returns:
         List[str]: 已连接设备的序列号/IP 地址列表
     """
-    current_time = time.time()
-    
-    # 检查缓存是否有效
-    if (current_time - _device_cache['last_update']) < _device_cache['cache_duration']:
-        return _device_cache['devices']
-    
-    # 缓存过期，重新获取
-    devices = get_connected_devices_simple()
-    
-    # 更新缓存
-    _device_cache['devices'] = devices
-    _device_cache['last_update'] = current_time
-    
-    return devices
+    devices = get_connected_devices_cached_safe()
+    if devices is not None:
+        return devices
+    # 查询失败：沿用上一次成功的结果
+    return list(_device_cache['devices'])
 
 def get_connected_devices(mode: str = "auto") -> List[str]:
     """
@@ -115,7 +188,7 @@ def get_connected_devices_simple() -> List[str]:
         result = subprocess.run(
             "adb devices", shell=True, check=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=3  # 更短的超时时间
+            timeout=Config.DEVICE_QUERY_TIMEOUT
         )
         output = result.stdout.decode('utf-8', errors='ignore')
         devices = []
@@ -131,67 +204,69 @@ def get_connected_devices_simple() -> List[str]:
 
 def get_connected_devices_parallel() -> List[str]:
     """并行检测多个设备并验证可达性（优化版）
-    
+
     使用线程池并行验证设备，提升多设备场景下的检测速度
-    
+
     Returns:
         List[str]: 已连接且可访问的设备列表
     """
     try:
         # 先快速获取所有设备列表
-        result = subprocess.run(
-            "adb devices", shell=True, check=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=3
-        )
-        output = result.stdout.decode('utf-8', errors='ignore')
-        
-        # 提取设备 ID
-        device_ids = []
-        for line in output.splitlines()[1:]:
-            if '\t' in line and 'device' in line and 'unauthorized' not in line and 'offline' not in line:
-                device_id = line.split('\t')[0].strip()
-                if device_id and device_id != 'List':
-                    device_ids.append(device_id)
-        
+        device_ids = query_connected_devices()
+        if device_ids is None:
+            return []
+
         if not device_ids:
             return []
-        
+
+        # 重负载操作（安装/录屏）期间跳过可达性验证：
+        # 设备正忙时 shell 验证必然超时，反而会把设备误判为掉线。
+        if _device_validation_paused:
+            return list(device_ids)
+
         # 使用线程池并行验证设备可达性
         import concurrent.futures
-        
+
         def validate_single_device(device_id):
-            """验证单个设备是否可达"""
+            """验证单个设备是否可达
+
+            用 `adb get-state` 而不是 `adb shell echo test`：
+            get-state 是纯 adb server 查询，不会在设备上起进程，
+            耗时 <10ms，也不会和正在传输/安装的任务抢设备通道。
+            """
             try:
                 validation_result = subprocess.run(
-                    f"adb -s {device_id} shell echo test", shell=True,
+                    f"adb -s {device_id} get-state", shell=True,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    timeout=2
+                    timeout=3
                 )
-                return device_id if validation_result.returncode == 0 else None
+                if validation_result.returncode != 0:
+                    return None
+                state = validation_result.stdout.decode('utf-8', errors='ignore').strip()
+                return device_id if state == 'device' else None
             except Exception:
                 return None
-        
+
         # 并行验证所有设备（最多 5 个并发）
         validated_devices = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(5, len(device_ids))) as executor:
             future_to_device = {
-                executor.submit(validate_single_device, device_id): device_id 
+                executor.submit(validate_single_device, device_id): device_id
                 for device_id in device_ids
             }
-            
+
             # 收集所有验证通过的设备
             for future in concurrent.futures.as_completed(future_to_device):
                 try:
-                    result = future.result(timeout=2)
+                    result = future.result(timeout=3)
                     if result:
                         validated_devices.append(result)
                 except Exception:
                     # 超时或失败的设备跳过
                     continue
-        
+
         return validated_devices
-        
+
     except Exception:
         return []
 

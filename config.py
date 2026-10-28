@@ -42,6 +42,10 @@ class Config:
     # 设备监控配置
     DEVICE_MONITOR_INTERVAL = 3  # 设备监控检查间隔（秒）
     DEVICE_MONITOR_ENABLED = True  # 默认启用设备监控
+    # 连续多少次空快照才判定「设备真的断开」（去抖，防止 adb 查询抖动造成误报）
+    DEVICE_DISCONNECT_STREAK = 3
+    # 设备列表查询（adb devices）超时时间（秒）
+    DEVICE_QUERY_TIMEOUT = 5
     
     # IP历史记录配置
     MAX_IP_HISTORY = 10  # 最大IP历史记录数
@@ -66,6 +70,12 @@ class Config:
     # 文件操作配置
     MAX_INSTALL_RETRIES = 2  # 减少安装重试次数
     FILE_OPERATION_TIMEOUT = 20  # 减少文件操作超时时间
+
+    # 安装配置
+    INSTALL_TIMEOUT = 900        # 单次安装最长耗时（秒），15 分钟
+    INSTALL_RETRIES = 2          # 安装失败后的重试次数
+    INSTALL_REMOTE_TMP = "/data/local/tmp/_adbtool_install.apk"  # 设备端临时 APK 路径
+    INSTALL_HEARTBEAT = 10       # 安装过程无输出时的心跳提示间隔（秒）
     
     # 性能优化的ADB命令配置
     ADB_COMMAND_TIMEOUT = 15  # 减少ADB命令超时时间
