@@ -5,12 +5,24 @@
 import tkinter as tk
 from tkinter import ttk
 from typing import Dict, Any, Callable, List, Tuple
+import logging
 from config import Config, get_text
 
 
 class LayoutModern:
     """现代化布局类"""
-    
+
+    # Tab 名称 -> 内容构建方法（懒加载：首次切换到该 Tab 时才构建）
+    TAB_BUILDERS = {
+        'device': 'create_device_tab',
+        'app': 'create_app_tab',
+        'log_screen': 'create_log_screen_tab',
+        'mirror': 'create_mirror_tab',
+        'performance': 'create_performance_tab',
+        'script_runner': 'create_script_runner_tab',
+        'advanced': 'create_advanced_tab',
+    }
+
     # 配色方案
     COLORS = {
         "primary": "#0078D4",         # 主色调（Windows蓝）
@@ -46,31 +58,35 @@ class LayoutModern:
         """构建完整的现代化布局（左右分栏）"""
         # 设置主容器
         self.setup_main_container()
-        
+
         # 创建顶部栏（标题 + 状态）
         self.create_top_bar()
-        
+
         # 创建Tab导航
         self.create_tab_navigation()
-        
+
         # 创建内容区域（左右分栏）
         self.create_content_area()
-        
-        # 创建各个Tab页（只包含功能按钮）
-        self.create_device_tab()
-        self.create_app_tab()
-        self.create_log_screen_tab()
-        self.create_mirror_tab()      # 投屏
-        self.create_performance_tab() # 性能监控
-        self.create_script_runner_tab()  # 脚本运行
-        self.create_advanced_tab()
-        
+
         # 创建右侧输出区域
         self.create_right_output_area()
-        
+
         # 设置快捷键
         self.setup_keyboard_shortcuts()
-        
+
+        # ⚠️ 先把窗口显示出来，再构建首屏 Tab 的内容：
+        #    ttk 控件创建很贵（自定义样式的 ttk.Button ~34ms/个，
+        #    比经典 tk.Button 慢 5 倍），一次性建完 + 首绘要 2.4 秒。
+        #    先出窗口框架、内容随后补齐，体感快得多。
+        #    ⚠️ 用 update_idletasks（只重绘不处理用户事件）而不是 update()：
+        #    update() 会把 idle 队列一起跑掉，等于没分帧。
+        try:
+            self.app.root.update_idletasks()
+        except Exception:
+            pass
+        # 用 after 而不是 after_idle：idle 会被上面的 update 提前触发
+        self.app.root.after(50, self.create_device_tab)
+
         # 默认显示第一个Tab
         self.app.root.after(100, lambda: self.switch_tab("device"))
     
@@ -319,6 +335,16 @@ class LayoutModern:
     def switch_tab(self, tab_name: str) -> None:
         """切换Tab页（使用 tkraise 优化，避免 grid_remove+grid 触发布局重算卡顿）"""
         # 所有 Tab 均已 grid 在同一 cell 叠放，仅提升选中项的 Z 顺序
+        # ⚠️ Tab 内容懒加载：首次切到某个 Tab 时才构建它。
+        #    启动时一次性构建 7 个 Tab 要 4.3s + 首绘 3.0s，而同一刻只显示一个。
+        if tab_name not in self.tabs:
+            builder = self.TAB_BUILDERS.get(tab_name)
+            if builder:
+                try:
+                    getattr(self, builder)()
+                except Exception:
+                    logging.exception("[布局] 构建 Tab 失败: %s", tab_name)
+
         if tab_name in self.tabs:
             self.tabs[tab_name].tkraise()
 
@@ -1064,7 +1090,14 @@ class LayoutModern:
         
         self.app.apk_entry = ttk.Entry(apk_row, font=('Microsoft YaHei UI', 9))
         self.app.apk_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        
+
+        # APK 拖放注册依赖 apk_entry，跟随本卡片一起初始化
+        # （Tab 是懒加载的，启动时 app Tab 还没建，拖放要等这里）
+        try:
+            self.app._setup_drag_drop()
+        except Exception:
+            logging.exception("[布局] 拖放注册失败")
+
         browse_btn = ttk.Button(
             apk_row,
             text="浏览",

@@ -9,6 +9,8 @@ develop-eggs/
 # dist/ 目录下构建产物默认忽略，但保留 exe 供团队直接拉取使用
 dist/*
 !dist/ADBTool.exe
+dist_onedir/
+build_onedir/
 downloads/
 eggs/
 .eggs/

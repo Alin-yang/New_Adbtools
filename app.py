@@ -9,6 +9,7 @@ import os
 import glob
 import re
 import queue
+import io
 import logging
 from typing import Optional, Tuple, Dict, Any
 from decorators import require_device_connected
@@ -48,17 +49,27 @@ log_file = os.path.join(log_dir, 'adb_tool_debug.log')
 
 # 创建轮转日志处理器（最大10MB，保留5个备份）
 file_handler = RotatingFileHandler(
-    log_file, 
+    log_file,
     maxBytes=10*1024*1024,  # 10MB
     backupCount=5,
     encoding='utf-8'
 )
 
+# 控制台 handler：Windows 控制台默认 GBK，遇到 ✓ / ⚠ 这类字符会抛
+# UnicodeEncodeError 并**丢掉整条日志**。这里强制 UTF-8 + 替换非法字符。
+console_handler = logging.StreamHandler(sys.stdout)
+try:
+    console_handler.stream = io.TextIOWrapper(
+        console_handler.stream.buffer, encoding='utf-8', errors='replace',
+        line_buffering=True)
+except Exception:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout),
+        console_handler,
         file_handler
     ]
 )
@@ -82,6 +93,7 @@ class ADBToolApp:
             layout_module: GUI布局模块
         """
         self.root = root
+        self._start_ts = time.perf_counter()
         self.root.title("ADB Tool")
         self.root.geometry(Config.WINDOW_GEOMETRY)
         if hasattr(Config, 'MIN_WINDOW_SIZE'):
@@ -113,6 +125,7 @@ class ADBToolApp:
         self._setup_gui()
         self._setup_window_close_handler()  # 设置窗口关闭清理逻辑
         # 注意：_delayed_initialization 已经在_setup_gui 中调用，不需要在此重复调用
+        logging.info(f"[启动] __init__ 耗时 {(time.perf_counter() - self._start_ts) * 1000:.0f} ms")
 
     def _setup_window_close_handler(self):
         """设置窗口关闭时的清理逻辑"""
@@ -1356,9 +1369,9 @@ class ADBToolApp:
                 self.log_path_entry.insert(0, self.default_log_path)
         except Exception:
             pass
-            
-        # 设置拖拽功能
-        self._setup_drag_drop()
+
+        # ⚠️ 拖放注册依赖 apk_entry（在「应用管理」Tab 里），
+        #    而 Tab 是懒加载的 —— 改由 _create_app_input_card 创建 apk_entry 后触发。
     
     def _extract_and_update_package_name(self, apk_path: str):
         """从 APK 文件中提取包名和版本号并更新到输入框（增强版）"""
@@ -4632,6 +4645,13 @@ class ADBToolApp:
 
     def _setup_drag_drop(self):
         """设置拖拽APK文件和脚本文件功能"""
+        # 幂等：app Tab 是懒加载的，重复触发时不要重复绑定
+        if getattr(self, '_drag_drop_ready', False):
+            return
+        if not hasattr(self, 'apk_entry'):
+            return
+        self._drag_drop_ready = True
+
         # 先设置占位符文本
         def setup_placeholder():
             if not self.apk_entry.get():
