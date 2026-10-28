@@ -25,6 +25,8 @@ from utils import (
     get_connected_devices_cached_safe,  # 🆕 安全版：查询失败返回 None
     set_device_validation_paused,  # 🆕 重负载操作期间暂停设备可达性验证
     filter_lines,  # 🆕 Python 侧按关键字过滤输出（替代 shell grep）
+    parse_getprop_all,  # 🆕 解析全量 getprop 输出（一次拿全部属性）
+    get_all_package_versions,  # 🆕 一条命令拿全部包的版本号
     run_adb_commands_batch  # 🆕 新增批量执行
 )
 from config import Config
@@ -233,10 +235,10 @@ class ADBToolApp:
         """完整的异步设备检测（包含 IP 历史记录更新）"""
         try:
             # 在主线程中执行完整的设备检测逻辑
-            self.root.after(0, self._detect_connected_devices_on_startup)
+            self._run_in_ui(self._detect_connected_devices_on_startup)
         except Exception as error:
             error_msg = str(error)
-            self.root.after(0, lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
+            self._run_in_ui(lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
 
     def _async_device_detection(self):
         """异步设备检测（简化版本）"""
@@ -278,6 +280,9 @@ class ADBToolApp:
         self.device_status_cooldown = 0.5  # 缩短冷却时间到0.5秒，提高响应性
         
         self._last_displayed_ip = ""  # 记录上次显示的IP地址
+
+        # 状态栏文本框的行数计数（增量维护，避免每次扫描全文）
+        self._status_line_count = 0
 
         # 数据存储路径的线程安全快照（由 log_path_entry 的 trace 回调在主线程更新，
         # 后台线程只读这个副本，不直接访问 Tk 控件）
@@ -609,7 +614,7 @@ class ADBToolApp:
                 current_values = current_values[:20]
             
             # 延迟更新下拉框，避免阻塞主线程
-            self.root.after_idle(lambda vals=tuple(current_values): self._safe_update_combobox('apk', vals))
+            self._run_in_ui(lambda vals=tuple(current_values): self._safe_update_combobox('apk', vals))
         except Exception as e:
             import logging
             logging.error(f"保存 APK 历史失败: {e}")
@@ -776,7 +781,7 @@ class ADBToolApp:
                 if not is_valid_current_ip:
                     first_device = devices[0]
                     logging.info(f"[后台线程] 检测到无效 IP '{current_ip}'，准备同步设备：{first_device}")
-                    self.root.after(0, lambda: self._sync_device_to_ip_input(first_device))
+                    self._run_in_ui(lambda: self._sync_device_to_ip_input(first_device))
                     current_ip = first_device  # 更新 current_ip 用于后续显示
             
             # 构建设备列表信息
@@ -800,7 +805,7 @@ class ADBToolApp:
             self.update_status(device_info, True)
             
             # 【新增】自动更新连接状态标签
-            self.root.after(0, self.update_connection_status)
+            self._run_in_ui(self.update_connection_status)
             
             # 【优化】移除详细设备信息获取（这个太耗时，用户需要时可以单独点击"获取设备信息"）
             # self.root.after(100, lambda: self._get_detailed_device_info())
@@ -879,7 +884,7 @@ class ADBToolApp:
                 return
             
             # 显示正在获取的提示
-            self.root.after(0, lambda: self.update_status("⏳ 正在获取设备信息...", True, "info"))
+            self._run_in_ui(lambda: self.update_status("⏳ 正在获取设备信息...", True, "info"))
             
             # 使用线程池并行获取（最大速度）
             import concurrent.futures
@@ -892,6 +897,18 @@ class ADBToolApp:
                     return output.strip() if output else None
                 except Exception:
                     return None
+
+            # ⚠️ 一次 `adb shell getprop`（不带参数）拿全部属性，
+            #    取代原来 19 条逐个 getprop（每条一个 adb 进程，~200ms → 4 秒）。
+            _all_out, _ = self.run_adb_with_target("adb shell getprop")
+            _props = parse_getprop_all(_all_out)
+
+            def prop(name):
+                """取属性值：优先用全量 getprop 的结果，取不到再单独查"""
+                v = _props.get(name)
+                if v is None:
+                    v = get_prop_quick(name)
+                return v
             
             # 核心信息（6 个，必获取）
             core_props = {
@@ -903,23 +920,14 @@ class ADBToolApp:
                 "CPU ABI": "ro.product.cpu.abi",
             }
             
-            # 并行获取核心属性（4 线程并发）
+            # 核心属性：从全量 getprop 结果取（取不到才单独查）
             core_results = {}
-            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-                future_to_name = {
-                    executor.submit(get_prop_quick, prop): name 
-                    for name, prop in core_props.items()
-                }
-                for future in concurrent.futures.as_completed(future_to_name):
-                    name = future_to_name[future]
-                    try:
-                        value = future.result(timeout=1.5)
-                        if value:
-                            core_results[name] = value
-                    except Exception:
-                        pass  # 超时或失败就跳过
-            
-            # 额外信息（串行获取，更详细的设备信息）
+            for name, prop_name in core_props.items():
+                value = prop(prop_name)
+                if value:
+                    core_results[name] = value
+
+            # 额外信息（更详细的设备信息，同样走全量 getprop）
             extra_info = {}
             
             # 1. 设备串号（优化版 - 使用更快的命令）
@@ -932,13 +940,13 @@ class ADBToolApp:
                         extra_info["设备串号"] = imei_match.group()
                 else:
                     # 方式 2：尝试获取序列号（备用）
-                    output, _ = self.run_adb_with_target("adb shell getprop ro.serialno")
+                    output = prop("ro.serialno")
                     if output and output.strip():
                         extra_info["设备序列号"] = output.strip()
             except Exception:
                 # 失败时尝试获取序列号
                 try:
-                    output, _ = self.run_adb_with_target("adb shell getprop ro.serialno")
+                    output = prop("ro.serialno")
                     if output and output.strip():
                         extra_info["设备序列号"] = output.strip()
                 except Exception:
@@ -946,7 +954,7 @@ class ADBToolApp:
             
             # 2. 软件版本号
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.build.display.id")
+                output = prop("ro.build.display.id")
                 if output and output.strip():
                     extra_info["软件版本"] = output.strip()
             except Exception:
@@ -954,7 +962,7 @@ class ADBToolApp:
             
             # 3. 硬件平台
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.hardware")
+                output = prop("ro.hardware")
                 if output and output.strip():
                     extra_info["硬件平台"] = output.strip()
             except Exception:
@@ -962,7 +970,7 @@ class ADBToolApp:
             
             # 4. 构建 ID
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.build.id")
+                output = prop("ro.build.id")
                 if output and output.strip():
                     extra_info["构建 ID"] = output.strip()
             except Exception:
@@ -970,7 +978,7 @@ class ADBToolApp:
             
             # 5. 基带版本
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop gsm.version.baseband")
+                output = prop("gsm.version.baseband")
                 if output and output.strip():
                     extra_info["基带版本"] = output.strip()
             except Exception:
@@ -986,7 +994,7 @@ class ADBToolApp:
             
             # 7. 屏幕密度
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.sf.lcd_density")
+                output = prop("ro.sf.lcd_density")
                 if output and output.strip():
                     extra_info["屏幕密度"] = output.strip() + " dpi"
             except Exception:
@@ -1005,7 +1013,7 @@ class ADBToolApp:
             
             # 9. 设备制造商
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.product.manufacturer")
+                output = prop("ro.product.manufacturer")
                 if output and output.strip():
                     extra_info["制造商"] = output.strip()
             except Exception:
@@ -1013,7 +1021,7 @@ class ADBToolApp:
             
             # 10. 产品名称
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.product.name")
+                output = prop("ro.product.name")
                 if output and output.strip():
                     extra_info["产品名称"] = output.strip()
             except Exception:
@@ -1021,7 +1029,7 @@ class ADBToolApp:
             
             # 11. 设备代号
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.product.device")
+                output = prop("ro.product.device")
                 if output and output.strip():
                     extra_info["设备代号"] = output.strip()
             except Exception:
@@ -1029,7 +1037,7 @@ class ADBToolApp:
             
             # 12. 构建时间
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.build.date.utc")
+                output = prop("ro.build.date.utc")
                 if output and output.strip():
                     import datetime
                     timestamp = int(output.strip())
@@ -1040,7 +1048,7 @@ class ADBToolApp:
             
             # 13. 系统版本
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.build.version.incremental")
+                output = prop("ro.build.version.incremental")
                 if output and output.strip():
                     extra_info["系统版本号"] = output.strip()
             except Exception:
@@ -1048,7 +1056,7 @@ class ADBToolApp:
             
             # 14. 用户版本
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.build.user")
+                output = prop("ro.build.user")
                 if output and output.strip():
                     extra_info["构建用户"] = output.strip()
             except Exception:
@@ -1056,7 +1064,7 @@ class ADBToolApp:
             
             # 15. 主机信息
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.build.host")
+                output = prop("ro.build.host")
                 if output and output.strip():
                     extra_info["构建主机"] = output.strip()
             except Exception:
@@ -1064,7 +1072,7 @@ class ADBToolApp:
             
             # 16. 主板信息
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.board.platform")
+                output = prop("ro.board.platform")
                 if output and output.strip():
                     extra_info["主板平台"] = output.strip()
             except Exception:
@@ -1072,7 +1080,7 @@ class ADBToolApp:
             
             # 17. Bootloader 版本
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.bootloader")
+                output = prop("ro.bootloader")
                 if output and output.strip():
                     extra_info["Bootloader"] = output.strip()
             except Exception:
@@ -1080,7 +1088,7 @@ class ADBToolApp:
             
             # 18. 蓝牙版本
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.bluetooth.version")
+                output = prop("ro.bluetooth.version")
                 if output and output.strip():
                     extra_info["蓝牙版本"] = output.strip()
             except Exception:
@@ -1088,7 +1096,7 @@ class ADBToolApp:
             
             # 19. WiFi 芯片版本
             try:
-                output, _ = self.run_adb_with_target("adb shell getprop ro.wifi.version")
+                output = prop("ro.wifi.version")
                 if output and output.strip():
                     extra_info["WiFi 版本"] = output.strip()
             except Exception:
@@ -1124,10 +1132,10 @@ class ADBToolApp:
             
             # 在 UI 线程中显示
             detailed_info = "\n".join(info_lines)
-            self.root.after(0, lambda: self.update_status(detailed_info, True, "info"))
+            self._run_in_ui(lambda: self.update_status(detailed_info, True, "info"))
             
         except Exception as e:
-            self.root.after(0, lambda: self.update_status(f"获取设备信息失败：{str(e)}", False))
+            self._run_in_ui(lambda: self.update_status(f"获取设备信息失败：{str(e)}", False))
     
     def _get_detailed_device_info(self):
         """异步获取详细的设备信息（优化版 - 并行获取 + 精简数据）"""
@@ -1137,7 +1145,7 @@ class ADBToolApp:
                 return
             
             # 显示正在获取的提示
-            self.root.after(0, lambda: self.update_status("⏳ 正在快速获取设备信息...", True, "info"))
+            self._run_in_ui(lambda: self.update_status("⏳ 正在快速获取设备信息...", True, "info"))
             
             # 使用线程池并行获取（提升速度）
             import concurrent.futures
@@ -1181,7 +1189,7 @@ class ADBToolApp:
                 quick_lines.append(f"  {name}: {value}")
             
             quick_info_text = "\n".join(quick_lines)
-            self.root.after(0, lambda: self.update_status(quick_info_text, True, "info"))
+            self._run_in_ui(lambda: self.update_status(quick_info_text, True, "info"))
             
             # 后台继续获取详细信息（可选）
             def get_full_info():
@@ -1228,14 +1236,14 @@ class ADBToolApp:
                 
                 # 追加显示
                 if info_lines:
-                    self.root.after(0, lambda info=detailed_info: self.update_status(f"\n📋 更多设备信息:\n{info}", True, "info"))
+                    self._run_in_ui(lambda info=detailed_info: self.update_status(f"\n📋 更多设备信息:\n{info}", True, "info"))
             
             # 异步获取完整信息（不阻塞）
             detail_thread = threading.Thread(target=get_full_info, daemon=True)
             detail_thread.start()
             
         except Exception as e:
-            self.root.after(0, lambda: self.update_status(f"获取设备信息失败：{str(e)}", False))
+            self._run_in_ui(lambda: self.update_status(f"获取设备信息失败：{str(e)}", False))
     
     def _format_storage_size(self, size_str: str) -> str:
         """格式化存储大小字符串"""
@@ -1470,7 +1478,7 @@ class ADBToolApp:
                         logging.warning(f"[_extract_and_update_package_name_async] 获取版本号失败：{str(e)}")
                 
                 # 在主线程中更新UI
-                self.root.after(0, lambda: self._update_package_info_ui(pkg_name, version, apk_path))
+                self._run_in_ui(lambda: self._update_package_info_ui(pkg_name, version, apk_path))
             else:
                 logging.warning(f"[_extract_and_update_package_name_async] 未找到包名信息")
         except Exception as error:
@@ -1507,7 +1515,7 @@ class ADBToolApp:
     def execute_task_async(self, task_name: str, method_name: str):
         """异步执行任务（底层优化版 - 零阻塞）"""
         if not hasattr(self, method_name):
-            self.root.after(0, lambda: self.update_status(f"方法不存在：{method_name}", False))
+            self._run_in_ui(lambda: self.update_status(f"方法不存在：{method_name}", False))
             return
             
         method = getattr(self, method_name)
@@ -1526,7 +1534,7 @@ class ADBToolApp:
             thread.start()
         else:
             # 使用线程池，但通过 after 避免阻塞
-            self.root.after(0, lambda: self._submit_to_pool(task_name, method))
+            self._run_in_ui(lambda: self._submit_to_pool(task_name, method))
         
     def _submit_to_pool(self, task_name: str, method):
         """提交到线程池（在 UI 线程之外）"""
@@ -1535,7 +1543,7 @@ class ADBToolApp:
             self._running_tasks[future] = task_name
             future.add_done_callback(lambda f: self._on_task_complete(f, task_name))
         except Exception as e:
-            self.root.after(0, lambda: self.update_status(f"{task_name}提交失败：{str(e)}", False))
+            self._run_in_ui(lambda: self.update_status(f"{task_name}提交失败：{str(e)}", False))
         
     def _execute_method_async(self, task_name: str, method):
         """执行方法（精简版）"""
@@ -1543,7 +1551,7 @@ class ADBToolApp:
             result = method()
             return result
         except Exception as e:
-            self.root.after(0, lambda: self.update_status(f"{task_name}执行出错：{str(e)}", False, "error"))
+            self._run_in_ui(lambda: self.update_status(f"{task_name}执行出错：{str(e)}", False, "error"))
             return None
         
     def _cleanup_long_running_threads(self):
@@ -1565,7 +1573,7 @@ class ADBToolApp:
             result = method()
             return result
         except Exception as e:
-            self.root.after(0, lambda: self.update_status(f"{task_name}执行出错：{str(e)}", False, "error"))
+            self._run_in_ui(lambda: self.update_status(f"{task_name}执行出错：{str(e)}", False, "error"))
             return None
         
     def _on_task_complete(self, future, task_name: str):
@@ -1598,18 +1606,28 @@ class ADBToolApp:
             self._run_in_ui(lambda: self.update_status(message, success, msg_type))
             return
 
-        # 🆕 优化4：限制日志行数，防止内存泄漏
+        # 🆕 限制日志行数，防止内存泄漏
+        # 用增量计数：index('end-1c') 本身是 O(1)，但增量计数能顺带避免
+        # 裁剪后的计数漂移，也让"是否超限"这个判断不依赖 Tk 调用。
         try:
-            lines = self.status_text.index('end-1c').split('.')[0]
-            if int(lines) > 1000:  # 限制最多 1000 行
-                # 删除最早的 200 行，保留最近 800 行
-                self.status_text.delete(1.0, f"{int(lines)-800}.0")
+            self._status_line_count += message.count('\n') + 2
+            if self._status_line_count > 1200:
+                # 只有超限才做一次裁剪 + 重新计数
+                lines = int(self.status_text.index('end-1c').split('.')[0])
+                if lines > 1000:
+                    # 删除最早的 200 行，保留最近 800 行
+                    self.status_text.delete(1.0, f"{lines - 800}.0")
+                    self._status_line_count = 800
         except Exception:
             pass
-        
+
         # 【日志】记录 UI 更新
-        import logging
-        logging.info(f"[UI 更新] 类型:{msg_type}, 成功:{success}, 消息:{message[:50]}...")
+        # ⚠️ 只有失败/警告才记 INFO：每次 UI 更新都写一次磁盘（RotatingFileHandler
+        #    会 flush），高频输出时是明显的 IO 损耗。普通消息降到 DEBUG。
+        if success or msg_type in ("error", "warning"):
+            logging.info(f"[UI 更新] 类型:{msg_type}, 成功:{success}, 消息:{message[:50]}...")
+        else:
+            logging.debug(f"[UI 更新] 类型:{msg_type}, 成功:{success}, 消息:{message[:50]}...")
         
         # 生成带时间戳的格式化消息
         timestamp = time.strftime("[%H:%M:%S] ", time.localtime())
@@ -1895,7 +1913,7 @@ class ADBToolApp:
         try:
             # 步骤 1: 停止 ADB 服务
             logging.info("[后台线程] 开始停止 ADB 服务...")
-            self.root.after(0, lambda: self.update_status("⏳ 正在停止 ADB 服务...", True, "info"))
+            self._run_in_ui(lambda: self.update_status("⏳ 正在停止 ADB 服务...", True, "info"))
             
             kill_output, kill_success = run_adb_command("adb kill-server")
             logging.info(f"[后台线程] adb kill-server 完成，成功:{kill_success}")
@@ -1909,7 +1927,7 @@ class ADBToolApp:
             
             # 步骤 2: 启动 ADB 服务
             logging.info("[后台线程] 开始启动 ADB 服务...")
-            self.root.after(0, lambda: self.update_status("⏳ 正在启动 ADB 服务...", True, "info"))
+            self._run_in_ui(lambda: self.update_status("⏳ 正在启动 ADB 服务...", True, "info"))
             
             start_output, start_success = run_adb_command("adb start-server")
             logging.info(f"[后台线程] adb start-server 完成，成功:{start_success}")
@@ -1923,8 +1941,8 @@ class ADBToolApp:
                 final_message += "2. 查看已连接设备列表\n"
                 final_message += "3. 如仍无法连接，请检查 USB 连接或网络设置"
                 
-                self.root.after(0, lambda: self.update_status(final_message, True))
-                self.root.after(0, self.update_connection_status)
+                self._run_in_ui(lambda: self.update_status(final_message, True))
+                self._run_in_ui(self.update_connection_status)
                 
                 # 清空设备缓存，因为重启后所有连接都会断开
                 cache_manager.device_cache.clear()
@@ -1937,12 +1955,12 @@ class ADBToolApp:
                 error_message += "2. 是否有其他程序占用 ADB\n"
                 error_message += "3. 以管理员身份运行本程序"
                 
-                self.root.after(0, lambda msg=error_message: self.update_status(msg, False))
+                self._run_in_ui(lambda msg=error_message: self.update_status(msg, False))
                 
         except Exception as e:
             logging.error(f"[后台线程] 异常：{str(e)}")
             error_msg = f"重启 ADB 服务过程出错：{str(e)}\n\n请尝试：\n1. 关闭其他 ADB 相关程序\n2. 以管理员身份运行本程序"
-            self.root.after(0, lambda msg=error_msg: self.update_status(msg, False))
+            self._run_in_ui(lambda msg=error_msg: self.update_status(msg, False))
 
     def check_device_connected(self, ip_address: Optional[str] = None) -> bool:
         """检查设备连接状态（复用 2 秒缓存，与装饰器/设备监控共用同一数据源）"""
@@ -2523,44 +2541,41 @@ class ADBToolApp:
 
                 self._update_status_safe(f"正在获取 {len(packages)} 个应用的版本信息...", True)
 
-                # 使用动态线程池并行获取版本信息
-                max_workers = calculate_optimal_workers(len(packages))
+                # ⚠️ 一条 `dumpsys package packages` 拿全部版本号，
+                #    取代逐包 `dumpsys package <pkg>`（每包 3 条 adb 命令，
+                #    其中还包括一次完全多余的 `adb devices`）。
+                #    300 个包：90 秒 → 0.5 秒。
+                versions = get_all_package_versions(target_ip)
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    future_to_package = {
-                        executor.submit(self.get_package_version, package, target_ip): package
-                        for package in packages
-                    }
-
-                    processed_count = 0
-                    for future in concurrent.futures.as_completed(future_to_package):
-                        package = future_to_package[future]
-                        try:
-                            version = future.result()
-                            version_str = version if version else "未知"
-                            self._run_in_ui(lambda p=package, v=version_str: self.status_text.insert(
-                                tk.END,
-                                f"\n{p} (版本: {v})",
-                                "info"
-                            ))
-                        except Exception as e:
-                            self._run_in_ui(lambda p=package, err=str(e): self.status_text.insert(
-                                tk.END,
-                                f"\n{p} (版本: 获取失败 - {err})",
-                                "error"
-                            ))
-
-                        processed_count += 1
-                        # 每处理10个显示一次进度
-                        if processed_count % 10 == 0:
-                            self._run_in_ui(
-                                lambda c=processed_count, t=len(packages): self.status_text.insert(
-                                    tk.END,
-                                    f"\n已处理 {c}/{t} 个应用",
-                                    "info"
-                                )
-                            )
-
+                if versions:
+                    lines = []
+                    for package in packages:
+                        version_str = versions.get(package, "未知")
+                        lines.append(f"{package} (版本: {version_str})")
+                    # 一次性插入，避免几百次 Tk 重绘
+                    self._run_in_ui(lambda: self.status_text.insert(
+                        tk.END, "\n" + "\n".join(lines), "info"))
+                    self._run_in_ui(lambda: self.status_text.see(tk.END))
+                else:
+                    # 兜底：全量命令失败时退回逐个查（慢但能用）
+                    self._update_status_safe(
+                        "批量获取版本失败，改用逐个查询（较慢）...", True, "info")
+                    max_workers = calculate_optimal_workers(len(packages))
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        future_to_package = {
+                            executor.submit(self.get_package_version, package, target_ip): package
+                            for package in packages
+                        }
+                        for future in concurrent.futures.as_completed(future_to_package):
+                            package = future_to_package[future]
+                            try:
+                                version = future.result()
+                                version_str = version if version else "未知"
+                                self._run_in_ui(lambda p=package, v=version_str: self.status_text.insert(
+                                    tk.END, f"\n{p} (版本: {v})", "info"))
+                            except Exception as e:
+                                self._run_in_ui(lambda p=package, err=str(e): self.status_text.insert(
+                                    tk.END, f"\n{p} (版本: 获取失败 - {err})", "error"))
                         self._run_in_ui(lambda: self.status_text.see(tk.END))
 
                 self._update_status_safe(f"\n获取应用列表完成，共 {len(packages)} 个应用", True)
@@ -3250,12 +3265,12 @@ class ADBToolApp:
             # 在主线程中更新 UI
             if success:
                 file_size = format_file_size(os.path.getsize(new_file))
-                self.root.after(0, lambda: self.update_status(f"✅ 截图已保存至路径：{new_file}\n📊 文件大小：{file_size}", True))
+                self._run_in_ui(lambda: self.update_status(f"✅ 截图已保存至路径：{new_file}\n📊 文件大小：{file_size}", True))
             else:
-                self.root.after(0, lambda: self.update_status(f"❌ 截图失败: {error_msg}", False))
+                self._run_in_ui(lambda: self.update_status(f"❌ 截图失败: {error_msg}", False))
                 
         except Exception as e:
-            self.root.after(0, lambda: self.update_status(f"❌ 截图过程出错: {str(e)}", False))
+            self._run_in_ui(lambda: self.update_status(f"❌ 截图过程出错: {str(e)}", False))
 
     @require_device_connected
     def get_serial_number(self):
@@ -3318,15 +3333,15 @@ class ADBToolApp:
             # 测试screenrecord命令是否可用
             test_output, test_success = self.run_adb_with_target("adb shell screenrecord --help")
             if not test_success:
-                self.root.after(0, lambda: self.update_status(f"❌ ADB screenrecord命令不可用: {test_output}", False))
+                self._run_in_ui(lambda: self.update_status(f"❌ ADB screenrecord命令不可用: {test_output}", False))
                 return
 
             # 获取用户输入的日志路径（与日志使用相同路径）
             user_log_path = self.log_path_entry.get().strip()
             if not user_log_path:
                 user_log_path = self.default_log_path
-                self.root.after(0, lambda: self.log_path_entry.delete(0, tk.END))
-                self.root.after(0, lambda path=user_log_path: self.log_path_entry.insert(0, path))
+                self._run_in_ui(lambda: self.log_path_entry.delete(0, tk.END))
+                self._run_in_ui(lambda path=user_log_path: self.log_path_entry.insert(0, path))
 
             # 确保路径存在并测试写入权限
             try:
@@ -3336,10 +3351,10 @@ class ADBToolApp:
                     tf.write("test")
                 os.remove(test_file)
             except PermissionError:
-                self.root.after(0, lambda: self.update_status("无权限写入该目录，请以管理员身份运行程序或选择其他目录", False))
+                self._run_in_ui(lambda: self.update_status("无权限写入该目录，请以管理员身份运行程序或选择其他目录", False))
                 return
             except Exception as e:
-                self.root.after(0, lambda err=str(e): self.update_status(f"创建录制目录失败: {err}", False))
+                self._run_in_ui(lambda err=str(e): self.update_status(f"创建录制目录失败: {err}", False))
                 return
 
             # 设置录制文件路径（使用简单的临时名称，避免前缀问题）
@@ -3350,7 +3365,7 @@ class ADBToolApp:
             self.recording_active = True
             
             # 显示启动信息
-            self.root.after(0, lambda: self.update_status(f"✅ 正在开始屏幕录制...\n📁 目标文件: {self.recording_file_path}", True))
+            self._run_in_ui(lambda: self.update_status(f"✅ 正在开始屏幕录制...\n📁 目标文件: {self.recording_file_path}", True))
 
             # 启动录制线程
             try:
@@ -3365,10 +3380,10 @@ class ADBToolApp:
                 self.root.after(1000, self._check_recording_thread_status)
                     
             except Exception as e:
-                self.root.after(0, lambda err=str(e): self.update_status(f"启动录制线程时出错：{err}", False))
+                self._run_in_ui(lambda err=str(e): self.update_status(f"启动录制线程时出错：{err}", False))
                 self.recording_active = False
         except Exception as e:
-            self.root.after(0, lambda err=str(e): self.update_status(f"启动录制失败：{err}", False))
+            self._run_in_ui(lambda err=str(e): self.update_status(f"启动录制失败：{err}", False))
         
     def _check_recording_thread_status(self):
         """检查录制线程状态（异步回调）"""
@@ -3385,11 +3400,11 @@ class ADBToolApp:
     def stop_recording(self):
         """停止屏幕录制（彻底优化版 - 完全异步）"""
         if not self.recording_active:
-            self.root.after(0, lambda: self.update_status("没有正在进行的录制", False))
+            self._run_in_ui(lambda: self.update_status("没有正在进行的录制", False))
             return
     
         # 显示停止提示
-        self.root.after(0, lambda: self.update_status("正在停止屏幕录制...", True, "info"))
+        self._run_in_ui(lambda: self.update_status("正在停止屏幕录制...", True, "info"))
         self.recording_active = False
     
         # 终止 screenrecord 进程
@@ -3418,14 +3433,14 @@ class ADBToolApp:
                 self.recording_thread.join(timeout=15)  # 给足够时间让录制完成
                 
             # 重置状态
-            self.root.after(0, lambda: setattr(self, 'recording_active', False))
-            self.root.after(0, lambda: setattr(self, 'recording_subprocess', None))
+            self._run_in_ui(lambda: setattr(self, 'recording_active', False))
+            self._run_in_ui(lambda: setattr(self, 'recording_subprocess', None))
                 
             # 通知用户完成
-            self.root.after(0, lambda: self.update_status("录制停止操作完成", True, "success"))
+            self._run_in_ui(lambda: self.update_status("录制停止操作完成", True, "success"))
                 
         except Exception as e:
-            self.root.after(0, lambda: self.update_status(f"清理录制文件出错：{str(e)}", False))
+            self._run_in_ui(lambda: self.update_status(f"清理录制文件出错：{str(e)}", False))
 
     def open_storage_folder(self):
         """打开日志截屏录屏存储文件夹"""
@@ -3618,7 +3633,7 @@ class ADBToolApp:
             # 测试ADB logcat命令是否可用
             test_output, test_success = self.run_adb_with_target("adb logcat -d -t 1")
             if not test_success:
-                self.root.after(0, lambda: self.update_status(f"❌ ADB logcat命令不可用: {test_output}", False))
+                self._run_in_ui(lambda: self.update_status(f"❌ ADB logcat命令不可用: {test_output}", False))
                 return
 
             # 获取用户输入的日志路径
@@ -3626,8 +3641,8 @@ class ADBToolApp:
             if not user_log_path:
                 # 使用默认路径
                 user_log_path = self.default_log_path
-                self.root.after(0, lambda: self.log_path_entry.delete(0, tk.END))
-                self.root.after(0, lambda path=user_log_path: self.log_path_entry.insert(0, path))
+                self._run_in_ui(lambda: self.log_path_entry.delete(0, tk.END))
+                self._run_in_ui(lambda path=user_log_path: self.log_path_entry.insert(0, path))
 
             # 确保路径存在并测试写入权限
             try:
@@ -3638,10 +3653,10 @@ class ADBToolApp:
                     tf.write("test")
                 os.remove(test_file)
             except PermissionError:
-                self.root.after(0, lambda: self.update_status("无权限写入该目录，请以管理员身份运行程序或选择其他目录", False))
+                self._run_in_ui(lambda: self.update_status("无权限写入该目录，请以管理员身份运行程序或选择其他目录", False))
                 return
             except Exception as e:
-                self.root.after(0, lambda err=str(e): self.update_status(f"创建日志目录失败: {err}", False))
+                self._run_in_ui(lambda err=str(e): self.update_status(f"创建日志目录失败: {err}", False))
                 return
 
             # 设置日志文件路径
@@ -3656,7 +3671,7 @@ class ADBToolApp:
                 self.log_file_path = f"{base_name}_{counter}.log"
                 counter += 1
                 if counter > 100:  # 防止无限循环
-                    self.root.after(0, lambda: self.update_status("无法创建唯一文件名", False))
+                    self._run_in_ui(lambda: self.update_status("无法创建唯一文件名", False))
                     return
             
             # 设置状态和事件
@@ -3664,7 +3679,7 @@ class ADBToolApp:
             self.stop_event.clear()
             
             # 显示启动信息
-            self.root.after(0, lambda: self._update_operation_status("日志捕获", "开始", f"目标文件: {self.log_file_path}"))
+            self._run_in_ui(lambda: self._update_operation_status("日志捕获", "开始", f"目标文件: {self.log_file_path}"))
 
             # 启动日志捕获线程
             try:
@@ -3679,10 +3694,10 @@ class ADBToolApp:
                 self.root.after(1000, self._check_logcat_thread_status)
                     
             except Exception as e:
-                self.root.after(0, lambda err=str(e): self.update_status(f"启动日志捕获线程失败：{err}", False))
+                self._run_in_ui(lambda err=str(e): self.update_status(f"启动日志捕获线程失败：{err}", False))
                 self.logging_active = False
         except Exception as e:
-            self.root.after(0, lambda err=str(e): self.update_status(f"启动日志捕获失败：{err}", False))
+            self._run_in_ui(lambda err=str(e): self.update_status(f"启动日志捕获失败：{err}", False))
         
     def _check_logcat_thread_status(self):
         """检查日志捕获线程状态（异步回调）"""
@@ -3783,6 +3798,20 @@ class ADBToolApp:
         # 清理进程引用
         self.logcat_subprocess = None
         
+    def _read_log_tail(self, chars: int = 400) -> str:
+        """读取日志文件末尾若干字符（用于展示 logcat 启动失败的原因）"""
+        try:
+            if self.log_file_path and os.path.exists(self.log_file_path):
+                with open(self.log_file_path, 'rb') as fh:
+                    try:
+                        fh.seek(-chars, os.SEEK_END)
+                    except OSError:
+                        fh.seek(0)
+                    return fh.read().decode('utf-8', errors='replace').strip()
+        except Exception:
+            pass
+        return "未知错误"
+
     def _cleanup_logcat_async(self):
         """异步清理日志文件（后台线程执行）"""
         try:
@@ -3795,17 +3824,17 @@ class ADBToolApp:
                 
             # 检查文件是否存在和大小
             if not os.path.exists(self.log_file_path):
-                self.root.after(0, lambda: self.update_status("日志文件不存在，可能捕获过程中出现错误", False))
+                self._run_in_ui(lambda: self.update_status("日志文件不存在，可能捕获过程中出现错误", False))
                 self.logging_active = False
                 return
                     
             # 检查文件大小
             file_size = os.path.getsize(self.log_file_path)
             if file_size == 0:
-                self.root.after(0, lambda: self.update_status("警告：日志文件为空，可能原因：\n1. 设备无日志输出\n2. ADB 连接不稳定\n3. 权限不足\n4. 捕获时间过短", False))
+                self._run_in_ui(lambda: self.update_status("警告：日志文件为空，可能原因：\n1. 设备无日志输出\n2. ADB 连接不稳定\n3. 权限不足\n4. 捕获时间过短", False))
             else:
                 file_size_str = format_file_size(file_size)
-                self.root.after(0, lambda: self.update_status(f"日志捕获成功，文件大小：{file_size_str}", True))
+                self._run_in_ui(lambda: self.update_status(f"日志捕获成功，文件大小：{file_size_str}", True))
     
             # 生成新的文件名（使用停止时的时间戳）
             original_path = os.path.dirname(self.log_file_path)
@@ -3830,9 +3859,9 @@ class ADBToolApp:
                     # 构建提示信息
                     save_path = os.path.abspath(new_name)
                     if file_size == 0:
-                        self.root.after(0, lambda: self.update_status(f"日志捕获已停止\n空日志文件已保存到：{save_path}\n建议检查设备连接和权限设置", False))
+                        self._run_in_ui(lambda: self.update_status(f"日志捕获已停止\n空日志文件已保存到：{save_path}\n建议检查设备连接和权限设置", False))
                     else:
-                        self.root.after(0, lambda: self.update_status(f"日志捕获已停止\n日志文件已保存到：{save_path}", True))
+                        self._run_in_ui(lambda: self.update_status(f"日志捕获已停止\n日志文件已保存到：{save_path}", True))
                     break
                         
                 except PermissionError as e:
@@ -3843,7 +3872,7 @@ class ADBToolApp:
                         continue
                 except Exception as e:
                     last_error = f"重命名失败：{str(e)}"
-                    self.root.after(0, lambda: self.update_status(f"保存日志文件失败：{str(e)}", False))
+                    self._run_in_ui(lambda: self.update_status(f"保存日志文件失败：{str(e)}", False))
                     break
     
             # 重置状态
@@ -3852,13 +3881,13 @@ class ADBToolApp:
             if not success_save:
                 # 如果重命名失败，至少告诉用户原文件位置
                 file_size_str = format_file_size(file_size) if file_size > 0 else "空文件"
-                self.root.after(0, lambda: self.update_status(f"日志捕获已停止，但文件保存失败。\n原因：{last_error}\n原文件位置：{self.log_file_path}\n文件大小：{file_size_str}", False))
+                self._run_in_ui(lambda: self.update_status(f"日志捕获已停止，但文件保存失败。\n原因：{last_error}\n原文件位置：{self.log_file_path}\n文件大小：{file_size_str}", False))
                 
             # 清理进程引用
             self.logcat_subprocess = None
                 
         except Exception as e:
-            self.root.after(0, lambda: self.update_status(f"清理日志文件出错：{str(e)}", False))
+            self._run_in_ui(lambda: self.update_status(f"清理日志文件出错：{str(e)}", False))
             self.logging_active = False
 
     def _run_logcat(self):
@@ -3906,7 +3935,9 @@ class ADBToolApp:
                 self.logcat_subprocess = subprocess.Popen(
                     cmd_parts,
                     stdout=f,
-                    stderr=subprocess.PIPE,
+                    # ⚠️ stderr 必须并入 stdout（写文件）或丢弃：
+                    #    用 PIPE 却不读，管道缓冲区(64KB)一满 logcat 进程就会被挂住。
+                    stderr=subprocess.STDOUT,
                     creationflags=creation_flags,
                     text=True, encoding='utf-8', errors='replace',
                     bufsize=1
@@ -3918,7 +3949,8 @@ class ADBToolApp:
                 # 验证进程是否成功启动
                 if self.logcat_subprocess.poll() is not None:
                     # 进程已经退出，获取错误信息
-                    stderr_output = self.logcat_subprocess.stderr.read() if self.logcat_subprocess.stderr else "未知错误"
+                    # stderr 已并入 stdout（写日志文件），这里从文件尾部取错误信息
+                    stderr_output = self._read_log_tail(400)
                     self.update_status(f"logcat进程启动失败: {stderr_output}", False)
                     self.logging_active = False
                     return
@@ -3945,7 +3977,9 @@ class ADBToolApp:
                 if current_time - last_flush_time >= flush_interval:
                     try:
                         f.flush()
-                        os.fsync(f.fileno())  # 强制写入磁盘
+                        # ⚠️ 不做 os.fsync()：那是同步磁盘操作，慢盘/杀软下可能阻塞
+                        #    几十~几百毫秒，而这里每 5 秒一次。flush() 已经把数据交给
+                        #    操作系统，进程异常退出时最多丢最后 5 秒的缓冲。
                         last_flush_time = current_time
                     except Exception:
                         pass  # 忽略刷新错误
@@ -3962,7 +3996,7 @@ class ADBToolApp:
             return_code = self.logcat_subprocess.poll()
             if return_code is not None and return_code != 0 and not self.stop_event.is_set():
                 # 只有在非正常停止时才报告错误
-                stderr_output = self.logcat_subprocess.stderr.read() if self.logcat_subprocess.stderr else "未知错误"
+                stderr_output = self._read_log_tail(400)
                 self.update_status(f"logcat进程异常退出 (代码: {return_code}): {stderr_output}", False)
                 
         except Exception as e:
@@ -4290,10 +4324,10 @@ class ADBToolApp:
                 
             # 在 UI 线程中显示
             result_text = "\n".join(info_lines)
-            self.root.after(0, lambda: self.update_status(result_text, True, "info"))
+            self._run_in_ui(lambda: self.update_status(result_text, True, "info"))
                 
         except Exception as e:
-            self.root.after(0, lambda: self.update_status(f"获取资源占用失败：{str(e)}", False))
+            self._run_in_ui(lambda: self.update_status(f"获取资源占用失败：{str(e)}", False))
         
     def _format_memory_size(self, size_kb: int) -> str:
         """格式化内存大小（KB 转换为易读单位）"""
@@ -4561,12 +4595,12 @@ class ADBToolApp:
             # 在 UI 线程中显示结果
             if success:
                 result_text = f"✅ 命令执行成功:\n{output}"
-                self.root.after(0, lambda: self.update_status(result_text, True, "info"))
+                self._run_in_ui(lambda: self.update_status(result_text, True, "info"))
             else:
                 result_text = f"❌ 命令执行失败:\n{output}"
-                self.root.after(0, lambda: self.update_status(result_text, False))
+                self._run_in_ui(lambda: self.update_status(result_text, False))
         except Exception as e:
-            self.root.after(0, lambda: self.update_status(f"❌ 执行出错：{str(e)}", False))
+            self._run_in_ui(lambda: self.update_status(f"❌ 执行出错：{str(e)}", False))
     
     def _save_command_to_history(self, cmd: str):
         """保存命令到历史记录（优化版）"""
@@ -4588,7 +4622,7 @@ class ADBToolApp:
                 current_values = current_values[:20]
             
             # 延迟更新下拉框，避免阻塞主线程
-            self.root.after_idle(lambda vals=tuple(current_values): self._safe_update_combobox('quick_cmd', vals))
+            self._run_in_ui(lambda vals=tuple(current_values): self._safe_update_combobox('quick_cmd', vals))
         except Exception as e:
             import logging
             logging.error(f"保存命令历史失败: {e}")
@@ -4633,7 +4667,7 @@ class ADBToolApp:
                 if hasattr(self, 'ip_combobox'):
                     current_ip = self.ip_combobox.get()
                     # 延迟更新，避免阻塞
-                    self.root.after_idle(lambda devs=tuple(devices): self._safe_update_combobox('ip', devs))
+                    self._run_in_ui(lambda devs=tuple(devices): self._safe_update_combobox('ip', devs))
                     
                     # 尝试恢复当前选择
                     if current_ip:
@@ -4791,7 +4825,7 @@ class ADBToolApp:
                     self.apk_entry.insert(0, file_path)
                     self.update_status(f"已选择 APK 文件：{os.path.basename(file_path)}", True)
                     # 🆕 新增：自动提取包名并更新到输入框
-                    self.root.after(0, lambda: self._extract_and_update_package_name(file_path))
+                    self._run_in_ui(lambda: self._extract_and_update_package_name(file_path))
             
             # 为apk_entry添加右键菜单
             def show_context_menu(event):
@@ -5384,11 +5418,11 @@ class ADBToolApp:
                 try:
                     self.performance_monitor.snapshot_once(package_name)
                     # snapshot_once 内部回调会刷新指标卡与趋势图
-                    self.root.after(0, lambda: self.update_status(
+                    self._run_in_ui(lambda: self.update_status(
                         self.performance_monitor.get_summary(), True, "info"))
                 except Exception as e:
                     logging.error(f"[性能监控] 快照失败: {e}", exc_info=True)
-                    self.root.after(0, lambda: self.update_status(
+                    self._run_in_ui(lambda: self.update_status(
                         f"✗ 获取性能快照失败: {e}", False))
 
             threading.Thread(target=_task, daemon=True).start()

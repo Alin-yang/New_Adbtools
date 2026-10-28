@@ -2,8 +2,9 @@ import subprocess
 import datetime
 import os
 import glob
+import re
 import time
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict
 from config import Config
 
 # 🆕 优化2：设备检测缓存
@@ -224,6 +225,34 @@ def normalize_device_serial(device: Optional[str]) -> Optional[str]:
     if '.' in device:
         return f"{device}:5555"
     return device
+
+
+def parse_getprop_all(output: str) -> Dict[str, str]:
+    """解析 `adb shell getprop` 的全量输出
+
+    输出格式形如：
+        [ro.product.model]: [Pixel 6]
+        [ro.build.version.release]: [13]
+
+    ⚠️ 为什么用全量 getprop：
+    逐条 `adb shell getprop <key>` 每条都要 spawn 一个 adb 进程（~200ms），
+    设备详情要 19 条 → 4 秒。而不带参数的 `getprop` 一次输出全部属性（几 KB），
+    一次命令搞定，快 19 倍。
+
+    Args:
+        output: getprop 命令的原始输出
+
+    Returns:
+        Dict[str, str]: 属性名 -> 属性值
+    """
+    props: Dict[str, str] = {}
+    if not output:
+        return props
+    for line in output.splitlines():
+        m = re.match(r'\s*\[(.+?)\]:\s*\[(.*)\]\s*$', line)
+        if m:
+            props[m.group(1)] = m.group(2)
+    return props
 
 
 def get_connected_devices_simple() -> List[str]:
@@ -1307,6 +1336,59 @@ def safe_decode(data: bytes, encoding: str = 'utf-8') -> str:
             return data.decode('utf-8', errors='ignore')
 
 
+def get_all_package_versions(target_device: Optional[str] = None) -> Dict[str, str]:
+    """一次拿到所有已安装包的版本号
+
+    ⚠️ 为什么不用逐包 `dumpsys package <pkg>`：
+    设备上装 300 个包时，逐个查要 300 条 adb 命令（每条 ~300ms）→ 90 秒以上；
+    `dumpsys package packages` 一条命令输出全部包（几百 KB），0.5 秒搞定。
+
+    Args:
+        target_device: 目标设备 IP/序列号
+
+    Returns:
+        Dict[str, str]: 包名 -> 版本号
+    """
+    versions: Dict[str, str] = {}
+
+    # 1) 定位设备（用缓存，别每次都跑 adb devices）
+    device_id = None
+    if target_device:
+        target = normalize_device_serial(target_device)
+        for dev in (get_connected_devices_cached_safe() or []):
+            if dev == target or dev.startswith(target_device.strip() + ':'):
+                device_id = dev
+                break
+    if not device_id:
+        devices = get_connected_devices_cached_safe() or []
+        if devices:
+            device_id = devices[0]
+    if not device_id:
+        return versions
+
+    # 2) 一条命令拿全部
+    try:
+        output, ok = run_adb_command(
+            f"adb -s {device_id} shell dumpsys package packages", timeout=30)
+    except Exception:
+        return versions
+    if not ok or not output:
+        return versions
+
+    # 3) 解析：按 "Package [xxx]" 分块，块内找 versionName
+    for block in re.split(r'\n\s*Package \[', output)[1:]:
+        m = re.match(r'([^\]]+)\]', block)
+        if not m:
+            continue
+        pkg = m.group(1).strip()
+        vm = re.search(r'versionName=([^\s]+)', block)
+        if vm:
+            ver = vm.group(1).strip()
+            if ver and ver != 'null':
+                versions[pkg] = ver
+    return versions
+
+
 def get_accurate_package_version(package_name: str, target_device: Optional[str] = None) -> Optional[str]:
     """获取应用的精确版本号（优先获取当前用户安装的最新版本）
     
@@ -1317,23 +1399,20 @@ def get_accurate_package_version(package_name: str, target_device: Optional[str]
     Returns:
         Optional[str]: 版本号，如果获取失败则返回None
     """
-    # 获取连接的设备列表
-    devices_output, devices_success = run_adb_command("adb devices")
-    if not devices_success:
+    # 获取连接的设备列表（用缓存：别每个包都重跑一次 adb devices）
+    devices_output, devices_success = get_connected_devices_cached_safe(), True
+    if not devices_success or not devices_output:
         return None
-    
+
     device_id = None
-    lines = devices_output.split('\n')[1:]  # 跳过标题行
-    
+    lines = [f"{d}\tdevice" for d in devices_output]
+
     # 如果指定了目标设备，优先匹配目标设备
     if target_device:
         target_device = target_device.strip().strip('"').strip("'")
         # 标准化IP地址格式
-        if ':' not in target_device and '.' in target_device:
-            target_with_port = f"{target_device}:5555"
-        else:
-            target_with_port = target_device
-        
+        target_with_port = normalize_device_serial(target_device)
+
         # 查找匹配的设备
         for line in lines:
             if '\t' in line and 'device' in line:
@@ -1341,7 +1420,7 @@ def get_accurate_package_version(package_name: str, target_device: Optional[str]
                 if dev == target_with_port or dev == target_device or dev.startswith(target_device + ':'):
                     device_id = dev
                     break
-    
+
     # 如果没有指定目标设备或未找到匹配的设备，使用第一个设备
     if not device_id:
         for line in lines:
