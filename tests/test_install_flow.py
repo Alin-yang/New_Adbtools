@@ -2,7 +2,7 @@
 
 用法: python tests/test_install_flow.py
 """
-import sys, os, io, types, subprocess
+import sys, os, io, types, queue, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import app as appmod
@@ -75,8 +75,11 @@ def make_stub():
     s.root = FakeRoot()
     s.status_text = FakeStatusText()
     s.progress = FakeProgress()
+    s._ui_queue = queue.Queue()
+    s._ui_pump_scheduled = False
     s.get_ip_address = lambda: "192.168.0.26"
-    for name in ('_run_in_ui', '_update_install_status', '_update_status_safe',
+    for name in ('_run_in_ui', '_schedule_ui_pump', '_pump_ui_queue',
+                 '_update_install_status', '_update_status_safe',
                  '_set_progress_mode', '_set_progress_value', '_show_progress', '_hide_progress',
                  '_install_with_retry', '_install_via_push_pm', '_run_pm_install',
                  '_run_adb_capture', '_install_via_adb_install', '_run_install_with_progress'):

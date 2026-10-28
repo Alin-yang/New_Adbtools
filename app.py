@@ -8,6 +8,7 @@ import subprocess
 import os
 import glob
 import re
+import queue
 import logging
 from typing import Optional, Tuple, Dict, Any
 from decorators import require_device_connected
@@ -22,6 +23,7 @@ from utils import (
     get_connected_devices_cached,  # 🆕 新增缓存版本
     get_connected_devices_cached_safe,  # 🆕 安全版：查询失败返回 None
     set_device_validation_paused,  # 🆕 重负载操作期间暂停设备可达性验证
+    filter_lines,  # 🆕 Python 侧按关键字过滤输出（替代 shell grep）
     run_adb_commands_batch  # 🆕 新增批量执行
 )
 from config import Config
@@ -197,10 +199,10 @@ class ADBToolApp:
             # 使用并行检测设备，不进行深度验证
             connected_devices = get_connected_devices_parallel()
             # 在主线程中更新 UI
-            self.root.after(0, lambda: self._handle_detected_devices(connected_devices))
+            self._run_in_ui(lambda: self._handle_detected_devices(connected_devices))
         except Exception as error:
             error_msg = str(error)
-            self.root.after(0, lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
+            self._run_in_ui(lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
     
     def _start_device_monitoring(self):
         """启动后台设备监控"""
@@ -228,10 +230,10 @@ class ADBToolApp:
         try:
             connected_devices = get_connected_devices()
             # 在主线程中更新 UI
-            self.root.after(0, lambda: self._handle_detected_devices(connected_devices))
+            self._run_in_ui(lambda: self._handle_detected_devices(connected_devices))
         except Exception as error:
             error_msg = str(error)
-            self.root.after(0, lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
+            self._run_in_ui(lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
 
     def _init_variables(self) -> None:
         """
@@ -267,6 +269,12 @@ class ADBToolApp:
         # 数据存储路径的线程安全快照（由 log_path_entry 的 trace 回调在主线程更新，
         # 后台线程只读这个副本，不直接访问 Tk 控件）
         self._user_log_path = ""
+
+        # UI 任务队列：后台线程把 UI 操作塞进来，主线程的定时器负责执行。
+        # ⚠️ 不能用 root.after() 从后台线程调度（主线程忙时会抛
+        #    "main thread is not in main loop"）。
+        self._ui_queue = queue.Queue()
+        self._ui_pump_scheduled = False
         
         # 历史记录防抖保存
         self._history_save_timer = None
@@ -295,10 +303,10 @@ class ADBToolApp:
                 pkg_history = load_pkg_history(self)
                 
                 # 在主线程中更新 UI
-                self.root.after(0, lambda: self._update_history_ui(merged_history, pkg_history))
+                self._run_in_ui(lambda: self._update_history_ui(merged_history, pkg_history))
             except Exception as error:
                 error_msg = str(error)
-                self.root.after(0, lambda msg=error_msg: self.update_status(f"加载历史记录失败：{msg}", False))
+                self._run_in_ui(lambda msg=error_msg: self.update_status(f"加载历史记录失败：{msg}", False))
         
         # 启动后台线程
         thread = threading.Thread(target=load_history, daemon=True)
@@ -306,11 +314,17 @@ class ADBToolApp:
     
     def _schedule_history_save(self):
         """调度历史记录保存（防抖）"""
-        if self._history_save_timer:
-            self.root.after_cancel(self._history_save_timer)
-        
-        # 2秒后保存
-        self._history_save_timer = self.root.after(2000, self._save_all_history)
+        # ⚠️ 可能从后台线程调用，after / after_cancel 必须回主线程执行
+        def _do():
+            if self._history_save_timer:
+                try:
+                    self.root.after_cancel(self._history_save_timer)
+                except Exception:
+                    pass
+            # 2秒后保存
+            self._history_save_timer = self.root.after(2000, self._save_all_history)
+
+        self._run_in_ui(_do)
     
     def _save_all_history(self):
         """保存所有历史记录"""
@@ -329,13 +343,13 @@ class ADBToolApp:
             self.ip_history = ip_history
             if hasattr(self, 'ip_combobox'):
                 # 使用 after_idle 延迟更新，避免阻塞 Tab 切换
-                self.root.after_idle(lambda: self._safe_update_combobox('ip', self.ip_history))
+                self._run_in_ui(lambda: self._safe_update_combobox('ip', self.ip_history))
         
         if self.pkg_history != pkg_history:
             self.pkg_history = pkg_history
             if hasattr(self, 'pkg_combobox'):
                 # 使用 after_idle 延迟更新，避免阻塞 Tab 切换
-                self.root.after_idle(lambda: self._safe_update_combobox('pkg', self.pkg_history))
+                self._run_in_ui(lambda: self._safe_update_combobox('pkg', self.pkg_history))
     
     def _safe_update_combobox(self, combo_type: str, values):
         """安全更新 Combobox（带异常处理）"""
@@ -560,7 +574,7 @@ class ADBToolApp:
             self._schedule_history_save()
             # 延迟更新下拉框，避免阻塞主线程
             if hasattr(self, 'pkg_combobox'):
-                self.root.after_idle(lambda: self._safe_update_combobox('pkg', self.pkg_history))
+                self._run_in_ui(lambda: self._safe_update_combobox('pkg', self.pkg_history))
     
     def _save_apk_to_history(self, apk_path: str) -> None:
         """保存 APK 路径到历史记录（增强版 - 同时更新下拉框）"""
@@ -800,7 +814,7 @@ class ADBToolApp:
                 # 调度保存（防抖）
                 self._schedule_history_save()
                 # 延迟更新，避免阻塞
-                self.root.after_idle(lambda: self._safe_update_combobox('ip', self.ip_history))
+                self._run_in_ui(lambda: self._safe_update_combobox('ip', self.ip_history))
                 logging.info(f"[同步操作] 已更新下拉框历史记录：{self.ip_history}")
             
             # 设置当前选中的设备（使用统一格式）
@@ -967,7 +981,8 @@ class ADBToolApp:
             
             # 8. 电池电量
             try:
-                output, _ = self.run_adb_with_target("adb shell dumpsys battery | grep level")
+                # ⚠️ 不能写 `| grep level`：管道由本机 cmd 解析，用户环境没有 grep 会整条失败
+                output, _ = self.run_adb_with_target("adb shell dumpsys battery")
                 if output and "level" in output:
                     match = re.search(r'level:\s*(\d+)', output)
                     if match:
@@ -1185,7 +1200,8 @@ class ADBToolApp:
                 
                 # 电池信息（可选）
                 try:
-                    output, _ = self.run_adb_with_target("adb shell dumpsys battery | grep level")
+                    # ⚠️ 不能写 `| grep level`：管道由本机 cmd 解析，用户环境没有 grep 会整条失败
+                    output, _ = self.run_adb_with_target("adb shell dumpsys battery")
                     if output and "level" in output:
                         import re
                         match = re.search(r'level:\s*(\d+)', output)
@@ -1554,12 +1570,21 @@ class ADBToolApp:
     def update_status(self, message: str, success: bool, msg_type: str = "normal") -> None:
         """
         更新状态文本框（极致优化版 - 零阻塞 + 行数限制）
-            
+
+        ⚠️ 线程安全：全项目有 100+ 处在后台线程里调用本方法，
+        而 status_text 是 Tk 控件，只能在主线程操作。
+        所以非主线程调用时自动转投 UI 队列，由主线程执行。
+
         Args:
             message: 要显示的消息
             success: 是否为成功状态
             msg_type: 消息类型 (normal/success/error/warning/info/system)
         """
+        # 非主线程 -> 转投 UI 队列（主线程取出后重新调用本方法）
+        if threading.current_thread() is not threading.main_thread():
+            self._run_in_ui(lambda: self.update_status(message, success, msg_type))
+            return
+
         # 🆕 优化4：限制日志行数，防止内存泄漏
         try:
             lines = self.status_text.index('end-1c').split('.')[0]
@@ -1681,17 +1706,21 @@ class ADBToolApp:
             self.update_status("请输入需要终止进程的应用包名", False)
             return
 
-        try:
-            output, success = self.run_adb_with_target(f"adb shell am force-stop {pkg_name}")
+        def _work():
+            try:
+                output, success = self.run_adb_with_target(f"adb shell am force-stop {pkg_name}")
+            except Exception:
+                self._update_status_safe(f"未找到{pkg_name}所属进程:", False)
+                return
             if success:
-                # 保存包名到历史记录
-                self._save_pkg_to_history(pkg_name)
-                self.update_status(f"成功终止{pkg_name}应用所处进程", True)
+                # 保存包名到历史记录（会操作 Tk，必须回主线程）
+                self._run_in_ui(lambda: self._save_pkg_to_history(pkg_name))
+                self._update_status_safe(f"成功终止{pkg_name}应用所处进程", True)
             else:
-                self.update_status(f"终止{pkg_name}进程失败", False)
-        except Exception:
-            self.update_status(f"未找到{pkg_name}所属进程:", False)
-    
+                self._update_status_safe(f"终止{pkg_name}进程失败", False)
+
+        self.run_in_background(_work)
+
     @require_device_connected
     def start_app(self):
         """启动当前包名应用"""
@@ -1700,16 +1729,22 @@ class ADBToolApp:
             self.update_status("请输入要启动的应用包名", False)
             return
 
-        try:
-            output, success = self.run_adb_with_target(f"adb shell monkey -p {pkg_name} -c android.intent.category.LAUNCHER 1")
+        def _work():
+            try:
+                output, success = self.run_adb_with_target(
+                    f"adb shell monkey -p {pkg_name} -c android.intent.category.LAUNCHER 1"
+                )
+            except Exception as e:
+                self._update_status_safe(f"启动应用失败：{str(e)}", False)
+                return
             if success:
-                # 保存包名到历史记录
-                self._save_pkg_to_history(pkg_name)
-                self.update_status(f"成功启动{pkg_name}应用", True)
+                # 保存包名到历史记录（会操作 Tk，必须回主线程）
+                self._run_in_ui(lambda: self._save_pkg_to_history(pkg_name))
+                self._update_status_safe(f"成功启动{pkg_name}应用", True)
             else:
-                self.update_status(f"启动{pkg_name}应用失败", False)
-        except Exception as e:
-            self.update_status(f"启动应用失败：{str(e)}", False)
+                self._update_status_safe(f"启动{pkg_name}应用失败", False)
+
+        self.run_in_background(_work)
 
 
     def get_ip_address(self) -> Optional[str]:
@@ -1930,20 +1965,77 @@ class ADBToolApp:
         return True
 
     def _run_in_ui(self, func):
-        """把 UI 操作调度到主线程执行（后台线程操作 Tk 控件的唯一入口）"""
+        """把 UI 操作调度到主线程执行（后台线程操作 Tk 控件的唯一入口）
+
+        ⚠️ 不能直接用 root.after()：
+        从后台线程调用 Tcl（after/insert/config…）在主线程正忙时不进事件循环时
+        会抛 "main thread is not in main loop"，而且会阻塞后台线程。
+        所以改成：后台线程只把 callable 塞进队列，主线程的定时器负责取出执行。
+        """
         try:
-            self.root.after(0, func)
-            return
+            self._ui_queue.put_nowait(func)
         except Exception:
             pass
+        self._schedule_ui_pump()
+
+    def _schedule_ui_pump(self):
+        """安排主线程的 UI 队列泵（只调度一次）"""
+        if getattr(self, '_ui_pump_scheduled', False):
+            return
+        self._ui_pump_scheduled = True
         try:
-            func()
+            self.root.after(20, self._pump_ui_queue)
+        except Exception:
+            self._ui_pump_scheduled = False
+
+    def _pump_ui_queue(self):
+        """主线程：从队列取出 UI 操作批量执行"""
+        self._ui_pump_scheduled = False
+        try:
+            while True:
+                func = self._ui_queue.get_nowait()
+                try:
+                    func()
+                except Exception:
+                    logging.exception("[UI 队列] 执行失败")
+        except queue.Empty:
+            pass
+        # 期间又来了新任务则继续排程
+        try:
+            if not self._ui_queue.empty():
+                self._schedule_ui_pump()
         except Exception:
             pass
 
     def _update_status_safe(self, message, success: bool):
         """跨线程安全的状态栏更新（后台线程调用）"""
         self._run_in_ui(lambda: self.update_status(message, success))
+
+    def run_in_background(self, task, *args, **kwargs) -> threading.Thread:
+        """在后台线程执行耗时任务，避免阻塞 UI
+
+        ⚠️ 约定：
+        - 任务内部**不要**直接操作 Tk 控件或调用 self.update_status()；
+          统一用 self._update_status_safe() / self._run_in_ui()。
+        - 需要在主线程做的事（如读输入框、弹确认框）要在调用本方法**之前**做完。
+
+        Args:
+            task: 要执行的函数
+            *args, **kwargs: 传给 task 的参数
+
+        Returns:
+            threading.Thread: 已启动的线程
+        """
+        def worker():
+            try:
+                task(*args, **kwargs)
+            except Exception as e:
+                logging.exception("[后台任务] 执行异常")
+                self._update_status_safe(f"操作失败：{e}", False)
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        return thread
 
     def _show_progress(self):
         """显示进度条动画（线程安全）"""
@@ -2314,13 +2406,20 @@ class ADBToolApp:
 
     def _update_operation_status(self, operation: str, status: str, details: str = "", msg_type: str = "info"):
         """更新操作状态显示（统一格式 - 零阻塞优化）
-            
+
+        ⚠️ 线程安全：可能在后台线程被调用，非主线程时转投 UI 队列。
+
         Args:
             operation: 操作名称（如“日志捕获”、“屏幕录制”）
             status: 状态（如“开始”、“进行中”、“完成”、“失败”）
             details: 详细信息
             msg_type: 消息类型
         """
+        # 非主线程 -> 转投 UI 队列
+        if threading.current_thread() is not threading.main_thread():
+            self._run_in_ui(
+                lambda: self._update_operation_status(operation, status, details, msg_type))
+            return
         timestamp = time.strftime("[%H:%M:%S] ", time.localtime())
             
         # 构造统一格式的消息
@@ -2374,90 +2473,104 @@ class ADBToolApp:
         )
         
         if result:
-            output, success = self.run_adb_with_target(f"adb uninstall {pkg_name}")
-            if success:
-                # 保存包名到历史记录
-                self._save_pkg_to_history(pkg_name)
-                # 清除包信息缓存
-                cache_manager.package_cache.delete(f"package_{pkg_name}")
-            self.update_status(output, success)
+            def _work():
+                output, success = self.run_adb_with_target(f"adb uninstall {pkg_name}")
+                if success:
+                    # 清除包信息缓存
+                    cache_manager.package_cache.delete(f"package_{pkg_name}")
+                    # 保存包名到历史记录（会操作 Tk，必须回主线程）
+                    self._run_in_ui(lambda: self._save_pkg_to_history(pkg_name))
+                self._update_status_safe(output, success)
+
+            self.run_in_background(_work)
         else:
             self.update_status("已取消卸载操作", True)
 
     @require_device_connected
     def package_list(self):
         """获取已安装应用包名列表及其版本(优化版，使用动态线程池)"""
-        try:
-            # 获取所有已安装包名
-            output, success = self.run_adb_with_target("adb shell pm list packages")
-            if not success:
-                self.update_status("获取应用列表失败", False)
-                return
+        # 目标设备必须在主线程取（读 Tk 控件），后台线程不能再碰
+        target_ip = self.get_ip_address()
 
-            # 清理并获取包名列表
-            packages = [line.replace("package:", "").strip() 
-                       for line in output.splitlines() if line.strip()]
-            
-            if not packages:
-                self.update_status("未找到已安装的应用", False)
-                return
-            
-            self.update_status(f"正在获取 {len(packages)} 个应用的版本信息...", True)
-            
-            # 使用动态线程池并行获取版本信息
-            max_workers = calculate_optimal_workers(len(packages))
-            
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_package = {
-                    executor.submit(self.get_package_version, package): package 
-                    for package in packages
-                }
-                
-                processed_count = 0
-                for future in concurrent.futures.as_completed(future_to_package):
-                    package = future_to_package[future]
-                    try:
-                        version = future.result()
-                        version_str = version if version else "未知"
-                        self.status_text.insert(
-                            tk.END, 
-                            f"\n{package} (版本: {version_str})", 
-                            "info"
-                        )
-                    except Exception as e:
-                        self.status_text.insert(
-                            tk.END,
-                            f"\n{package} (版本: 获取失败 - {str(e)})",
-                            "error"
-                        )
-                    
-                    processed_count += 1
-                    # 每处理10个显示一次进度
-                    if processed_count % 10 == 0:
-                        self.status_text.insert(
-                            tk.END,
-                            f"\n已处理 {processed_count}/{len(packages)} 个应用",
-                            "info"
-                        )
-                    
-                    self.status_text.see(tk.END)
-                    
-            self.update_status(f"\n获取应用列表完成，共 {len(packages)} 个应用", True)
-            
-        except Exception as e:
-            self.update_status(f"获取应用列表时出错: {str(e)}", False)
+        def _work():
+            try:
+                # 获取所有已安装包名
+                output, success = self.run_adb_with_target("adb shell pm list packages")
+                if not success:
+                    self._update_status_safe("获取应用列表失败", False)
+                    return
 
-    def get_package_version(self, package_name: str) -> Optional[str]:
-        """获取应用版本号(优化版，优先获取最新版本)"""
+                # 清理并获取包名列表
+                packages = [line.replace("package:", "").strip()
+                           for line in output.splitlines() if line.strip()]
+
+                if not packages:
+                    self._update_status_safe("未找到已安装的应用", False)
+                    return
+
+                self._update_status_safe(f"正在获取 {len(packages)} 个应用的版本信息...", True)
+
+                # 使用动态线程池并行获取版本信息
+                max_workers = calculate_optimal_workers(len(packages))
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    future_to_package = {
+                        executor.submit(self.get_package_version, package, target_ip): package
+                        for package in packages
+                    }
+
+                    processed_count = 0
+                    for future in concurrent.futures.as_completed(future_to_package):
+                        package = future_to_package[future]
+                        try:
+                            version = future.result()
+                            version_str = version if version else "未知"
+                            self._run_in_ui(lambda p=package, v=version_str: self.status_text.insert(
+                                tk.END,
+                                f"\n{p} (版本: {v})",
+                                "info"
+                            ))
+                        except Exception as e:
+                            self._run_in_ui(lambda p=package, err=str(e): self.status_text.insert(
+                                tk.END,
+                                f"\n{p} (版本: 获取失败 - {err})",
+                                "error"
+                            ))
+
+                        processed_count += 1
+                        # 每处理10个显示一次进度
+                        if processed_count % 10 == 0:
+                            self._run_in_ui(
+                                lambda c=processed_count, t=len(packages): self.status_text.insert(
+                                    tk.END,
+                                    f"\n已处理 {c}/{t} 个应用",
+                                    "info"
+                                )
+                            )
+
+                        self._run_in_ui(lambda: self.status_text.see(tk.END))
+
+                self._update_status_safe(f"\n获取应用列表完成，共 {len(packages)} 个应用", True)
+
+            except Exception as e:
+                self._update_status_safe(f"获取应用列表时出错: {str(e)}", False)
+
+        self.run_in_background(_work)
+
+    def get_package_version(self, package_name: str, target_ip: Optional[str] = None) -> Optional[str]:
+        """获取应用版本号(优化版，优先获取最新版本)
+
+        ⚠️ target_ip 必须由调用方在主线程取好后传入：
+        本方法会在线程池里跑，不能直接读 Tk 控件（get_ip_address）。
+        """
         # 检查缓存
         cached_info = cache_manager.get_package_info(package_name)
         if cached_info and 'version' in cached_info:
             return cached_info['version']
-            
+
         # 使用新的精确版本获取方法，传递目标设备
-        target_ip = self.get_ip_address()
         version = get_accurate_package_version(package_name, target_device=target_ip)
-        
+
         if version:
             # 更新缓存
             package_info = {'version': version, 'name': package_name}
@@ -2481,38 +2594,50 @@ class ADBToolApp:
         )
         
         if result:
-            output, success = self.run_adb_with_target(f"adb shell pm clear {pkg_name}")
-            if success:
-                # 保存包名到历史记录
-                self._save_pkg_to_history(pkg_name)
-                # 清除包信息缓存
-                cache_manager.package_cache.delete(f"package_{pkg_name}")
-            self.update_status(output, success)
+            def _work():
+                output, success = self.run_adb_with_target(f"adb shell pm clear {pkg_name}")
+                if success:
+                    # 清除包信息缓存
+                    cache_manager.package_cache.delete(f"package_{pkg_name}")
+                    # 保存包名到历史记录（会操作 Tk，必须回主线程）
+                    self._run_in_ui(lambda: self._save_pkg_to_history(pkg_name))
+                self._update_status_safe(output, success)
+
+            self.run_in_background(_work)
         else:
             self.update_status("已取消清理缓存操作", True)
 
     @require_device_connected
     def root_device(self):
         """获取root权限"""
-        output, success = self.run_adb_with_target("adb root")
-        self.update_status(output, success)
+        def _work():
+            output, success = self.run_adb_with_target("adb root")
+            self._update_status_safe(output, success)
+
+        self.run_in_background(_work)
 
     @require_device_connected
     def pull_anr_file(self):
         """拉取ANR文件"""
-        # 获取用户自定义的日志存储路径
-        from utils import get_user_defined_log_path
-        user_log_path = get_user_defined_log_path(self)
-        # 在用户路径下创建anr_files子目录
-        anr_dir = ensure_directory(os.path.join(user_log_path, "anr_files"))
-        output, success = self.run_adb_with_target(f"adb pull /data/anr \"{anr_dir}\"")
-        self.update_status(f"ANR文件已保存至: {anr_dir}", success)
+        def _work():
+            # 获取用户自定义的日志存储路径（读的是线程安全快照）
+            from utils import get_user_defined_log_path
+            user_log_path = get_user_defined_log_path(self)
+            # 在用户路径下创建anr_files子目录
+            anr_dir = ensure_directory(os.path.join(user_log_path, "anr_files"))
+            output, success = self.run_adb_with_target(f"adb pull /data/anr \"{anr_dir}\"")
+            self._update_status_safe(f"ANR文件已保存至: {anr_dir}", success)
+
+        self.run_in_background(_work)
 
     @require_device_connected
     def remount(self):
         """重新挂载分区"""
-        output, success = self.run_adb_with_target("adb remount")
-        self.update_status(output, success)
+        def _work():
+            output, success = self.run_adb_with_target("adb remount")
+            self._update_status_safe(output, success)
+
+        self.run_in_background(_work)
 
     @require_device_connected
     def get_version(self):
@@ -2521,24 +2646,28 @@ class ADBToolApp:
         if not pkg_name:
             self.update_status("请输入包名", False)
             return
-    
-        output, success = self.run_adb_with_target(f"adb shell pm dump {pkg_name}")
-        if success:
+
+        def _work():
+            output, success = self.run_adb_with_target(f"adb shell pm dump {pkg_name}")
+            if not success:
+                # 清空版本显示
+                self._run_in_ui(lambda: self.update_version_display())
+                self._update_status_safe(output, False)
+                return
+
             version = extract_version_info(output)
             if version:
-                # 保存包名到历史记录
-                self._save_pkg_to_history(pkg_name)
+                # 保存包名到历史记录（会操作 Tk，必须回主线程）
+                self._run_in_ui(lambda: self._save_pkg_to_history(pkg_name))
                 # 【新增】同步更新版本展示框
-                self.update_version_display(version)
-                self.update_status(f"当前应用{pkg_name}版本：{version}", True)
+                self._run_in_ui(lambda: self.update_version_display(version))
+                self._update_status_safe(f"当前应用{pkg_name}版本：{version}", True)
             else:
                 # 清空版本显示
-                self.update_version_display()
-                self.update_status("版本信息解析失败", False)
-        else:
-            # 清空版本显示
-            self.update_version_display()
-            self.update_status(output, False)
+                self._run_in_ui(lambda: self.update_version_display())
+                self._update_status_safe("版本信息解析失败", False)
+
+        self.run_in_background(_work)
 
     @require_device_connected
     def reboot(self):
@@ -2549,15 +2678,18 @@ class ADBToolApp:
             "您确定要重启设备吗？\n\n注意：重启后将断开ADB连接，需要重新连接。",
             icon="warning"
         )
-        
+
         if result:
-            output, success = self.run_adb_with_target("adb reboot")
-            if success:
-                self.update_status("设备重启中...", True)
-                # 清空设备缓存，因为重启后连接状态会发生变化
-                cache_manager.device_cache.clear()
-            else:
-                self.update_status(output, False)
+            def _work():
+                output, success = self.run_adb_with_target("adb reboot")
+                if success:
+                    # 清空设备缓存，因为重启后连接状态会发生变化
+                    cache_manager.device_cache.clear()
+                    self._update_status_safe("设备重启中...", True)
+                else:
+                    self._update_status_safe(output, False)
+
+            self.run_in_background(_work)
         else:
             self.update_status("已取消重启操作", True)
 
@@ -2569,28 +2701,31 @@ class ADBToolApp:
         if cached_version:
             self.update_status(f"Android版本: {cached_version}", True)
             return
-            
-        output, success = self.run_adb_with_target("adb shell getprop ro.build.version.release")
-        if success:
-            version = output.strip()
-            cache_manager.set_system_info("android_version", version)
-            self.update_status(f"Android 版本：{version}", True)
-        else:
-            self.update_status(output, False)
-    
+
+        def _work():
+            output, success = self.run_adb_with_target("adb shell getprop ro.build.version.release")
+            if success:
+                version = output.strip()
+                cache_manager.set_system_info("android_version", version)
+                self._update_status_safe(f"Android 版本：{version}", True)
+            else:
+                self._update_status_safe(output, False)
+
+        self.run_in_background(_work)
+
     @require_device_connected
     def send_text_input(self):
         """发送文本输入到设备（只支持数字）"""
-        # 获取输入框内容
+        # 获取输入框内容（主线程读 Tk）
         if not hasattr(self, 'text_input_entry'):
             self.update_status("文本输入组件未初始化", False)
             return
-                
+
         text_to_send = self.text_input_entry.get().strip()
         if not text_to_send:
             self.update_status("请输入要发送的文本内容", False)
             return
-            
+
         # 检查是否只包含数字
         if not text_to_send.isdigit():
             self.update_status(
@@ -2599,19 +2734,22 @@ class ADBToolApp:
                 True
             )
             return
-            
+
         # 直接执行 ADB 命令
         self.update_status(f"正在输入：{text_to_send}...", True, "info")
-        
-        try:
-            output, success = self.run_adb_with_target(f'adb shell input text "{text_to_send}"')
-            
-            if success and not output.strip():
-                self.update_status(f"✓ 输入成功：{text_to_send}", True)
-            else:
-                self.update_status(f"结果：{output}", False)
-        except Exception as e:
-            self.update_status(f"出错：{str(e)}", False)
+
+        def _work():
+            try:
+                output, success = self.run_adb_with_target(f'adb shell input text "{text_to_send}"')
+
+                if success and not output.strip():
+                    self._update_status_safe(f"✓ 输入成功：{text_to_send}", True)
+                else:
+                    self._update_status_safe(f"结果：{output}", False)
+            except Exception as e:
+                self._update_status_safe(f"出错：{str(e)}", False)
+
+        self.run_in_background(_work)
     
     def _send_text_simple(self, text: str):
         """发送数字和字母文本（简单直接）"""
@@ -2929,11 +3067,15 @@ class ADBToolApp:
                 logging.warning(f"获取输入法列表失败：{ime_output}")
             
             # 步骤 2: 检查是否有焦点（通过检查当前聚焦的窗口）
+            # ⚠️ 不能写 `| grep -E '...'`：管道由本机 cmd 解析，用户环境没有 grep 会整条失败；
+            #    且 dumpsys window 输出很大，改用 dumpsys activity activities（体积小得多）
             focus_output, focus_success = self.run_adb_with_target(
-                "adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'"
+                "adb shell dumpsys activity activities"
             )
             if focus_success and focus_output:
-                logging.info(f"当前焦点窗口：{focus_output}")
+                focus_lines = filter_lines(focus_output, 'mResumedActivity', 'mFocusedApp')
+                if focus_lines:
+                    logging.info(f"当前焦点窗口：{focus_lines[0].strip()}")
             
             # 步骤 3: 逐字符发送文本（使用增强的转义处理）
             success_count = 0
@@ -3880,85 +4022,97 @@ class ADBToolApp:
         )
         
         if result:
-            output, success = self.run_adb_with_target("adb logcat -c")
-            if success:
-                self.update_status("日志清除成功", True)
-            else:
-                self.update_status(output, False)
+            def _work():
+                output, success = self.run_adb_with_target("adb logcat -c")
+                if success:
+                    self._update_status_safe("日志清除成功", True)
+                else:
+                    self._update_status_safe(output, False)
+
+            self.run_in_background(_work)
         else:
             self.update_status("已取消清理日志操作", True)
 
     @require_device_connected
     def get_package_name(self):
         """获取当前打开应用包名"""
-        try:
-            # 尝试第一个命令
-            output, success = self.run_adb_with_target("adb shell dumpsys window windows | findstr mCurrentFocus")
-            if not success or not output:
-                # 如果第一个命令失败，尝试第二个命令
-                output, success = self.run_adb_with_target("adb shell dumpsys window | findstr mCurrentFocus")
+        def _work():
+            try:
+                # ⚠️ 过滤放在 Python 侧做，不能用 `| findstr`：
+                #    管道由本机 cmd 解析；且 dumpsys window 输出极大（全量传回本机很慢）。
+                #    dumpsys activity activities 体积小得多，同样能拿到前台包名。
+                output, success = self.run_adb_with_target(
+                    "adb shell dumpsys activity activities")
                 if not success or not output:
-                    # 如果还是失败，尝试第三个命令
-                    output, success = self.run_adb_with_target("adb shell dumpsys activity activities | findstr mResumedActivity")
-                    if not success or not output:
-                        self.update_status("获取当前应用包名失败", False)
-                        return
+                    # 备用命令
+                    output, success = self.run_adb_with_target(
+                        "adb shell dumpsys window windows")
+                if not success or not output:
+                    self._update_status_safe("获取当前应用包名失败", False)
+                    return
 
-            # 调试输出
-            self.update_status(f"原始输出: {output}", True)
-            
-            package_name = None
-            # 尝试多种格式匹配
-            if "u0" in output:
-                # 格式1: mCurrentFocus=Window{...u0 包名/活动名}
-                try:
-                    package_name = output.split("u0 ")[1].split("/")[0].strip()
-                except Exception:
-                    pass
-            
-            if not package_name and "Window{" in output:
-                # 格式2: mCurrentFocus=Window{...包名/活动名}
-                try:
-                    package_name = output.split("Window{")[1].split("/")[0].split()[-1].strip()
-                except Exception:
-                    pass
-            
-            if not package_name and "ResumedActivity" in output:
-                # 格式3: ResumedActivity: ActivityRecord{...包名/活动名}
-                try:
-                    package_name = output.split("ResumedActivity")[1].split("/")[0].split()[-1].strip()
-                except Exception:
-                    pass
-            
-            if not package_name:
-                # 格式4: 尝试直接从/分隔的内容中提取
-                try:
-                    parts = output.split("/")
-                    if len(parts) > 1:
-                        package_name = parts[0].split()[-1].strip()
-                except Exception:
-                    pass
+                # 只保留与前台窗口相关的行
+                output = "\n".join(filter_lines(
+                    output, 'mResumedActivity', 'mFocusedApp', 'mCurrentFocus'))
 
-            if package_name:
-                # 验证包名格式
-                if "." in package_name and not package_name.startswith(".") and not package_name.endswith("."):
-                    self.update_status(f"当前应用包名: {package_name}", True)
-                    # 保存包名到历史记录
-                    self._save_pkg_to_history(package_name)
-                    # 自动填充包名到输入框
-                    if hasattr(self, 'pkg_combobox'):
-                        self.pkg_combobox.delete(0, tk.END)
-                        self.pkg_combobox.insert(0, package_name)
+                # 调试输出
+                self._update_status_safe(f"原始输出: {output}", True)
+
+                package_name = None
+                # 尝试多种格式匹配
+                if "u0" in output:
+                    # 格式1: mCurrentFocus=Window{...u0 包名/活动名}
+                    try:
+                        package_name = output.split("u0 ")[1].split("/")[0].strip()
+                    except Exception:
+                        pass
+
+                if not package_name and "Window{" in output:
+                    # 格式2: mCurrentFocus=Window{...包名/活动名}
+                    try:
+                        package_name = output.split("Window{")[1].split("/")[0].split()[-1].strip()
+                    except Exception:
+                        pass
+
+                if not package_name and "ResumedActivity" in output:
+                    # 格式3: ResumedActivity: ActivityRecord{...包名/活动名}
+                    try:
+                        package_name = output.split("ResumedActivity")[1].split("/")[0].split()[-1].strip()
+                    except Exception:
+                        pass
+
+                if not package_name:
+                    # 格式4: 尝试直接从/分隔的内容中提取
+                    try:
+                        parts = output.split("/")
+                        if len(parts) > 1:
+                            package_name = parts[0].split()[-1].strip()
+                    except Exception:
+                        pass
+
+                if package_name:
+                    # 验证包名格式
+                    if "." in package_name and not package_name.startswith(".") and not package_name.endswith("."):
+                        self._update_status_safe(f"当前应用包名: {package_name}", True)
+                        # 保存包名到历史记录 + 自动填充包名到输入框（都要回主线程）
+                        def _fill():
+                            self._save_pkg_to_history(package_name)
+                            if hasattr(self, 'pkg_combobox'):
+                                self.pkg_combobox.delete(0, tk.END)
+                                self.pkg_combobox.insert(0, package_name)
+                            else:
+                                self.pkg_entry.delete(0, tk.END)
+                                self.pkg_entry.insert(0, package_name)
+                        self._run_in_ui(_fill)
                     else:
-                        self.pkg_entry.delete(0, tk.END)
-                        self.pkg_entry.insert(0, package_name)
+                        self._update_status_safe("解析出的包名格式不正确", False)
                 else:
-                    self.update_status("解析出的包名格式不正确", False)
-            else:
-                self.update_status("无法解析应用包名", False)
-                
-        except Exception as e:
-            self.update_status(f"获取应用包名时出错: {str(e)}", False)
+                    self._update_status_safe("无法解析应用包名", False)
+
+            except Exception as e:
+                self._update_status_safe(f"获取应用包名时出错: {str(e)}", False)
+
+        self.run_in_background(_work)
 
     @require_device_connected
     def get_package_path(self):
@@ -3967,20 +4121,24 @@ class ADBToolApp:
         if not pkg_name:
             self.update_status("请输入包名", False)
             return
-            
-        try:
-            output, success = self.run_adb_with_target(f"adb shell pm path {pkg_name}")
-            if success and output:
-                # 保存包名到历史记录
-                self._save_pkg_to_history(pkg_name)
-                # 移除"package:"前缀并清理输出
-                path = output.replace("package:", "").strip()
-                self.status_text.insert(tk.END, f"\n应用安装路径：{path}\n", "info")
-                self.status_text.see(tk.END)
-            else:
-                self.update_status(f"未找到包名 {pkg_name} 的安装路径", False)
-        except Exception as e:
-            self.update_status(f"获取安装路径失败：{str(e)}", False)
+
+        def _work():
+            try:
+                output, success = self.run_adb_with_target(f"adb shell pm path {pkg_name}")
+                if success and output:
+                    # 保存包名到历史记录（会操作 Tk，必须回主线程）
+                    self._run_in_ui(lambda: self._save_pkg_to_history(pkg_name))
+                    # 移除"package:"前缀并清理输出
+                    path = output.replace("package:", "").strip()
+                    self._run_in_ui(lambda: self.status_text.insert(
+                        tk.END, f"\n应用安装路径：{path}\n", "info"))
+                    self._run_in_ui(lambda: self.status_text.see(tk.END))
+                else:
+                    self._update_status_safe(f"未找到包名 {pkg_name} 的安装路径", False)
+            except Exception as e:
+                self._update_status_safe(f"获取安装路径失败：{str(e)}", False)
+
+        self.run_in_background(_work)
         
     @require_device_connected
     def get_app_resource_usage(self):
@@ -4013,12 +4171,16 @@ class ADBToolApp:
             # 1. 获取 CPU 和内存占用（使用更可靠的命令）
             try:
                 # 方式 1：使用 top -n 1 获取单行输出
-                output, _ = self.run_adb_with_target(f"adb shell top -n 1 | grep {pkg_name}")
-                
+                # ⚠️ 不能写 `| grep {pkg}`：管道由本机 cmd 解析，用户环境没有 grep 会整条失败
+                output, _ = self.run_adb_with_target("adb shell top -n 1")
+
                 if not output or not output.strip():
                     # 方式 2：使用 top -m 1 获取单行
-                    output, _ = self.run_adb_with_target(f"adb shell top -m 1 | grep {pkg_name}")
-                
+                    output, _ = self.run_adb_with_target("adb shell top -m 1")
+
+                # 过滤目标应用的行（Python 侧过滤，不依赖本机/设备端 grep）
+                output = "\n".join(filter_lines(output, pkg_name))
+
                 if output and output.strip():
                     # 解析 top 输出
                     for line in output.strip().split('\n'):
@@ -4086,7 +4248,9 @@ class ADBToolApp:
                 
             # 3. 获取进程信息
             try:
-                output, _ = self.run_adb_with_target(f"adb shell ps -A | grep {pkg_name}")
+                # ⚠️ 不能写 `| grep {pkg}`：管道由本机 cmd 解析，用户环境没有 grep 会整条失败
+                output, _ = self.run_adb_with_target("adb shell ps -A")
+                output = "\n".join(filter_lines(output, pkg_name))
                 if output:
                     lines = output.strip().split('\n')
                     info_lines.append(f"\n【进程信息】")
@@ -4647,25 +4811,28 @@ class ADBToolApp:
     @require_device_connected
     def open_factory_menu(self):
         """打开工厂菜单"""
-        try:
-            # 尝试不同的启动方式
-            # 方式1: 使用完整的组件名称格式
-            output, success = self.run_adb_with_target("adb shell am start -n com.konka.kkfactory/.FactoryHome")
-            
-            if not success:
-                # 方式2: 如果上面失败，尝试其他可能的格式
-                output, success = self.run_adb_with_target("adb shell am start -n com.konka.kkfactory.FactoryHome/.FactoryHome")
-            
-            if not success:
-                # 方式3: 尝试直接启动包
-                output, success = self.run_adb_with_target("adb shell am start -n com.konka.kkfactory")
-            
-            if success:
-                self.update_status("工厂菜单已打开", True)
-            else:
-                self.update_status(f"打开工厂菜单失败：{output}", False)
-        except Exception as e:
-            self.update_status(f"打开工厂菜单时出错：{str(e)}", False)
+        def _work():
+            try:
+                # 尝试不同的启动方式
+                # 方式1: 使用完整的组件名称格式
+                output, success = self.run_adb_with_target("adb shell am start -n com.konka.kkfactory/.FactoryHome")
+
+                if not success:
+                    # 方式2: 如果上面失败，尝试其他可能的格式
+                    output, success = self.run_adb_with_target("adb shell am start -n com.konka.kkfactory.FactoryHome/.FactoryHome")
+
+                if not success:
+                    # 方式3: 尝试直接启动包
+                    output, success = self.run_adb_with_target("adb shell am start -n com.konka.kkfactory")
+
+                if success:
+                    self._update_status_safe("工厂菜单已打开", True)
+                else:
+                    self._update_status_safe(f"打开工厂菜单失败：{output}", False)
+            except Exception as e:
+                self._update_status_safe(f"打开工厂菜单时出错：{str(e)}", False)
+
+        self.run_in_background(_work)
         
     def open_cmd_window(self):
         """打开 CMD 窗口（在日志路径下）"""
@@ -5020,71 +5187,81 @@ class ADBToolApp:
     
     def get_current_package_for_perf(self):
         """获取当前正在运行的应用包名并设置到性能监控"""
-        try:
-            # 尝试第一个命令
-            output, success = self.run_adb_with_target("adb shell dumpsys window windows | findstr mCurrentFocus")
-            if not success or not output:
-                # 如果第一个命令失败，尝试第二个命令
-                output, success = self.run_adb_with_target("adb shell dumpsys window | findstr mCurrentFocus")
+        def _work():
+            try:
+                # ⚠️ 过滤放在 Python 侧做，不能用 `| findstr`：
+                #    dumpsys window 输出极大（全量传回本机，网络设备上更慢），
+                #    dumpsys activity activities 体积小得多，同样能拿到前台包名。
+                output, success = self.run_adb_with_target(
+                    "adb shell dumpsys activity activities")
                 if not success or not output:
-                    # 如果还是失败，尝试第三个命令
-                    output, success = self.run_adb_with_target("adb shell dumpsys activity activities | findstr mResumedActivity")
-                    if not success or not output:
-                        self.update_status("获取当前应用包名失败", False)
-                        return
-    
-            package_name = None
-            # 尝试多种格式匹配
-            if "u0" in output:
-                # 格式1: mCurrentFocus=Window{...u0 包名/活动名}
-                try:
-                    package_name = output.split("u0 ")[1].split("/")[0].strip()
-                except Exception:
-                    pass
-                
-            if not package_name and "Window{" in output:
-                # 格式2: mCurrentFocus=Window{...包名/活动名}
-                try:
-                    package_name = output.split("Window{")[1].split("/")[0].split()[-1].strip()
-                except Exception:
-                    pass
-                
-            if not package_name and "ResumedActivity" in output:
-                # 格式3: ResumedActivity: ActivityRecord{...包名/活动名}
-                try:
-                    package_name = output.split("ResumedActivity")[1].split("/")[0].split()[-1].strip()
-                except Exception:
-                    pass
-                
-            if not package_name:
-                # 格式4: 尝试直接从/分隔的内容中提取
-                try:
-                    parts = output.split("/")
-                    if len(parts) > 1:
-                        package_name = parts[0].split()[-1].strip()
-                except Exception:
-                    pass
-    
-            if package_name:
-                # 验证包名格式
-                if "." in package_name and not package_name.startswith(".") and not package_name.endswith("."):
-                    # 设置到输入框
-                    if hasattr(self, 'perf_package_entry'):
-                        self.perf_package_entry.delete(0, tk.END)
-                        self.perf_package_entry.insert(0, package_name)
-                        self.update_status(f"✓ 已设置监控目标: {package_name}", True)
-                        logging.info(f"[性能监控] 设置监控目标: {package_name}")
+                    # 备用命令
+                    output, success = self.run_adb_with_target(
+                        "adb shell dumpsys window windows")
+                if not success or not output:
+                    self._update_status_safe("获取当前应用包名失败", False)
+                    return
+
+                # 只保留与前台窗口相关的行
+                output = "\n".join(filter_lines(
+                    output, 'mResumedActivity', 'mFocusedApp', 'mCurrentFocus'))
+
+                package_name = None
+                # 尝试多种格式匹配
+                if "u0" in output:
+                    # 格式1: mCurrentFocus=Window{...u0 包名/活动名}
+                    try:
+                        package_name = output.split("u0 ")[1].split("/")[0].strip()
+                    except Exception:
+                        pass
+
+                if not package_name and "Window{" in output:
+                    # 格式2: mCurrentFocus=Window{...包名/活动名}
+                    try:
+                        package_name = output.split("Window{")[1].split("/")[0].split()[-1].strip()
+                    except Exception:
+                        pass
+
+                if not package_name and "ResumedActivity" in output:
+                    # 格式3: ResumedActivity: ActivityRecord{...包名/活动名}
+                    try:
+                        package_name = output.split("ResumedActivity")[1].split("/")[0].split()[-1].strip()
+                    except Exception:
+                        pass
+
+                if not package_name:
+                    # 格式4: 尝试直接从/分隔的内容中提取
+                    try:
+                        parts = output.split("/")
+                        if len(parts) > 1:
+                            package_name = parts[0].split()[-1].strip()
+                    except Exception:
+                        pass
+
+                if package_name:
+                    # 验证包名格式
+                    if "." in package_name and not package_name.startswith(".") and not package_name.endswith("."):
+                        def _fill():
+                            # 设置到输入框（Tk 操作，必须回主线程）
+                            if hasattr(self, 'perf_package_entry'):
+                                self.perf_package_entry.delete(0, tk.END)
+                                self.perf_package_entry.insert(0, package_name)
+                                self.update_status(f"✓ 已设置监控目标: {package_name}", True)
+                                logging.info(f"[性能监控] 设置监控目标: {package_name}")
+                            else:
+                                self.update_status("✗ 性能监控组件未初始化", False)
+
+                        self._run_in_ui(_fill)
                     else:
-                        self.update_status("✗ 性能监控组件未初始化", False)
+                        self._update_status_safe("解析出的包名格式不正确", False)
                 else:
-                    self.update_status("解析出的包名格式不正确", False)
-            else:
-                self.update_status("无法解析应用包名", False)
-            
-        except Exception as e:
-            logging.error(f"[性能监控] 获取当前应用失败: {str(e)}", exc_info=True)
-            self.update_status(f"✗ 获取失败: {str(e)}", False)
-    
+                    self._update_status_safe("无法解析应用包名", False)
+
+            except Exception as e:
+                self._update_status_safe(f"获取当前应用包名时出错: {str(e)}", False)
+
+        self.run_in_background(_work)
+
     def start_performance_monitor(self):
         """开始性能监控"""
         try:
@@ -5703,8 +5880,10 @@ class ADBToolApp:
             self.update_status(f"⏹️ 正在停止脚本: {script_name}...", True)
             
             # 先查找进程
-            ps_output, ps_success = self.run_adb_with_target(f"adb shell ps | grep {script_name}")
-            
+            # ⚠️ 不能写 `| grep {script_name}`：管道由本机 cmd 解析，用户环境没有 grep 会整条失败
+            ps_output, ps_success = self.run_adb_with_target("adb shell ps")
+            ps_output = "\n".join(filter_lines(ps_output, script_name))
+
             if ps_success and ps_output.strip():
                 # 提取PID并杀死
                 lines = ps_output.strip().split('\n')

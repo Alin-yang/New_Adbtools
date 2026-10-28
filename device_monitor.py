@@ -95,11 +95,13 @@ class DeviceMonitor:
                 # 检测设备列表变化
                 if set(stable_devices) != set(last_devices):
                     # 设备列表发生变化，触发回调
+                    # ⚠️ 用 app._run_in_ui 而不是 root.after：
+                    #    监控是后台线程，root.after 在主线程忙时会抛
+                    #    "main thread is not in main loop"
                     for callback in self.callbacks:
                         try:
-                            # 在主线程中执行回调
                             if self.app:
-                                self.app.root.after(0, lambda d=list(stable_devices): callback(d))
+                                self.app._run_in_ui(lambda d=list(stable_devices), c=callback: c(d))
                             else:
                                 callback(list(stable_devices))
                         except Exception:
@@ -108,8 +110,8 @@ class DeviceMonitor:
 
                     # 更新 UI 显示
                     if self.app:
-                        self.app.root.after(
-                            0, lambda d=list(stable_devices): self._update_device_status_ui(d)
+                        self.app._run_in_ui(
+                            lambda d=list(stable_devices): self._update_device_status_ui(d)
                         )
 
                     last_devices = list(stable_devices)

@@ -176,6 +176,56 @@ def _get_connected_devices_full() -> List[str]:
         return []
 
 
+def filter_lines(text: str, *keywords: str) -> List[str]:
+    """按关键字过滤多行输出（Python 侧过滤）
+
+    ⚠️ 为什么不直接在命令里写 `| grep`：
+    `adb shell xxx | grep yyy` 里的管道是**本机 cmd** 解析的，grep 在本机跑，
+    用户环境（双击 exe）PATH 里通常没有 grep → 整条命令失败。
+    且设备端也不一定有 grep（Android 4.x 没有）。
+    所以一律在 Python 侧过滤。
+
+    Args:
+        text: 多行文本
+        *keywords: 关键字，任一命中即保留该行；不传则返回全部行
+
+    Returns:
+        List[str]: 命中的行
+    """
+    if not text:
+        return []
+    lines = text.splitlines()
+    if not keywords:
+        return lines
+    return [line for line in lines if any(k in line for k in keywords)]
+
+
+def normalize_device_serial(device: Optional[str]) -> Optional[str]:
+    """把用户输入的设备标识标准化成 `adb devices` 里的完整序列号
+
+    IP 地址不带端口时补上默认的 5555（adb connect 的默认端口），
+    保证 scrcpy / adb 等直接接受 `-s <serial>` 的地方能选中设备。
+
+    Args:
+        device: 用户输入的 IP 或序列号
+
+    Returns:
+        Optional[str]: 标准化后的序列号
+    """
+    if not device:
+        return device
+    device = device.strip().strip('"').strip("'")
+    if not device:
+        return device
+    # 已是 IP:端口 或 USB 序列号，原样返回
+    if ':' in device:
+        return device
+    # 纯 IP → 补默认端口
+    if '.' in device:
+        return f"{device}:5555"
+    return device
+
+
 def get_connected_devices_simple() -> List[str]:
     """获取当前连接的所有设备列表（快速版本，不深度验证）
     
@@ -354,22 +404,17 @@ def build_adb_command_with_device(command: str, target_ip: Optional[str] = None)
     # 如果指定了目标设备，始终添加 -s 参数（关键修复！）
     # 这样可以避免 "more than one device/emulator" 错误
     if target_ip:
-        # 清理目标IP（去除空格和引号）
-        target_ip = target_ip.strip().strip('"').strip("'")
-        
-        # 标准化IP地址格式（确保包含端口号）
-        if ':' not in target_ip and '.' in target_ip:
-            # IP地址但没有端口号，添加默认端口
-            target_ip_with_port = f"{target_ip}:5555"
-        else:
-            target_ip_with_port = target_ip
-        
+        # 清理目标IP（去除空格和引号），并补齐端口号
+        target_ip = normalize_device_serial(target_ip)
+        if not target_ip:
+            return command
+
         # 直接添加 -s 参数，不依赖设备数量检测
         # 这样可以确保即使有隐藏设备也不会报错
         if command.startswith('adb '):
-            return command.replace('adb ', f'adb -s {target_ip_with_port} ', 1)
+            return command.replace('adb ', f'adb -s {target_ip} ', 1)
         elif command.startswith('adb'):
-            return f'adb -s {target_ip_with_port} {command[3:]}'
+            return f'adb -s {target_ip} {command[3:]}'
     
     # 如果没有指定目标IP，才检测设备数量
     devices = get_connected_devices()

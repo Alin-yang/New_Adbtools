@@ -9,6 +9,7 @@ import os
 import sys
 from typing import Optional
 from config import Config
+from utils import normalize_device_serial
 
 
 class ScreenMirrorManager:
@@ -187,8 +188,13 @@ class ScreenMirrorManager:
         
         # 如果指定了设备，添加 -s 参数
         if device_ip:
-            cmd.extend(["-s", device_ip])
-        
+            # ⚠️ 必须补齐端口：scrcpy 要求 -s 的序列号与 `adb devices` 里完全一致，
+            #    网络设备是 "192.168.0.26:5555"，只给 IP 会选不中设备。
+            #    统一走 utils.normalize_device_serial，与 ADB 命令路径保持一致。
+            serial = normalize_device_serial(device_ip)
+            if serial:
+                cmd.extend(["-s", serial])
+
         return cmd
     
     def _launch_scrcpy(self, cmd: list):
