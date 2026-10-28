@@ -1341,22 +1341,39 @@ def get_accurate_package_version(package_name: str, target_device: Optional[str]
 
 
 def get_user_defined_log_path(app_instance=None) -> str:
-    """获取用户自定义的数据存储路径
-    
+    """获取用户自定义的数据存储路径（线程安全）
+
+    后台线程不能直接读 Tk 控件（会抛 "main thread is not in main loop"），
+    所以优先读 app 缓存的路径快照（由 Entry 的 trace 回调在主线程更新）。
+
     Args:
         app_instance: 应用实例，用于获取数据路径输入框的值
-        
+
     Returns:
         str: 用户自定义的路径或默认路径
     """
-    if app_instance and hasattr(app_instance, 'log_path_entry'):
-        user_path = app_instance.log_path_entry.get().strip()
+    if app_instance is not None:
+        user_path = ''
+
+        # 优先用缓存（任何线程都能安全读）
+        cached = getattr(app_instance, '_user_log_path', None)
+        if cached:
+            user_path = cached.strip()
+        else:
+            # 没有缓存时退回直接读控件（仅主线程安全，失败就当没设置）
+            entry = getattr(app_instance, 'log_path_entry', None)
+            if entry is not None:
+                try:
+                    user_path = entry.get().strip()
+                except Exception:
+                    user_path = ''
+
         if user_path:
             # 确保路径以分隔符结尾
             if not user_path.endswith('\\') and not user_path.endswith('/'):
                 user_path += os.sep
             return user_path
-    
+
     # 如果无法获取用户路径，返回默认路径
     return Config.get_actual_path(Config.DEFAULT_LOG_PATH)
 

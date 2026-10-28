@@ -263,6 +263,10 @@ class ADBToolApp:
         self.device_status_cooldown = 0.5  # 缩短冷却时间到0.5秒，提高响应性
         
         self._last_displayed_ip = ""  # 记录上次显示的IP地址
+
+        # 数据存储路径的线程安全快照（由 log_path_entry 的 trace 回调在主线程更新，
+        # 后台线程只读这个副本，不直接访问 Tk 控件）
+        self._user_log_path = ""
         
         # 历史记录防抖保存
         self._history_save_timer = None
@@ -1637,6 +1641,18 @@ class ADBToolApp:
             # 🆕 新增：保存 APK 路径到历史记录
             self._save_apk_to_history(file_path)
 
+    def _on_log_path_changed(self, *args) -> None:
+        """数据存储路径输入框内容变化时更新缓存。
+
+        trace 回调在主线程触发，这里只做纯 Python 赋值；
+        后台线程（历史记录加载、截图/录屏保存等）通过
+        `utils.get_user_defined_log_path()` 读缓存，避免跨线程访问 Tk 控件。
+        """
+        try:
+            self._user_log_path = self.log_path_entry.get().strip()
+        except Exception:
+            pass
+
     def choose_log_path(self) -> None:
         """
         选择数据存储路径
@@ -1655,6 +1671,7 @@ class ADBToolApp:
             cleaned_path = os.path.normpath(selected_path)
             self.log_path_entry.delete(0, tk.END)
             self.log_path_entry.insert(0, cleaned_path + os.sep)  # 添加分隔符
+            self._on_log_path_changed()  # 同步缓存给后台线程用
 
     @require_device_connected
     def kill_app_process(self):

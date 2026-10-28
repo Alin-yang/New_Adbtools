@@ -56,8 +56,12 @@ class Config:
     PKG_HISTORY_FILE = "pkg_history.txt"
     
     # 界面配置
-    WINDOW_GEOMETRY = "1078x464"
-    MIN_WINDOW_SIZE = (1026, 422)
+    # 窗口默认 1280x620：1080p 屏幕下 1078x464 会让右侧终端只剩 ~350px，
+    # 日志里的长路径换行严重。放宽后左侧卡片和右侧终端都能铺开。
+    # ⚠️ 高度不要低于 620：投屏 Tab 内容最多（含说明卡 + 4 组按键），
+    #    高度不够会把底部「系统控制」卡片顶出窗口。
+    WINDOW_GEOMETRY = "1280x620"
+    MIN_WINDOW_SIZE = (1026, 520)
     
     # 进度条配置
     PROGRESS_BAR_LENGTH = 150

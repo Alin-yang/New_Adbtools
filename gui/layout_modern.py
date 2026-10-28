@@ -79,10 +79,10 @@ class LayoutModern:
         self.main_frame = ttk.Frame(self.app.root, style='Modern.TFrame')
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # 配置窗口
+        # 配置窗口（尺寸统一由 Config 控制，这里不要再硬编码覆盖）
         self.app.root.title("ADB Tool v2.0")
-        self.app.root.geometry("1200x620")  # 增加宽度，给右侧输出框更多空间
-        self.app.root.minsize(900, 520)
+        self.app.root.geometry(Config.WINDOW_GEOMETRY)
+        self.app.root.minsize(*Config.MIN_WINDOW_SIZE)
         
         # 使用grid布局，左右分栏
         self.main_frame.grid_rowconfigure(0, weight=0)  # 顶部栏
@@ -384,74 +384,70 @@ class LayoutModern:
         self.output_area = right_panel
     
     def create_device_tab(self) -> None:
-        """创建设备管理Tab（左侧功能按钮）"""
+        """创建设备管理Tab（左侧功能按钮，两列排布填满横向空间）"""
         tab = ttk.Frame(self.content_area, style='Card.TFrame')
         self.tabs['device'] = tab
-        
+
         # 让tab填满整个区域
         tab.grid(row=0, column=0, sticky=tk.NSEW)
+        # ⚠️ 本 Tab 只有一列内容：多设一个空列会让这一列只分到一半宽度（右侧留白）
         tab.grid_columnconfigure(0, weight=1)
         tab.grid_rowconfigure(0, weight=1)
-        
+
         # 创建主容器，分为上下两部分
         main_container = ttk.Frame(tab, style='Card.TFrame')
         main_container.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        # ⚠️ main_container 只有一列：多余的空列会让这唯一的一列只分到一半宽度，
+        #    卡片区就贴不满左侧面板（右侧留白）
         main_container.grid_columnconfigure(0, weight=1)
         main_container.grid_rowconfigure(0, weight=0)  # 按钮区域
         main_container.grid_rowconfigure(1, weight=1)  # 弹性空白区域
-        
-        # 按钮容器（顶部）
+
+        # 按钮容器（两列，卡片横向拉伸铺满，避免右侧留白）
         button_frame = ttk.Frame(main_container, style='Card.TFrame')
-        button_frame.grid(row=0, column=0, sticky=tk.NW)
-        button_frame.columnconfigure(0, weight=1)
-        
-        # 使用垂直排列的功能卡片
-        row = 0
-        
-        # ADB 服务管理
+        button_frame.grid(row=0, column=0, sticky="ew")
+        # 两列等宽（uniform 保证左右卡片一样宽），横向铺满整块区域
+        button_frame.grid_columnconfigure(0, weight=1, uniform="devcols")
+        button_frame.grid_columnconfigure(1, weight=1, uniform="devcols")
+
+        # --- 第一行：ADB 服务管理 | 设备信息 ---
         self._create_card(button_frame, "ADB 服务管理", [
             ("🔌连接ADB", "connect_adb", "primary"),
             ("❌断开所有", "disconnect_adb", "danger"),
             ("🔄重启服务", "restart_adb_server", "secondary"),
-        ], row=row, col=0)
-        row += 1
-        
-        # 设备信息
+        ], row=0, col=0)
+
         self._create_card(button_frame, "设备信息", [
             ("📱查看设备", "show_device_info", "primary"),
             ("📋详细信息", "get_device_info_fast", "secondary"),
             ("🔍获取串号", "get_serial_number", "secondary"),
-        ], row=row, col=0)
-        row += 1
-        
-        # 设备控制
+        ], row=0, col=1)
+
+        # --- 第二行：设备控制 | 系统工具 ---
         self._create_card(button_frame, "设备控制", [
             ("🔁重启设备", "reboot", "primary"),
             ("🔑Root权限", "root_device", "secondary"),
             ("📀重新挂载", "remount", "secondary"),
-        ], row=row, col=0)
-        row += 1
-        
-        # 系统工具
+        ], row=1, col=0)
+
         self._create_card(button_frame, "系统工具", [
             ("🖥️打开CMD", "open_cmd_window", "secondary"),
             ("📝常用命令", "show_common_adb_commands", "secondary"),
             ("🔍Android版本", "get_android_version", "secondary"),
-        ], row=row, col=0)
-        row += 1
-        
-        # 文本输入
-        self._create_text_input_card(button_frame, row=row, col=0)
+        ], row=1, col=1)
+
+        # --- 第三行：文本输入（跨两列）---
+        self._create_text_input_card(button_frame, row=2, col=0, colspan=2)
     
     def create_app_tab(self) -> None:
         """创建应用管理Tab"""
         tab = ttk.Frame(self.content_area, style='Card.TFrame')
         self.tabs['app'] = tab
         
-        tab.columnconfigure(0, weight=1)
-        tab.columnconfigure(1, weight=1)
+        tab.columnconfigure(0, weight=1, uniform="appcols")
+        tab.columnconfigure(1, weight=1, uniform="appcols")
         tab.grid(row=0, column=0, sticky=tk.NSEW)
-        
+
         # 应用输入卡片
         self._create_app_input_card(tab, row=0, col=0, colspan=2)
         
@@ -503,10 +499,10 @@ class LayoutModern:
         tab = ttk.Frame(self.content_area, style='Card.TFrame')
         self.tabs['log_screen'] = tab
         
-        tab.columnconfigure(0, weight=1)
-        tab.columnconfigure(1, weight=1)
+        tab.columnconfigure(0, weight=1, uniform="logcols")
+        tab.columnconfigure(1, weight=1, uniform="logcols")
         tab.grid(row=0, column=0, sticky=tk.NSEW)
-        
+
         # 日志设置卡片
         self._create_log_settings_card(tab, row=0, col=0, colspan=2)
         
@@ -566,16 +562,17 @@ class LayoutModern:
             tab,
             text="💡 使用说明",
             style='Card.TLabelframe',
-            padding=(12, 10)
+            padding=(12, 6)
         )
         info_card.grid(row=0, column=0, sticky=tk.EW, padx=6, pady=6)
-        
+
+        # 说明文字压到 4 行：本 Tab 内容最多，文字一多就会把底部的
+        # 「系统控制」卡片顶出窗口（电源/锁屏按钮点不到）
         info_text = (
-            "🔹 scrcpy 投屏工具已集成，无需额外下载\n"
-            "🔹 支持鼠标点击、滑动等完整交互操作\n"
-            "🔹 低延迟（<100ms），高帧率（30-60fps）\n"
-            "🔹 点击“启动投屏”即可开始镜像手机、TV屏幕\n"
-            "🔹 可使用下方按键模拟功能控制设备"
+            "🔹 scrcpy 投屏已集成，支持点击/滑动等完整交互，低延迟（<100ms）\n"
+            "🔹 点击“启动投屏”即可镜像手机或 TV 屏幕\n"
+            "🔹 下方按键可模拟操作设备（方向键 / 系统键 / 音量电源）\n"
+            "🔹 投屏时建议关闭设备省电模式，避免 WiFi 休眠断流"
         )
         info_label = ttk.Label(
             info_card,
@@ -584,9 +581,9 @@ class LayoutModern:
             background=self.COLORS["bg_card"],
             foreground=self.COLORS["primary"],
             justify=tk.LEFT,
-            wraplength=400
+            wraplength=520
         )
-        info_label.pack(anchor=tk.W, padx=5, pady=5)
+        info_label.pack(anchor=tk.W, padx=5, pady=3)
         
         # 投屏控制卡片
         self._create_card(
@@ -778,12 +775,14 @@ class LayoutModern:
         pkg_row = ttk.Frame(control_card, style='Card.TFrame')
         pkg_row.pack(fill=tk.X, pady=(2, 4))
 
-        ttk.Label(pkg_row, text="监控应用:", font=('Microsoft YaHei UI', 9),
+        ttk.Label(pkg_row, text="应用:", font=('Microsoft YaHei UI', 9),
                   background=self.COLORS["bg_card"]).pack(side=tk.LEFT, padx=(0, 5))
 
         # 包名输入框（Entry + 浮动搜索下拉）
+        # 标签缩到「应用:」+ width=30：既让包名显示得下，
+        # 又把控制条的自然宽度控制在 ~700，否则会把整个左面板撑宽、挤扁右侧终端
         self.app.perf_package_entry = ttk.Entry(
-            pkg_row, font=('Microsoft YaHei UI', 9), width=32)
+            pkg_row, font=('Microsoft YaHei UI', 9), width=30)
         self.app.perf_package_entry.pack(side=tk.LEFT, padx=(0, 4))
         self.app.perf_package_entry.bind('<KeyRelease>', self.app._on_perf_package_search)
 
@@ -806,13 +805,7 @@ class LayoutModern:
         ttk.Label(pkg_row, text="秒", font=('Microsoft YaHei UI', 9),
                   background=self.COLORS["bg_card"]).pack(side=tk.LEFT)
 
-        # 运行状态指示（右侧）
-        self.app.perf_status_label = ttk.Label(
-            pkg_row, text="● 未开始", font=('Microsoft YaHei UI', 9, 'bold'),
-            background=self.COLORS["bg_card"], foreground=self.COLORS["text_secondary"])
-        self.app.perf_status_label.pack(side=tk.RIGHT)
-
-        # 行2：操作按钮 + PID/模式指示
+        # 行2：监控控制 + 运行状态指示（右侧）
         btn_row = ttk.Frame(control_card, style='Card.TFrame')
         btn_row.pack(fill=tk.X, pady=(2, 2))
 
@@ -822,22 +815,33 @@ class LayoutModern:
                    style='Danger.TButton').pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_row, text="🧹 清空数据", command=self.app.clear_performance_data,
                    style='Secondary.TButton').pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_row, text="📸 单次快照", command=self.app.get_performance_snapshot,
+
+        # 运行状态指示（右侧）
+        self.app.perf_status_label = ttk.Label(
+            btn_row, text="● 未开始", font=('Microsoft YaHei UI', 9, 'bold'),
+            background=self.COLORS["bg_card"], foreground=self.COLORS["text_secondary"])
+        self.app.perf_status_label.pack(side=tk.RIGHT)
+
+        # 行3：快照 / 导出类按钮（单独一行，避免一行塞 6 个按钮把左面板撑得过宽）
+        btn_row2 = ttk.Frame(control_card, style='Card.TFrame')
+        btn_row2.pack(fill=tk.X, pady=(0, 2))
+
+        ttk.Button(btn_row2, text="📸 单次快照", command=self.app.get_performance_snapshot,
+                   style='Secondary.TButton').pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(btn_row2, text="💾 导出 CSV", command=self.app.export_performance_csv,
                    style='Secondary.TButton').pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_row, text="💾 导出 CSV", command=self.app.export_performance_csv,
-                   style='Secondary.TButton').pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_row, text="📄 导出报告", command=self.app.export_performance_report,
+        ttk.Button(btn_row2, text="📄 导出报告", command=self.app.export_performance_report,
                    style='Secondary.TButton').pack(side=tk.LEFT, padx=5)
 
         self.app.perf_pid_label = ttk.Label(
-            btn_row, text="PID: --   模式: --   采样: 0 次",
+            btn_row2, text="PID: --   模式: --   采样: 0 次",
             font=('Consolas', 9), background=self.COLORS["bg_card"],
             foreground=self.COLORS["text_secondary"])
         self.app.perf_pid_label.pack(side=tk.RIGHT)
 
         # 卡顿率（与 FPS 语义相近，放控制条右侧，不额外占用指标卡）
         self.app.perf_jank_label = ttk.Label(
-            btn_row, text="卡顿率 --", font=('Consolas', 9, 'bold'),
+            btn_row2, text="卡顿率 --", font=('Consolas', 9, 'bold'),
             background=self.COLORS["bg_card"],
             foreground=self.COLORS["text_secondary"])
         self.app.perf_jank_label.pack(side=tk.RIGHT, padx=(0, 10))
@@ -1113,6 +1117,10 @@ class LayoutModern:
         ).pack(side=tk.LEFT)
         
         self.app.log_path_entry = ttk.Entry(path_row, font=('Microsoft YaHei UI', 9))
+        # 监听内容变化，把路径同步到 app 的缓存（后台线程只读缓存，不碰 Tk 控件）
+        # ttk.Entry 没有 trace_add，用事件绑定代替
+        self.app.log_path_entry.bind('<KeyRelease>', self.app._on_log_path_changed)
+        self.app.log_path_entry.bind('<FocusOut>', self.app._on_log_path_changed)
         self.app.log_path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         self.app.log_path_entry.insert(0, Config.DEFAULT_LOG_PATH)
         
@@ -1172,7 +1180,8 @@ class LayoutModern:
             bg='#F8F8F8',
             fg=self.COLORS["text_primary"],
             relief='solid',
-            borderwidth=1
+            borderwidth=1,
+            width=40  # 显式指定请求宽度：默认 80 字符会把右栏撑到 ~580px，挤掉左侧按钮区
         )
         self.app.status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
@@ -1246,3 +1255,5 @@ def setup_gui(app):
     """
     layout = LayoutModern(app)
     layout.setup_gui()
+    # 暴露实例，方便调试/自动化脚本拿到 tabs / tab_buttons
+    app.layout_instance = layout
