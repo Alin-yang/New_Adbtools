@@ -48,6 +48,8 @@ New_Adbtools/
 │   ├── screenshot_tabs.py               # 自动截图各 Tab
 │   ├── probe_device_tab.py              # 容器树宽度溯源
 │   ├── profile_startup.py               # 启动耗时分解
+│   ├── measure_tabs_vertical.py         # 各 Tab 纵向空白量化
+│   ├── test_log_search.py               # 终端搜索/过滤功能测试
 │   └── verify_install_real_device.py    # 真机验证安装判定（需 adb）
 ├── ADBTool.spec                 # PyInstaller 打包配置（onefile）
 ├── ADBTool_onedir.spec          # PyInstaller 打包配置（onedir，启动更快）
@@ -87,6 +89,11 @@ def build_adb_command_with_device(base_cmd, target_ip):
 def force_install(self): ...
 ```
 
+#### 顶部设备区（全局可用，不必切 Tab）
+- **连接 / 断开**：连设备是最高频动作，放在顶栏随时可点
+- **刷新设备**：真正重新扫描设备并更新下拉框（保持当前选中项不变）
+- 设备下拉框显示完整 IP（历史上被截断成「192.168.」）
+
 ### 2.2 应用管理模块（📦 应用管理）
 **功能卡片**:
 - **应用操作**: 强制安装 APK（带进度显示）/ 卸载应用 / 清除应用缓存
@@ -125,6 +132,13 @@ def _install_via_push_pm(self, apk_path, apk_size, target_ip):
 - **文件管理**: 打开存储文件夹
 
 **实现逻辑**: 日志捕获/录屏均在后台线程持续运行，通过 `root.after()` 线程安全地更新 UI。
+
+#### 终端输出区（全局右侧）
+- **关键字搜索**：输入即高亮全部命中，回车定位，▼▲ 逐个跳转，显示命中计数
+- **只看错误**：一键隐藏非错误行（✗ / Error / Exception / failed / 失败…）
+- **⚙ 菜单**：只看错误开关 / 导出终端输出到文件 / 复制全部
+
+> 以前 logcat 抓几千行后只能肉眼翻（`tk.Text` 连 Ctrl+F 都没有）。
 
 ### 2.4 投屏模块（🖥️ 投屏）
 基于 **scrcpy** 实现的设备屏幕镜像与交互，已内置 scrcpy 工具集，无需额外下载。
@@ -516,7 +530,18 @@ adb shell am broadcast -a ADB_INPUT_TEXT --es msg "你好"
 
 ## 十、版本历史
 
-### v3.2（当前版本）
+### v3.3（当前版本）
+- 🎯 **顶部设备区**：新增「连接」「断开」按钮（连设备不必再跨 Tab）；
+  修「🔄 刷新设备」绑错功能（之前实际执行的是「查看设备信息」）；
+  修设备下拉框被截断成「192.168.」
+- 🔍 **终端输出区可搜索**：关键字高亮 + 上下跳转 + 命中计数 + 只看错误过滤
+  + 导出/复制（新增 tests/test_log_search.py，19 项断言）
+- 🛡️ **危险操作加二次确认**：获取 Root、重新挂载分区（原来单击即执行）
+- 📐 **消除纵向空白**：各 Tab 空白占比从 47~82% 降到 1~34%；
+  删除只含一个按钮的「高级工具」Tab（功能并入设备管理），Tab 从 7 个减为 6 个
+- 🪟 **窗口默认宽度 1280 → 1400**：右栏终端要放得下搜索工具栏
+
+### v3.2
 - 🐛 **修复安装成功被误报为失败**：某些定制 ROM（TCL 的 `com.tcl.guard` 等）会让
   `adb install` 在实际安装成功后仍以退出码 1 结束（`Get install_switch_flag: 1`），
   设备端却打印了 `Success`。现在有三重判定：退出码 / 设备端 `Success` 行 /
@@ -587,4 +612,4 @@ GitHub：https://github.com/Alin-yang/New_Adbtools
 ---
 
 **最后更新**: 2026-10-28
-**文档版本**: v3.2
+**文档版本**: v3.3

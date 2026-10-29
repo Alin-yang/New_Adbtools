@@ -65,7 +65,7 @@ class Config:
     MIN_WINDOW_SIZE = (1100, 520)
 
     # 应用版本号（标题栏显示，与 README 版本历史保持一致）
-    APP_VERSION = "3.2"
+    APP_VERSION = "3.3"
 
     # 进度条配置
     PROGRESS_BAR_LENGTH = 150

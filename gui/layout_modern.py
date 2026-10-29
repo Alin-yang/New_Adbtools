@@ -1107,8 +1107,13 @@ class LayoutModern:
                     command=getattr(self.app, method_name),
                     style=style
                 )
+                # ⚠️ 纵向拉伸时按钮不能跟着拉高（会变成大方块，很丑）。
+                #    做法：sticky 只用 EW（横向拉伸），再给行加权重让单元格变高，
+                #    grid 默认 anchor=center → 按钮在单元格内垂直居中。
                 btn.grid(row=0, column=i, sticky=tk.EW, padx=4, pady=4)
                 card.columnconfigure(i, weight=1)
+                if fill_vertical:
+                    card.rowconfigure(0, weight=1)
     
     def _create_text_input_card(self, parent, row: int, col: int, colspan: int = 1) -> None:
         """创建文本输入卡片"""
