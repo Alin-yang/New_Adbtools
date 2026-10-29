@@ -20,7 +20,6 @@ class LayoutModern:
         'mirror': 'create_mirror_tab',
         'performance': 'create_performance_tab',
         'script_runner': 'create_script_runner_tab',
-        'advanced': 'create_advanced_tab',
     }
 
     # 配色方案
@@ -212,7 +211,9 @@ class LayoutModern:
     
     def create_top_bar(self) -> None:
         """创建顶部栏"""
-        self.top_bar = ttk.Frame(self.main_frame, style='Card.TFrame', height=60)
+        # ⚠️ 高度必须 ≥ 嵌套 LabelFrame 的需求高度（实测 req_h=67）：
+        #    之前设 60 会把内层按钮从 30px 压到 23px，文字显示不全。
+        self.top_bar = ttk.Frame(self.main_frame, style='Card.TFrame', height=70)
         self.top_bar.grid(row=0, column=0, sticky=tk.EW, padx=10, pady=(10, 0))
         self.top_bar.pack_propagate(False)
         
@@ -230,12 +231,12 @@ class LayoutModern:
         
         ttk.Label(
             title_frame,
-            text="v2.0 · 现代化UI",
+            text=f"v{Config.APP_VERSION}",
             font=('Microsoft YaHei UI', 9),
             background=self.COLORS["bg_card"],
             foreground=self.COLORS["text_secondary"]
         ).pack(side=tk.LEFT, padx=(8, 0), pady=(5, 0))
-        
+
         # === 中间：设备信息 ===
         device_frame = ttk.LabelFrame(
             self.top_bar,
@@ -243,12 +244,12 @@ class LayoutModern:
             style='Card.TLabelframe',
             padding=(8, 5)
         )
-        device_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=15)
-        
+        device_frame.pack(side=tk.LEFT, padx=15)
+
         # IP输入框
         ip_row = ttk.Frame(device_frame, style='Card.TFrame')
         ip_row.pack(fill=tk.X, pady=2)
-        
+
         ttk.Label(
             ip_row,
             text="设备:",
@@ -256,12 +257,18 @@ class LayoutModern:
             background=self.COLORS["bg_card"],
             foreground=self.COLORS["text_primary"]
         ).pack(side=tk.LEFT, padx=(0, 8))
-        
-        self.app.ip_combobox = ttk.Combobox(ip_row, width=20, font=('Microsoft YaHei UI', 9))
-        self.app.ip_combobox.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # ⚠️ 宽度处理：之前 width=20 + expand=True，实测只显示 "192.168." ——
+        #    用户连自己填的 IP 都看不全。原因是 expand=True 让 combobox 抢走
+        #    全部富余空间（实测膨胀到 508px），把旁边的按钮挤成 86px。
+        #    现在不用 expand，给固定宽度；富余空间由顶栏右侧的状态区消化。
+        self.app.ip_combobox = ttk.Combobox(
+            ip_row, width=22, font=('Microsoft YaHei UI', 9))
+        self.app.ip_combobox.pack(side=tk.LEFT, padx=(0, 8))
+        # 记录实际宽度，供窗口缩放时按比例调整
         self.app.ip_combobox['height'] = 8
         self.app.ip_combobox.insert(0, "192.168.")
-        
+
         # 连接状态标签（使用 tk.Label 以获得更好的对齐控制）
         self.app.connection_status_label = tk.Label(
             ip_row,
@@ -269,18 +276,34 @@ class LayoutModern:
             font=('Microsoft YaHei UI', 9, 'bold'),
             background='#C8C6C4',
             foreground='white',
-            width=14,
+            width=11,
             relief='flat',
             anchor='center'  # 文字居中
         )
-        self.app.connection_status_label.pack(side=tk.LEFT, padx=(10, 0))
-        
+        self.app.connection_status_label.pack(side=tk.LEFT, padx=(0, 6))
+
+        # ⚠️ 顶部栏补「连接 / 断开」：连设备是最高频动作，
+        #    之前必须跨到「设备管理」Tab 才能点「🔌连接ADB」。
+        # ⚠️ 顶栏空间紧张，按钮里不要放 emoji：
+        #    ttk 的 width 按「字符数」算，不计 emoji 的双宽，
+        #    结果「🔌 连接」被算成 86px，文字直接被压扁成色块。
+        #    顶栏用纯文字，卡片区（空间充裕）才用 emoji。
+        self.app.btn_connect_top = ttk.Button(
+            ip_row, text="连接", command=self.app.connect_adb,
+            style='Primary.TButton')
+        self.app.btn_connect_top.pack(side=tk.LEFT, padx=(0, 4))
+
+        self.app.btn_disconnect_top = ttk.Button(
+            ip_row, text="断开", command=self.app.disconnect_adb,
+            style='Secondary.TButton')
+        self.app.btn_disconnect_top.pack(side=tk.LEFT)
+
         self.app.ip_combobox.bind('<<ComboboxSelected>>', self._on_ip_selected)
-        
+
         # === 右侧：状态指示器 ===
         status_frame = ttk.Frame(self.top_bar, style='Card.TFrame')
         status_frame.pack(side=tk.RIGHT, padx=15)
-        
+
         # 设备数量标签
         self.app.device_count_label = ttk.Label(
             status_frame,
@@ -290,12 +313,13 @@ class LayoutModern:
             foreground=self.COLORS["text_secondary"]
         )
         self.app.device_count_label.pack(side=tk.LEFT, padx=5)
-        
-        # 刷新按钮
+
+        # 刷新按钮 —— ⚠️ 之前绑的是 show_device_info（查看设备信息），
+        #    按钮写着「刷新设备」实际却不刷新设备列表。
         refresh_btn = ttk.Button(
             status_frame,
             text="🔄 刷新设备",
-            command=self.app.show_device_info,
+            command=self.app.refresh_device_list,
             style='Primary.TButton',
             width=12
         )
@@ -314,7 +338,6 @@ class LayoutModern:
             ("🖥️ 投屏", "mirror"),  # 投屏 Tab
             ("📊 性能监控", "performance"),  # 性能监控 Tab
             ("🔧 脚本运行", "script_runner"),  # 脚本运行 Tab
-            ("⚙️ 高级工具", "advanced"),
         ]
         
         for i, (text, tab_name) in enumerate(tab_configs):
@@ -353,10 +376,13 @@ class LayoutModern:
         if getattr(self, 'current_tab', None) != tab_name:
             if hasattr(self, 'content_frame'):
                 wide = (tab_name == 'performance')
+                # ⚠️ 右栏 minsize 不能太小：终端搜索栏需要 ~360px 才能
+                #    完整显示（搜索框 + 计数 + 导航 + 菜单）。之前设 260，
+                #    在 1280 宽的窗口里右栏被压到 356px，搜索栏布局全乱。
                 self.content_frame.grid_columnconfigure(
                     0, weight=6 if wide else 1, minsize=620 if wide else 300)
                 self.content_frame.grid_columnconfigure(
-                    1, weight=1 if wide else 3, minsize=260)
+                    1, weight=1 if wide else 3, minsize=360 if not wide else 260)
 
             # 更新Tab选中效果
             self._update_tab_selection(tab_name)
@@ -456,10 +482,13 @@ class LayoutModern:
             ("📀重新挂载", "remount", "secondary"),
         ], row=1, col=0)
 
+        # ⚠️ 原「高级工具」Tab 只有「工厂菜单」一个按钮，单独占一个 Tab
+        #   太浪费（实测纵向空白 82%）—— 已合并到这里
         self._create_card(button_frame, "系统工具", [
             ("🖥️打开CMD", "open_cmd_window", "secondary"),
             ("📝常用命令", "show_common_adb_commands", "secondary"),
             ("🔍Android版本", "get_android_version", "secondary"),
+            ("🔧工厂菜单", "open_factory_menu", "secondary"),
         ], row=1, col=1)
 
         # --- 第三行：文本输入（跨两列）---
@@ -541,7 +570,7 @@ class LayoutModern:
                 ("⏹️停止捕获", "stop_logcat", "danger"),
                 ("🧹清除缓存", "log_clear", "secondary"),
             ],
-            row=1, col=0
+            row=1, col=0, fill_vertical=True
         )
         
         self._create_card(
@@ -551,7 +580,7 @@ class LayoutModern:
                 ("📥导出ANR", "pull_anr_file", "secondary"),
                 ("📜原始命令", "show_all_adb_commands", "secondary"),
             ],
-            row=1, col=1
+            row=1, col=1, fill_vertical=True
         )
         
         self._create_card(
@@ -562,7 +591,7 @@ class LayoutModern:
                 ("⏹️停止录制", "stop_recording", "danger"),
                 ("📷截屏", "screencap", "secondary"),
             ],
-            row=2, col=0
+            row=2, col=0, fill_vertical=True
         )
         
         # 打开存储文件夹
@@ -572,7 +601,7 @@ class LayoutModern:
             [
                 ("📂打开存储文件夹", "open_storage_folder", "primary"),
             ],
-            row=2, col=1
+            row=2, col=1, fill_vertical=True
         )
     
     def create_mirror_tab(self) -> None:
@@ -670,22 +699,6 @@ class LayoutModern:
             row=3, col=1
         )
     
-    def create_advanced_tab(self) -> None:
-        """创建高级工具Tab"""
-        tab = ttk.Frame(self.content_area, style='Card.TFrame')
-        self.tabs['advanced'] = tab
-        
-        tab.columnconfigure(0, weight=1)
-        tab.grid(row=0, column=0, sticky=tk.NSEW)
-        self._create_card(
-            tab,
-            "工厂菜单",
-            [
-                ("🔧打开工厂菜单", "open_factory_menu", "primary"),
-            ],
-            row=0, col=0
-        )
-    
     def create_script_runner_tab(self) -> None:
         """创建脚本运行Tab"""
         tab = ttk.Frame(self.content_area, style='Card.TFrame')
@@ -693,8 +706,8 @@ class LayoutModern:
         
         tab.columnconfigure(0, weight=1)
         tab.columnconfigure(1, weight=1)
-        tab.rowconfigure(0, weight=0)  # Shell脚本管理
-        tab.rowconfigure(1, weight=1)  # Monkey日志导出 + 设备文件管理器（左右排列，扩展）
+        tab.rowconfigure(0, weight=1)  # Shell脚本管理
+        tab.rowconfigure(1, weight=1)  # Monkey日志导出 + 设备文件（左右排列，扩展）
         tab.grid(row=0, column=0, sticky=tk.NSEW)
         
         # 脚本选择卡片
@@ -704,7 +717,8 @@ class LayoutModern:
             style='Card.TLabelframe',
             padding=(10, 8)
         )
-        script_card.grid(row=0, column=0, columnspan=2, sticky=tk.EW, padx=6, pady=6)
+        script_card.grid(row=0, column=0, columnspan=2, sticky=tk.NSEW,
+                        padx=6, pady=6)
         
         # 脚本文件路径行
         script_row = ttk.Frame(script_card, style='Card.TFrame')
@@ -769,24 +783,51 @@ class LayoutModern:
         )
         clear_btn.pack(side=tk.LEFT, padx=5)
         
-        # Monkey日志导出卡片（紧凑版）
+        # ⚠️ Monkey日志导出卡片：原来只有一个按钮，且 sticky=tk.N 贴顶显示，
+        #    下方 275px 全空（实测纵向空白 56%）。
+        #    现在：① 改成左右双列（与脚本管理并排）② 补上有用的操作
+        #    ③ 纵向拉伸填满剩余空间
         monkey_card = ttk.LabelFrame(
             tab,
-            text="🐒 Monkey日志导出",
+            text="🐒 Monkey 日志导出",
             style='Card.TLabelframe',
-            padding=(10, 4)
+            padding=(10, 8)
         )
-        monkey_card.grid(row=1, column=0, sticky=tk.N, padx=6, pady=(2, 6))
-        
-        # 仅保留按钮
-        export_btn = ttk.Button(
+        monkey_card.grid(row=1, column=0, sticky=tk.NSEW, padx=6, pady=(2, 6))
+
+        # 说明文字：让用户知道这个功能干什么
+        ttk.Label(
             monkey_card,
-            text=" 导出日志",
+            text="导出 Monkey 测试产生的崩溃/ANR 日志，\n"
+                 "用于定位应用稳定性问题",
+            font=('Microsoft YaHei UI', 8),
+            background=self.COLORS["bg_card"],
+            foreground=self.COLORS["text_secondary"],
+            justify=tk.LEFT
+        ).pack(anchor=tk.W, padx=4, pady=(4, 2))
+
+        # 操作按钮行
+        monkey_btn_row = ttk.Frame(monkey_card, style='Card.TFrame')
+        monkey_btn_row.pack(fill=tk.X, pady=4)
+
+        export_btn = ttk.Button(
+            monkey_btn_row,
+            text="📤 导出 Monkey 日志",
             command=self.app.export_monkey_logs,
-            style='Primary.TButton',
-            width=15
+            style='Primary.TButton'
         )
-        export_btn.pack(side=tk.RIGHT, padx=5, pady=5)
+        export_btn.pack(side=tk.LEFT, padx=4)
+
+        # 右侧：与 Monkey 相关的辅助操作
+        self._create_card(
+            tab,
+            "设备文件",
+            [
+                ("📂打开存储", "open_storage_folder", "secondary"),
+                ("🧹清空tmp", "clear_tmp_directory", "secondary"),
+            ],
+            row=1, col=1, fill_vertical=True
+        )
     
     def create_performance_tab(self) -> None:
         """创建性能监控Tab（重写版：控制条 + 指标卡 + 实时趋势图 + 线程表格）"""
@@ -1026,16 +1067,28 @@ class LayoutModern:
             foreground=self.COLORS["text_secondary"]
         ).pack(side=tk.LEFT, padx=(4, 0))
 
-    def _create_card(self, parent, title: str, buttons: List[Tuple], row: int, col: int, colspan: int = 1) -> None:
-        """创建功能卡片"""
+    def _create_card(self, parent, title: str, buttons: List[Tuple], row: int,
+                     col: int, colspan: int = 1, fill_vertical: bool = False) -> None:
+        """创建功能卡片
+
+        Args:
+            fill_vertical: 是否纵向拉伸填满所在行。
+                内容少的 Tab（如日志录屏，实测纵向空白 47%）开启后，
+                卡片变高、按钮更好点，空白被消化掉。
+        """
         card = ttk.LabelFrame(
             parent,
             text=title,
             style='Card.TLabelframe',
             padding=(10, 8)
         )
-        card.grid(row=row, column=col, columnspan=colspan, sticky=tk.EW, padx=6, pady=6)
+        # ⚠️ 纵向拉伸需要 NSEW（原来只有 EW，卡片不占满行高）
+        card.grid(row=row, column=col, columnspan=colspan,
+                  sticky=tk.NSEW if fill_vertical else tk.EW,
+                  padx=6, pady=6)
         parent.columnconfigure(col, weight=1)
+        if fill_vertical:
+            parent.rowconfigure(row, weight=1)
         
         # 创建按钮网格
         for i, (text, method_name, btn_type) in enumerate(buttons):
@@ -1244,21 +1297,80 @@ class LayoutModern:
         )
         clear_btn.pack(side=tk.RIGHT)
         
-        # 自动滚动复选框
+        # 自动滚动复选框（标签缩短：右栏只有 ~490px，"自动滚动"会被截断）
         self.auto_scroll_var = tk.BooleanVar(value=True)
         auto_scroll_cb = ttk.Checkbutton(
             header,
-            text="自动滚动",
+            text="滚动",
             variable=self.auto_scroll_var,
             style='Card.TCheckbutton'
         )
-        auto_scroll_cb.pack(side=tk.RIGHT, padx=10)
+        auto_scroll_cb.pack(side=tk.RIGHT, padx=4)
+
+        # ⚠️ 搜索工具栏：logcat 抓几千行后只能肉眼翻，tk.Text 连 Ctrl+F 都没有。
+        #    加关键字搜索 + 高亮 + 错误过滤 + 命中计数。
+        #
+        # ⚠️ 布局要点（踩过的坑）：
+        #    1) 右栏只有 ~490px，一行塞不下所有控件 → 拆成两行
+        #    2) 用 grid 而不是 pack：pack(side=RIGHT) 是「后进先出」，
+        #       排在前面的控件会被挤到容器右边缘外（实测计数标签 w=4，文字全没）
+        #    3) Entry 用 sticky=EW 让它吃掉富余空间，但不给它 expand 之外的权重
+        search_bar = ttk.Frame(self.output_area, style='Card.TFrame')
+        search_bar.grid(row=1, column=0, sticky=tk.EW, pady=(0, 4))
+        # ⚠️ 两行搜索栏需要固定高度：grid_propagate(False) 会关掉自动高度调整，
+        #    必须显式给 height，否则整个搜索栏高度为 0（完全看不见）。
+        search_bar.configure(height=52)
+        search_bar.grid_propagate(False)
+        search_bar.columnconfigure(1, weight=1)   # 搜索框列可伸缩
+
+        ttk.Label(
+            search_bar,
+            text="🔍",
+            font=('Microsoft YaHei UI', 9),
+            background=self.COLORS["bg_card"],
+            foreground=self.COLORS["text_secondary"]
+        ).grid(row=0, column=0, padx=(0, 4), pady=(0, 2))
+
+        self.app.log_search_var = tk.StringVar()
+        self.app.log_search_entry = ttk.Entry(
+            search_bar, textvariable=self.app.log_search_var,
+            font=('Consolas', 9))
+        self.app.log_search_entry.grid(row=0, column=1, sticky=tk.EW,
+                                       padx=(0, 4), pady=(0, 2))
+        self.app.log_search_entry.bind('<Return>', lambda e: self._search_log())
+        self.app.log_search_entry.bind('<Escape>', lambda e: self._clear_search())
+
+        # 搜索结果计数（第一行右侧）
+        self.app.log_search_count = ttk.Label(
+            search_bar, text="",
+            font=('Consolas', 9),
+            background=self.COLORS["bg_card"],
+            foreground=self.COLORS["text_secondary"],
+            width=9, anchor=tk.CENTER
+        )
+        self.app.log_search_count.grid(row=0, column=2, padx=(2, 6), pady=(0, 2))
+
+        # 第二行：命中导航 + 功能菜单
+        self._make_search_btn(search_bar, "▼", self._search_log_next,
+                              "跳到下一个命中（回车）", col=0, row=1)
+        self._make_search_btn(search_bar, "▲", self._search_log_prev,
+                              "跳到上一个命中", col=1, row=1)
+
+        # 「只看错误」「导出」收进「⚙」菜单 —— 一个按钮就够，
+        # 省下的横向空间给搜索框（关键字往往很长）
+        self.app.log_error_only_var = tk.BooleanVar(value=False)
+
+        menu_btn = ttk.Button(search_bar, text="⚙", width=3,
+                              style='Secondary.TButton',
+                              command=self._show_log_menu)
+        menu_btn.grid(row=1, column=2, sticky=tk.E, padx=2)
         
         # 日志文本框容器 - 增加expand权重使其更大
+        # ⚠️ row 编号整体下移：row=1 现在是搜索栏，文本框移到 row=2
         log_frame = ttk.Frame(self.output_area, style='Card.TFrame')
-        log_frame.grid(row=1, column=0, sticky=tk.NSEW)
+        log_frame.grid(row=2, column=0, sticky=tk.NSEW)
         # 设置行权重，让日志区域占据更多空间（从10增加到20）
-        self.output_area.rowconfigure(1, weight=20)
+        self.output_area.rowconfigure(2, weight=20)
         
         self.app.status_text = tk.Text(
             log_frame,
@@ -1268,7 +1380,7 @@ class LayoutModern:
             fg=self.COLORS["text_primary"],
             relief='solid',
             borderwidth=1,
-            width=40  # 显式指定请求宽度：默认 80 字符会把右栏撑到 ~580px，挤掉左侧按钮区
+            width=44  # 显式指定请求宽度：默认 80 字符会把右栏撑到 ~580px，挤掉左侧按钮区
         )
         self.app.status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
@@ -1284,10 +1396,13 @@ class LayoutModern:
         self.app.status_text.tag_configure("warning", foreground="#D83B01")
         self.app.status_text.tag_configure("info", foreground=self.COLORS["primary"])
         self.app.status_text.tag_configure("command", foreground='#6B69D6', font=('Consolas', 9, 'italic'))
+        # 搜索命中高亮
+        self.app.status_text.tag_configure("search_hit", background='#FFF3A0', foreground='#7A4F01')
+        self.app.status_text.tag_configure("search_hit_current", background='#FFB300', foreground='#000000')
         
         # 进度条
         progress_frame = ttk.Frame(self.output_area, style='Card.TFrame')
-        progress_frame.grid(row=2, column=0, sticky=tk.EW, pady=(5, 0))
+        progress_frame.grid(row=3, column=0, sticky=tk.EW, pady=(5, 0))
         
         self.app.progress = ttk.Progressbar(
             progress_frame,
@@ -1297,6 +1412,214 @@ class LayoutModern:
         self.app.progress.pack(fill=tk.X)
         self.app.progress.pack_forget()
     
+    # ------------------------------------------------------------------
+    # 终端搜索 / 高亮 / 过滤
+    # ------------------------------------------------------------------
+
+    def _show_log_menu(self):
+        """弹出终端功能菜单（只看错误 / 导出）"""
+        menu = tk.Menu(self.app.root, tearoff=0)
+        menu.add_checkbutton(
+            label="只看错误",
+            variable=self.app.log_error_only_var,
+            command=self._toggle_error_only)
+        menu.add_separator()
+        menu.add_command(label="导出终端输出…", command=self._export_log)
+        menu.add_command(label="复制全部", command=self._copy_all_output)
+
+        try:
+            menu.tk_popup(self.app.root.winfo_pointerx(),
+                          self.app.root.winfo_pointery())
+        finally:
+            menu.grab_release()
+
+    def _copy_all_output(self):
+        """复制终端全部内容到剪贴板"""
+        try:
+            self.app.status_text.clipboard_clear()
+            self.app.status_text.clipboard_append(
+                self.app.status_text.get("1.0", tk.END))
+            self.app.update_status("已复制终端内容到剪贴板", True)
+        except Exception as e:
+            self.app.update_status(f"复制失败: {e}", False)
+
+    def _make_search_btn(self, parent, text, command, tooltip, col=None,
+                         row=0, side=tk.LEFT):
+        """创建一个带 tooltip 的紧凑搜索按钮"""
+        btn = ttk.Button(parent, text=text, command=command,
+                         style='Secondary.TButton', width=3)
+        if col is not None:
+            btn.grid(row=row, column=col, padx=1)
+        else:
+            btn.pack(side=side, padx=1)
+
+        # ttk 没有原生 tooltip，用一个小 Toplevel 模拟
+        def show_tip(event=None):
+            tip = tk.Toplevel(parent)
+            tip.wm_overrideredirect(True)
+            x = btn.winfo_rootx() + btn.winfo_width() // 2
+            y = btn.winfo_rooty() - 24
+            tip.wm_geometry(f"+{x}+{y}")
+            tk.Label(tip, text=tooltip, background="#FFFFE0",
+                     relief='solid', borderwidth=1,
+                     font=('Microsoft YaHei UI', 8)).pack()
+
+            def close(event=None):
+                tip.destroy()
+
+            tip.bind('<Leave>', close)
+            tip.bind('<ButtonPress>', close)
+            tip.after(1500, close)
+
+        btn.bind('<Enter>', show_tip)
+        return btn
+
+    def _search_log(self):
+        """在终端输出里查找关键字并高亮全部命中"""
+        keyword = (self.app.log_search_var.get() or '').strip()
+        if not keyword:
+            self._clear_search()
+            return
+
+        text = self.app.status_text
+        text.tag_remove("search_hit", "1.0", tk.END)
+        text.tag_remove("search_hit_current", "1.0", tk.END)
+
+        # 找出全部命中位置
+        hits = []
+        start = "1.0"
+        while True:
+            pos = text.search(keyword, start, stopindex=tk.END,
+                              nocase=True)
+            if not pos:
+                break
+            end = f"{pos}+{len(keyword)}c"
+            hits.append((pos, end))
+            text.tag_add("search_hit", pos, end)
+            start = end
+            if len(hits) > 5000:      # 防止超大输出卡死
+                break
+
+        self._search_hits = hits
+        self._search_index = 0
+
+        if hits:
+            text.tag_add("search_hit_current", *hits[0])
+            text.see(hits[0][0])
+            self.app.log_search_count.config(
+                text=f"{len(hits)} 处命中",
+                foreground=self.COLORS["primary"])
+        else:
+            self.app.log_search_count.config(
+                text="无匹配", foreground=self.COLORS["error"])
+
+    def _search_log_next(self):
+        """跳到下一个命中"""
+        hits = getattr(self, '_search_hits', [])
+        if not hits:
+            self._search_log()
+            return
+        self._search_index = (self._search_index + 1) % len(hits)
+        self._goto_hit()
+
+    def _search_log_prev(self):
+        """跳到上一个命中"""
+        hits = getattr(self, '_search_hits', [])
+        if not hits:
+            self._search_log()
+            return
+        self._search_index = (self._search_index - 1) % len(hits)
+        self._goto_hit()
+
+    def _goto_hit(self):
+        """定位到当前命中项"""
+        hits = getattr(self, '_search_hits', [])
+        if not hits:
+            return
+        text = self.app.status_text
+        text.tag_remove("search_hit_current", "1.0", tk.END)
+        pos, end = hits[self._search_index]
+        text.tag_add("search_hit_current", pos, end)
+        text.see(pos)
+        self.app.log_search_count.config(
+            text=f"{self._search_index + 1}/{len(hits)}",
+            foreground=self.COLORS["primary"])
+
+    def _clear_search(self):
+        """清除搜索高亮"""
+        if hasattr(self.app, 'status_text'):
+            self.app.status_text.tag_remove("search_hit", "1.0", tk.END)
+            self.app.status_text.tag_remove("search_hit_current", "1.0", tk.END)
+        self._search_hits = []
+        self._search_index = 0
+        if hasattr(self.app, 'log_search_var'):
+            self.app.log_search_var.set("")
+        if hasattr(self.app, 'log_search_count'):
+            self.app.log_search_count.config(text="")
+
+    def _toggle_error_only(self):
+        """只看错误：隐藏不含错误关键字的行"""
+        text = self.app.status_text
+        only_error = self.app.log_error_only_var.get()
+
+        # 先清掉所有行级隐藏标记
+        text.tag_remove("hidden_line", "1.0", tk.END)
+
+        if not only_error:
+            self.app.log_search_count.config(text="")
+            return
+
+        # 错误特征：✗ / Error / error / FAIL / Exception / failed / 失败
+        error_markers = ("✗", "error", "Error", "ERROR", "FAIL", "Exception",
+                         "failed", "Failed", "失败", "Traceback")
+
+        content = text.get("1.0", tk.END)
+        lines = content.split("\n")
+        hidden = 0
+        for i, line in enumerate(lines):
+            if not line.strip():
+                continue
+            if not any(m in line for m in error_markers):
+                # ⚠️ 区间必须留出间隙：相邻两行若分别标记 [n.0, n+1.0) 和
+                #    [n+1.0, n+2.0)，Tk 会把它们**合并**成一段，
+                #    elide 后只隐藏掉其中一部分（实测 4 行只隐藏了 3 行）。
+                #    改成标记 [n.0, n+1.0) 的同时跳过行尾换行符，
+                #    用「行首到行尾字符」的区间，每段之间自然断开。
+                start = f"{i + 1}.0"
+                end = f"{i + 1}.end - 1c"
+                text.tag_add("hidden_line", start, end)
+                hidden += 1
+
+        text.tag_configure("hidden_line", elide=True)
+        self.app.log_search_count.config(
+            text=f"隐藏 {hidden}/{len(lines)} 行",
+            foreground=self.COLORS["warning"])
+
+    def _export_log(self):
+        """把终端输出导出到文件"""
+        if not hasattr(self.app, 'status_text'):
+            return
+        try:
+            from tkinter import filedialog
+            import datetime
+            default_name = (f"adbtool_log_"
+                            f"{datetime.datetime.now():%Y%m%d_%H%M%S}.txt")
+            path = filedialog.asksaveasfilename(
+                title="导出终端输出",
+                defaultextension=".txt",
+                initialfile=default_name,
+                filetypes=[("文本文件", "*.txt"), ("所有文件", "*.*")])
+            if not path:
+                return
+
+            content = self.app.status_text.get("1.0", tk.END)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            self.app.update_status(f"已导出到: {path}", True)
+        except Exception as e:
+            self.app.update_status(f"导出失败: {e}", False)
+
     def _clear_output(self):
         """清空输出区域"""
         if hasattr(self.app, 'status_text'):

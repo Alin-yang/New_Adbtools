@@ -106,13 +106,23 @@ TABS = [
     ('mirror', '投屏'),
     ('performance', '性能监控'),
     ('script_runner', '脚本运行'),
-    ('advanced', '高级工具'),
 ]
 
 lay = getattr(app, 'layout_instance', None)
 print("布局实例:", lay)
 
 state = {'i': 0}
+
+
+DEMO_LOG = """[16:00:01] [\u2713] \u8bbe\u5907\u76d1\u63a7\u5df2\u542f\u52a8
+[16:00:02] [\u2713] \u8fde\u63a5\u6210\u529f com.example.app
+[16:00:03] [\u2717] \u5b89\u88c5\u5931\u8d25 (code 1)
+[16:00:04] [i] \u6b63\u5728\u4f20\u8f93... 45%\uff0843.28MB / 96.20MB\uff09
+[16:00:05] [E] java.lang.NullPointerException at Foo.bar
+[16:00:06] [\u2713] \u4f20\u8f93\u5b8c\u6210
+[16:00:07] [i] \u8bbe\u5907\u5df2\u8fde\u63a5 192.168.0.51:5555
+[16:00:08] [\u2717] \u542f\u52a8\u5931\u8d25\uff1a\u8bbe\u5907\u672a\u54cd\u5e94
+"""
 
 
 def step():
@@ -128,6 +138,25 @@ def step():
     root.update()
     grab(f"{key}.png")
     state['i'] += 1
+
+    # 最后一轮：演示终端搜索功能（填入示例日志 + 搜索关键字）
+    if state['i'] == len(TABS):
+        try:
+            app.status_text.delete('1.0', tk.END)
+            app.status_text.insert(tk.END, DEMO_LOG)
+            app.log_search_var.set('\u5931\u8d25')
+            lay._search_log()
+            root.update()
+            root.update_idletasks()
+            time.sleep(0.3)
+            root.update()
+            grab('_search_demo.png')
+            print('saved: _search_demo.png (search demo)')
+        except Exception as e:
+            print('search demo failed:', e)
+        root.after(300, step)   # 下一轮触发销毁
+        return
+
     root.after(120, step)
 
 

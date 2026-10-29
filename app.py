@@ -207,7 +207,62 @@ class ADBToolApp:
         except Exception as error:
             error_msg = str(error)
             self._run_in_ui(lambda msg=error_msg: self.update_status(f"启动时设备检测失败：{msg}", False))
-    
+
+    def refresh_device_list(self):
+        """刷新设备列表（顶栏「🔄 刷新设备」按钮）
+
+        ⚠️ 之前这个按钮绑的是 `show_device_info`（查看设备信息），
+        点下去只是往终端刷一堆信息，设备列表根本没刷新 —— 按钮与行为不符。
+        现在真正重新扫描设备并更新下拉框 + 连接状态。
+        """
+        self.update_status("正在刷新设备列表...", True, "info")
+
+        def _work():
+            try:
+                devices = get_connected_devices_parallel()
+            except Exception as e:
+                self._update_status_safe(f"刷新设备列表失败：{e}", False)
+                return
+
+            def _apply():
+                if not devices:
+                    self.update_status("未检测到已连接设备", False)
+                    # 仍要更新连接状态（可能显示"未连接"）
+                    self.update_connection_status()
+                    return
+
+                # 把检测到的设备并入历史（去重，保持当前选中项不变）
+                current = self.get_ip_address()
+                for device in devices:
+                    normalized = device
+                    if ':' in device and '.' in device:
+                        normalized = device.split(':')[0]
+                    if normalized not in self.ip_history:
+                        self.ip_history.insert(0, normalized)
+
+                self.ip_history = self.ip_history[:Config.MAX_IP_HISTORY]
+                self._schedule_history_save()
+                self._safe_update_combobox('ip', self.ip_history)
+
+                # 保持用户当前选中的设备（不要被自动切走）
+                if current:
+                    try:
+                        self.ip_combobox.delete(0, tk.END)
+                        self.ip_combobox.insert(0, current)
+                    except Exception:
+                        pass
+
+                self.update_connection_status()
+                names = "、".join(
+                    d.split(':')[0] if (':' in d and '.' in d) else d
+                    for d in devices
+                )
+                self.update_status(f"已刷新：{len(devices)} 台设备在线（{names}）", True)
+
+            self._run_in_ui(_apply)
+
+        self.run_in_background(_work)
+
     def _start_device_monitoring(self):
         """启动后台设备监控"""
         try:
@@ -2545,6 +2600,19 @@ class ADBToolApp:
     @require_device_connected
     def root_device(self):
         """获取root权限"""
+        # ⚠️ 获取 root 会重启 adbd、改变设备安全状态，属于不可逆操作，
+        #    必须二次确认（之前是单击即执行）。
+        if not messagebox.askyesno(
+            "确认获取 Root 权限",
+            "获取 Root 权限会重启设备的 adb 服务，可能导致：\n\n"
+            "• 当前 ADB 连接断开，需要重新连接\n"
+            "• 部分应用可能检测到 root 状态而拒绝运行\n\n"
+            "确定要继续吗？",
+            icon="warning"
+        ):
+            self.update_status("已取消获取 Root 权限", True)
+            return
+
         def _work():
             output, success = self.run_adb_with_target("adb root")
             self._update_status_safe(output, success)
@@ -2568,6 +2636,18 @@ class ADBToolApp:
     @require_device_connected
     def remount(self):
         """重新挂载分区"""
+        # ⚠️ remount 会把 /system 挂成可写，属于会削弱系统安全性的操作，
+        #    必须二次确认（之前是单击即执行）。
+        if not messagebox.askyesno(
+            "确认重新挂载分区",
+            "重新挂载分区会把系统分区切换为可写状态，\n"
+            "可能削弱设备的安全保护。\n\n"
+            "确定要继续吗？",
+            icon="warning"
+        ):
+            self.update_status("已取消重新挂载", True)
+            return
+
         def _work():
             output, success = self.run_adb_with_target("adb remount")
             self._update_status_safe(output, success)

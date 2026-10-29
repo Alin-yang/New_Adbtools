@@ -127,6 +127,13 @@ def make_stub(slow=2.0):
     s.update_status = lambda msg, success, msg_type="normal": s.messages.append((msg, success))
     return s
 
+
+# ⚠️ root_device / remount 现在有二次确认弹窗（messagebox.askyesno）——
+#    必须 mock，否则会弹出真实模态框阻塞测试（实测阻塞 69 秒）。
+#    app.py 用模块级 messagebox，所以 patch 模块属性即可生效。
+_real_askyesno = appmod.messagebox.askyesno
+appmod.messagebox.askyesno = lambda *a, **kw: True
+
 stub = make_stub(slow=2.0)
 t0 = time.time()
 stub.kill_app_process()
@@ -148,6 +155,20 @@ for name in ('start_app', 'root_device', 'remount', 'get_android_version',
     getattr(st, name)()
     dt = time.time() - t
     check(f"{name}() 立即返回", dt < 0.4, f"{dt:.3f}s")
+
+print()
+print("=" * 72)
+print("=== 6b. 危险操作取消确认时不执行命令 ===")
+for name in ('root_device', 'remount'):
+    st = make_stub(slow=0.1)
+    appmod.messagebox.askyesno = lambda *a, **kw: False   # 用户点"取消"
+    t = time.time()
+    getattr(st, name)()
+    elapsed = time.time() - t
+    check(f"{name}() 取消后立即返回", elapsed < 0.5, f"{elapsed:.3f}s")
+    check(f"{name}() 取消后不执行 adb 命令", len(st.adb_calls) == 0, st.adb_calls)
+    check(f"{name}() 取消后有提示", any("取消" in m[0] for m in st.messages), st.messages)
+appmod.messagebox.askyesno = _real_askyesno
 
 print()
 print("=" * 72)
