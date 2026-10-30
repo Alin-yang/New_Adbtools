@@ -24,6 +24,14 @@ if __name__ == "__main__":
     import time
     import logging
 
+    # ⚠️ DPI 感知必须在创建 Tk 根窗口**之前**声明：
+    #    否则 DPI-unaware 进程会被 Windows 位图拉伸整个窗口，
+    #    文字变成插值出来的 —— 这就是「字体模糊不锐利」的根因。
+    from gui.win_render import enable_dpi_awareness, enable_clear_type
+    _dpi_ok = enable_dpi_awareness()
+    enable_clear_type()
+    logging.info(f"[启动] DPI 感知: {'Per-Monitor V2' if _dpi_ok else '未启用'}")
+
     # ⚠️ 启动耗时基准要用「进程创建时间」，不能用 main.py 里的 import 时刻：
     #    onefile 打包时，PyInstaller 的 bootloader 会先解压内嵌 archive
     #    （实测约 12 秒），那段时间发生在 main.py 之前，用 import 时刻算会漏掉。

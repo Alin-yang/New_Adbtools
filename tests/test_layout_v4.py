@@ -133,6 +133,34 @@ avail = bar.winfo_width()
 check("顶栏元素未超出可用宽度", total_req <= avail,
       f"需求={total_req} 可用={avail}")
 
+# ⚠️ 回归守护：包名框必须保持可读宽度。
+#    之前像素字号让控件变宽，包名框被压到 73px（完全看不出内容）。
+check("包名框宽度可读", app.pkg_combobox.winfo_width() >= 90,
+      f"width={app.pkg_combobox.winfo_width()}")
+check("设备框宽度可读", app.ip_combobox.winfo_width() >= 100,
+      f"width={app.ip_combobox.winfo_width()}")
+
+# 所有按钮的文字都不能被截断（像素字号变宽后的常见问题）
+import tkinter.font as tkfont
+truncated = []
+for panel in lay.panels.values():
+    for w in panel.winfo_children():
+        for btn in [w] + list(w.winfo_children()):
+            if btn.winfo_class() != 'TButton':
+                continue
+            try:
+                text = btn.cget('text')
+                if not text:
+                    continue
+                f = tkfont.Font(root=root, font=btn.cget('font'))
+                need = f.measure(text) + 16
+                if btn.winfo_width() < need - 2:
+                    truncated.append((text, btn.winfo_width(), need))
+            except Exception:
+                pass
+check("按钮文字未被截断", not truncated,
+      f"{len(truncated)} 处: {truncated[:3]}")
+
 # ── 5. 终端折叠 / 展开 ────────────────────────────────────
 check("终端默认展开", not lay._terminal_collapsed)
 lay._toggle_terminal()

@@ -29,7 +29,9 @@ from tkinter import ttk
 import logging
 
 from config import Config
-from gui.theme import ThemeManager, FONT_UI, FONT_MONO
+from gui.theme import (ThemeManager, FONT_UI, FONT_MONO,
+                      FS_XS, FS_SM, FS_MD, FS_LG, FS_XL, FS_XXL,
+                      FSM_SM, FSM_MD, FSM_LG)
 
 
 class LayoutV4:
@@ -163,8 +165,8 @@ class LayoutV4:
         logo_dot.pack_propagate(False)
         self.theme.register(logo_dot, 'side')
 
-        self._label(brand, text="ADB Tool", fg_key='fg', bg_key='bg_side', font=(FONT_UI, 12, 'bold'), anchor=tk.W).pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self._label(brand, text=f"v{Config.APP_VERSION}", fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, 8)).pack(side=tk.RIGHT, padx=12)
+        self._label(brand, text="ADB Tool", fg_key='fg', bg_key='bg_side', font=(FONT_UI, FS_XL, 'bold'), anchor=tk.W).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._label(brand, text=f"v{Config.APP_VERSION}", fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, FS_SM)).pack(side=tk.RIGHT, padx=12)
 
         # 分隔线
         self._hline(side)
@@ -175,7 +177,7 @@ class LayoutV4:
         self.theme.register(nav_wrap, 'side')
 
         for group_title, items in self.NAV_GROUPS:
-            self._label(nav_wrap, text=group_title, fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, 8, 'bold'), anchor=tk.W).pack(fill=tk.X, padx=16, pady=(10, 4))
+            self._label(nav_wrap, text=group_title, fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, FS_SM, 'bold'), anchor=tk.W).pack(fill=tk.X, padx=16, pady=(10, 4))
 
             for key, title, icon, _builder in items:
                 self._build_nav_item(nav_wrap, key, title, icon)
@@ -187,10 +189,17 @@ class LayoutV4:
         foot.pack_propagate(False)
         self.theme.register(foot, 'side')
 
-        self.theme_btn = self._label(foot, text="", fg_key='fg_muted', bg_key='bg_side', font=(FONT_UI, 9), anchor=tk.W, cursor='hand2')
+        self.theme_btn = self._label(foot, text="", fg_key='fg_muted', bg_key='bg_side', font=(FONT_UI, FS_MD), anchor=tk.W, cursor='hand2')
         self.theme_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=16)
         self.theme_btn.bind('<Button-1>', lambda e: self._toggle_theme())
         self._update_theme_button()
+
+        # 设备数放在侧边栏底部：它是「状态信息」而不是「操作」，
+        # 放顶栏会跟设备/包名上下文抢横向空间（顶栏只有 672px）。
+        self.app.device_count_label = self._label(
+            foot, text="0 台", fg_key='fg_dim', bg_key='bg_side',
+            font=(FONT_UI, FS_SM), anchor=tk.E)
+        self.app.device_count_label.pack(side=tk.RIGHT, padx=(0, 16))
 
     def _build_nav_item(self, parent, key, title, icon):
         """单个导航项：左侧 3px 高亮条 + 图标 + 文字
@@ -218,10 +227,10 @@ class LayoutV4:
         self.theme.register(bar, 'side')
         self.nav_rows[key + '_bar'] = bar
 
-        icon_lbl = self._label(hl, text=icon, fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, 11), width=2)
+        icon_lbl = self._label(hl, text=icon, fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, FS_LG), width=2)
         icon_lbl.pack(side=tk.LEFT, padx=(10, 6))
 
-        text_lbl = self._label(hl, text=title, fg_key='fg_muted', bg_key='bg_side', font=(FONT_UI, 9), anchor=tk.W)
+        text_lbl = self._label(hl, text=title, fg_key='fg_muted', bg_key='bg_side', font=(FONT_UI, FS_MD), anchor=tk.W)
         text_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         for w in (row, hl, icon_lbl, text_lbl):
@@ -233,27 +242,39 @@ class LayoutV4:
         self.nav_buttons[key] = _NavButtonProxy(self, key)
 
     def _nav_hover(self, key, entering):
-        """导航项悬停反馈（未选中时才变色，避免和选中态打架）"""
+        """导航项悬停反馈
+
+        ⚠️ 悬停态必须**明显**：底色变化 + 文字提亮 + 图标提亮 +
+           左侧出现一条淡主色指示条。用户要能一眼看出「鼠标在这儿」。
+        选中态由 _update_nav_state 负责（更强烈）。
+        """
         if self.current_nav == key:
             return
         hl = self.nav_rows.get(key + '_hl')
-        icon_lbl = None
-        text_lbl = None
-        for child in hl.winfo_children():
-            if child.winfo_class() == 'Label':
-                if text_lbl is None:
-                    icon_lbl = child
-                else:
-                    text_lbl = child
+        bar = self.nav_rows.get(key + '_bar')
+        if hl is None:
+            return
+
         bg = self.theme.color('bg_hover') if entering else self.theme.color('bg_side')
         fg = self.theme.color('fg') if entering else self.theme.color('fg_muted')
-        self.theme.register(hl, 'side')
+        icon_fg = self.theme.color('accent') if entering else self.theme.color('fg_dim')
+
         try:
             hl.configure(bg=bg)
-            if icon_lbl is not None:
-                icon_lbl.configure(bg=bg, fg=self.theme.color('fg_dim'))
-            if text_lbl is not None:
-                text_lbl.configure(bg=bg, fg=fg)
+            self.theme.register(hl, 'side')
+            # 悬停时左侧也出现淡主色条（比选中态的更淡）
+            if bar is not None:
+                bar.configure(bg=self.theme.color('accent') if entering
+                              else self.theme.color('bg_side'))
+                bar.place_configure(relx=0, rely=0, relheight=1.0,
+                                    width=2 if entering else 0)
+                self.theme.register(bar, 'side')
+            # 文字与图标
+            labels = [c for c in hl.winfo_children() if c.winfo_class() == 'Label']
+            for child in labels:
+                # 第一个是图标 Label，第二个是文字 Label
+                is_icon = child is labels[0] if labels else False
+                child.configure(bg=bg, fg=icon_fg if is_icon else fg)
         except Exception:
             pass
 
@@ -346,11 +367,14 @@ class LayoutV4:
     def _build_topbar(self):
         """顶栏：设备上下文 + 包名上下文 + 终端折叠按钮
 
-        ⚠️ 顶栏元素的总需求宽度必须 < 主区宽度，否则后面的控件
-           （通常是包名框）会被挤掉 —— 表现为「控件凭空消失」。
-           当前主区宽度 = 窗口 - 侧栏188 - 终端380 = 632px，
-           所以这里的元素要克制：设备框 16 字符、包名框 20 字符，
-           连接/断开用紧凑按钮，设备数只留文字。
+        ⚠️ 顶栏元素的总需求宽度必须 ≤ 主区宽度，否则后面的控件
+           （通常是包名框）会被挤没 —— 表现为「控件凭空消失」。
+           当前主区宽度 = 窗口1200 - 侧栏188 - 终端340 = 672px。
+
+           像素字号后控件比原来宽（719px 超了），所以做了三处压缩：
+           ① 设备数并入连接状态徽标（少一个独立标签）
+           ② 连接/断开改用**图标**按钮（⇄ / ⏻ 语义更准，且省 30px）
+           ③ 设备框 12 字符 + 包名框 16 字符
         """
         bar = tk.Frame(self.root_frame, bg=self.theme.color('bg_app'), height=46)
         bar.grid(row=0, column=2, sticky=tk.EW)
@@ -358,36 +382,32 @@ class LayoutV4:
         self.theme.register(bar, 'canvas')
         self.topbar = bar
 
-        # ── 右侧：设备数 + 终端折叠 ───────────────────────────
+        # ── 右侧：终端折叠 ────────────────────────────────────
         # 先 pack RIGHT：它会占据右端，剩下的空间留给左侧上下文
         right = tk.Frame(bar, bg=self.theme.color('bg_app'))
-        right.pack(side=tk.RIGHT, padx=10)
+        right.pack(side=tk.RIGHT, padx=8)
         self.theme.register(right, 'canvas')
-
-        self.app.device_count_label = self._label(
-            right, text="0 台", fg_key='fg_dim', bg_key='bg_app',
-            font=(FONT_UI, 8))
-        self.app.device_count_label.pack(side=tk.LEFT, padx=(0, 6))
 
         self.collapse_btn = ttk.Button(
             right, text="终端 ▸", command=self._toggle_terminal,
-            style='Secondary.TButton', width=6,
+            style='Ghost.TButton', width=7,
         )
         self.collapse_btn.pack(side=tk.LEFT)
+        self._attach_tip(self.collapse_btn, "折叠/展开终端（Ctrl+B）")
 
         # ── 设备上下文 ────────────────────────────────────────
         self._ctx_field(bar, '设备')
 
         self.app.ip_combobox = ttk.Combobox(
-            bar, width=14, font=(FONT_UI, 9), style='App.TCombobox')
+            bar, width=12, font=(FONT_UI, FS_MD), style='App.TCombobox')
         self.app.ip_combobox.pack(side=tk.LEFT, padx=(0, 6))
         self.app.ip_combobox['height'] = 8
         self.app.ip_combobox.insert(0, "192.168.")
         self.app.ip_combobox.bind('<<ComboboxSelected>>', self._on_ip_selected)
 
-        # 连接状态徽标
+        # 连接状态徽标：文案里带设备数，省掉一个独立标签
         self.app.connection_status_label = tk.Label(
-            bar, text="● 未连接", font=(FONT_UI, 9),
+            bar, text="● 未连接", font=(FONT_UI, FS_SM),
             bg=self.theme.color('fg_dim'), fg=self.theme.color('accent_fg'),
             padx=6, anchor=tk.CENTER, height=1,
         )
@@ -396,23 +416,25 @@ class LayoutV4:
         # 登记到主题：换肤时按当前状态重新上色
         self.theme.register(self.app.connection_status_label, 'badge')
 
-        # ⚠️ 连接/断开用紧凑按钮（width=6）：
-        #    ttk.Button 的 width 按字符数算，默认宽度会把包名框整个挤没。
+        # ⚠️ 连接/断开用**中文文字**而不是图标：
+        #    ⇄ / ⏻ 这类字符在「微软雅黑 UI」里字形缺失，会渲染成方块；
+        #    文字虽然占宽一点，但用户一看就懂，不用悬停猜。
+        #    宽度用 style 里的 padding 控制，不要用 width（那是字符数）。
         self.app.btn_connect_top = ttk.Button(
             bar, text="连接", command=self.app.connect_adb,
-            style='Primary.TButton', width=6)
+            style='TopPrimary.TButton')
         self.app.btn_connect_top.pack(side=tk.LEFT, padx=(0, 4))
 
         self.app.btn_disconnect_top = ttk.Button(
             bar, text="断开", command=self.app.disconnect_adb,
-            style='Secondary.TButton', width=6)
+            style='TopSecondary.TButton')
         self.app.btn_disconnect_top.pack(side=tk.LEFT, padx=(0, 10))
 
         # ── 包名上下文 ────────────────────────────────────────
         self._ctx_field(bar, '包名')
 
         self.app.pkg_combobox = ttk.Combobox(
-            bar, width=19, font=(FONT_UI, 9), style='App.TCombobox')
+            bar, width=15, font=(FONT_UI, FS_MD), style='App.TCombobox')
         self.app.pkg_combobox.pack(side=tk.LEFT, padx=(0, 6))
         self.app.pkg_combobox['height'] = 10
         # app.py 里 pkg_entry 就是 pkg_combobox 的别名（历史遗留）
@@ -434,7 +456,7 @@ class LayoutV4:
         """
         lbl = tk.Label(
             parent, text=text,
-            font=font or (FONT_UI, 9),
+            font=font or (FONT_UI, FS_MD),
             bg=self.theme.color(bg_key),
             fg=self.theme.color(fg_key),
             **kw)
@@ -448,7 +470,8 @@ class LayoutV4:
 
     def _ctx_field(self, parent, label):
         """顶栏里的字段标签（浅色小字）"""
-        lbl = self._label(parent, text=label, fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, 8))
+        lbl = self._label(parent, text=label, fg_key='fg_dim', bg_key='bg_app',
+                          font=(FONT_UI, FS_XS))
         lbl.pack(side=tk.LEFT, padx=(0, 5))
         return lbl
 
@@ -488,7 +511,14 @@ class LayoutV4:
         self._update_nav_state(key)
 
     def _update_nav_state(self, active):
-        """更新导航选中态"""
+        """更新导航选中态
+
+        ⚠️ 选中态要**一眼可辨**（用户反馈「只有一点选中样式」）：
+           ① 整行主色淡底 bg_active
+           ② 左侧 3px 主色实心条
+           ③ 文字变主色 + **加粗**
+           ④ 图标也变主色
+        """
         for key in self.nav_buttons:
             is_on = (key == active)
             hl = self.nav_rows.get(key + '_hl')
@@ -505,15 +535,22 @@ class LayoutV4:
                 bar.place_configure(relx=0, rely=0, relheight=1.0,
                                     width=3 if is_on else 0)
                 self.theme.register(bar, 'side')
-            # 文字与图标颜色
-            for child in (hl.winfo_children() if hl is not None else []):
-                if child.winfo_class() != 'Label':
-                    continue
-                cur_fg = child.cget('fg')
-                if is_on:
-                    child.configure(fg=self.theme.color('accent'))
-                elif cur_fg == self.theme.color('accent'):
-                    child.configure(fg=self.theme.color('fg_muted'))
+
+            # 文字与图标：选中 → 主色 + 加粗；未选中 → 次要色
+            labels = [c for c in (hl.winfo_children() if hl is not None else [])
+                      if c.winfo_class() == 'Label']
+            for idx, child in enumerate(labels):
+                is_icon = (idx == 0)
+                try:
+                    if is_on:
+                        child.configure(fg=self.theme.color('accent'),
+                                        font=(FONT_UI, FS_MD, 'bold'))
+                    else:
+                        child.configure(fg=self.theme.color('fg_dim') if is_icon
+                                        else self.theme.color('fg_muted'),
+                                        font=(FONT_UI, FS_MD))
+                except Exception:
+                    pass
 
     # ================================================================
     # 面板构建辅助
@@ -563,9 +600,9 @@ class LayoutV4:
         head.pack(fill=tk.X, padx=20, pady=(16, 0))
         self.theme.register(head, 'canvas')
 
-        self._label(head, text=title, fg_key='fg', bg_key='bg_app', font=(FONT_UI, 15, 'bold'), anchor=tk.W).pack(fill=tk.X)
+        self._label(head, text=title, fg_key='fg', bg_key='bg_app', font=(FONT_UI, FS_XXL, 'bold'), anchor=tk.W).pack(fill=tk.X)
 
-        self._label(head, text=subtitle, fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, 9), anchor=tk.W).pack(fill=tk.X, pady=(2, 0))
+        self._label(head, text=subtitle, fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, FS_MD), anchor=tk.W).pack(fill=tk.X, pady=(2, 0))
 
         body = tk.Frame(inner, bg=self.theme.color('bg_app'))
         body.pack(fill=tk.BOTH, expand=True, padx=20, pady=(14, 18))
@@ -590,10 +627,10 @@ class LayoutV4:
         head.pack(fill=tk.X, pady=(0, 6))
         self.theme.register(head, 'canvas')
 
-        self._label(head, text=title, fg_key='fg', bg_key='bg_app', font=(FONT_UI, 9, 'bold'), anchor=tk.W).pack(side=tk.LEFT)
+        self._label(head, text=title, fg_key='fg', bg_key='bg_app', font=(FONT_UI, FS_MD, 'bold'), anchor=tk.W).pack(side=tk.LEFT)
 
         if hint:
-            self._label(head, text=hint, fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, 8), anchor=tk.W).pack(side=tk.LEFT, padx=(10, 0))
+            self._label(head, text=hint, fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, FS_SM), anchor=tk.W).pack(side=tk.LEFT, padx=(10, 0))
 
         content = tk.Frame(wrap, bg=self.theme.color('bg_app'))
         content.pack(fill=tk.X)
@@ -601,12 +638,21 @@ class LayoutV4:
         return wrap, content
 
     def _btn(self, parent, text, method_name, kind='secondary', width=None):
-        """创建一个动作按钮（kind: primary/secondary/danger）"""
+        """创建一个动作按钮
+
+        kind:
+            primary   —— 主操作（实心主色）
+            secondary —— 普通操作（带描边的次级按钮）
+            danger    —— 危险操作（淡红底 + 红字 + 红边）
+        """
         if not hasattr(self.app, method_name):
             return None
+        # ⚠️ 面板里的功能按钮统一用 Action.* 样式：
+        #    Secondary.TButton 是给顶栏/终端这类小控件用的，
+        #    底色偏淡；功能按钮需要更明确的「可点击块」观感。
         style = {'primary': 'Primary.TButton',
-                 'danger': 'Danger.TButton',
-                 'secondary': 'Secondary.TButton'}.get(kind, 'Secondary.TButton')
+                 'danger': 'ActionDanger.TButton',
+                 'secondary': 'Action.TButton'}.get(kind, 'Action.TButton')
         kw = {}
         if width:
             kw['width'] = width
@@ -641,7 +687,7 @@ class LayoutV4:
         self.theme.register(apk_row, 'canvas')
 
         self.app.apk_entry = ttk.Entry(
-            apk_row, font=(FONT_UI, 9), style='App.TEntry')
+            apk_row, font=(FONT_UI, FS_MD), style='App.TEntry')
         self.app.apk_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
 
         browse_btn = ttk.Button(
@@ -660,10 +706,10 @@ class LayoutV4:
         ver_row.pack(fill=tk.X, pady=(8, 0))
         self.theme.register(ver_row, 'canvas')
 
-        self._label(ver_row, text="版本", fg_key='fg_muted', bg_key='bg_app', font=(FONT_UI, 9), width=7, anchor=tk.W).pack(side=tk.LEFT, padx=(0, 8))
+        self._label(ver_row, text="版本", fg_key='fg_muted', bg_key='bg_app', font=(FONT_UI, FS_MD), width=7, anchor=tk.W).pack(side=tk.LEFT, padx=(0, 8))
 
         self.app.version_display = ttk.Entry(
-            ver_row, state='readonly', font=(FONT_MONO, 9), style='App.TEntry')
+            ver_row, state='readonly', font=(FONT_MONO, FSM_MD), style='App.TEntry')
         self.app.version_display.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # ── 安装动作 ──────────────────────────────────────────
@@ -709,7 +755,7 @@ class LayoutV4:
         self.theme.register(path_row, 'canvas')
 
         self.app.log_path_entry = ttk.Entry(
-            path_row, font=(FONT_UI, 9), style='App.TEntry')
+            path_row, font=(FONT_UI, FS_MD), style='App.TEntry')
         self.app.log_path_entry.bind('<KeyRelease>', self.app._on_log_path_changed)
         self.app.log_path_entry.bind('<FocusOut>', self.app._on_log_path_changed)
         self.app.log_path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
@@ -800,7 +846,7 @@ class LayoutV4:
         self.theme.register(text_row, 'canvas')
 
         self.app.text_input_entry = ttk.Entry(
-            text_row, font=(FONT_UI, 9), style='App.TEntry')
+            text_row, font=(FONT_UI, FS_MD), style='App.TEntry')
         self.app.text_input_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
 
         ttk.Button(
@@ -825,10 +871,10 @@ class LayoutV4:
         pkg_row.pack(fill=tk.X, pady=(0, 8))
         self.theme.register(pkg_row, 'canvas')
 
-        self._label(pkg_row, text="应用", fg_key='fg_muted', bg_key='bg_app', font=(FONT_UI, 9), width=7, anchor=tk.W).pack(side=tk.LEFT, padx=(0, 8))
+        self._label(pkg_row, text="应用", fg_key='fg_muted', bg_key='bg_app', font=(FONT_UI, FS_MD), width=7, anchor=tk.W).pack(side=tk.LEFT, padx=(0, 8))
 
         self.app.perf_package_entry = ttk.Entry(
-            pkg_row, font=(FONT_MONO, 9), style='App.TEntry')
+            pkg_row, font=(FONT_MONO, FSM_MD), style='App.TEntry')
         self.app.perf_package_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
         self.app.perf_package_entry.bind('<KeyRelease>', self.app._on_perf_package_search)
 
@@ -841,14 +887,14 @@ class LayoutV4:
         ttk.Button(pkg_row, text="当前", command=self.app.get_current_package_for_perf,
                    style='Secondary.TButton', width=6).pack(side=tk.LEFT, padx=(0, 12))
 
-        self._label(pkg_row, text="间隔", fg_key='fg_muted', bg_key='bg_app', font=(FONT_UI, 9)).pack(side=tk.LEFT, padx=(0, 6))
+        self._label(pkg_row, text="间隔", fg_key='fg_muted', bg_key='bg_app', font=(FONT_UI, FS_MD)).pack(side=tk.LEFT, padx=(0, 6))
 
         self.app.perf_interval_var = tk.StringVar(value="2")
         ttk.Combobox(pkg_row, textvariable=self.app.perf_interval_var,
                      values=["1", "2", "3", "5", "10"], width=4,
-                     font=(FONT_UI, 9), state="readonly",
+                     font=(FONT_UI, FS_MD), state="readonly",
                      style='App.TCombobox').pack(side=tk.LEFT, padx=(0, 4))
-        self._label(pkg_row, text="秒", fg_key='fg_muted', bg_key='bg_app', font=(FONT_UI, 9)).pack(side=tk.LEFT)
+        self._label(pkg_row, text="秒", fg_key='fg_muted', bg_key='bg_app', font=(FONT_UI, FS_MD)).pack(side=tk.LEFT)
 
         # 运行状态 + 采样按钮
         ctrl_row = tk.Frame(content, bg=self.theme.color('bg_app'))
@@ -862,7 +908,7 @@ class LayoutV4:
         ttk.Button(ctrl_row, text="清空数据", command=self.app.clear_performance_data,
                    style='Secondary.TButton').pack(side=tk.LEFT, padx=(0, 8))
 
-        self.app.perf_status_label = self._label(ctrl_row, text="● 未开始", fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, 9, 'bold'))
+        self.app.perf_status_label = self._label(ctrl_row, text="● 未开始", fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, FS_MD, 'bold'))
         self.app.perf_status_label.pack(side=tk.RIGHT)
 
         # 导出与状态行
@@ -877,10 +923,19 @@ class LayoutV4:
         ttk.Button(export_row, text="导出报告", command=self.app.export_performance_report,
                    style='Secondary.TButton').pack(side=tk.LEFT, padx=(0, 12))
 
-        self.app.perf_jank_label = self._label(export_row, text="卡顿率 --", fg_key='fg_dim', bg_key='bg_app', font=(FONT_MONO, 9, 'bold'))
-        self.app.perf_jank_label.pack(side=tk.RIGHT, padx=(0, 12))
+        # ⚠️ 这两个状态标签单独占一行：和导出按钮并排时会被挤出可视区。
+        status_row = tk.Frame(content, bg=self.theme.color('bg_app'))
+        status_row.pack(fill=tk.X, pady=(6, 0))
+        self.theme.register(status_row, 'canvas')
 
-        self.app.perf_pid_label = self._label(export_row, text="PID: --   模式: --   采样: 0 次", fg_key='fg_dim', bg_key='bg_app', font=(FONT_MONO, 9))
+        self.app.perf_jank_label = self._label(
+            status_row, text="卡顿率 --", fg_key='fg_dim', bg_key='bg_app',
+            font=(FONT_MONO, FSM_SM, 'bold'))
+        self.app.perf_jank_label.pack(side=tk.LEFT)
+
+        self.app.perf_pid_label = self._label(
+            status_row, text="PID: --   模式: --   采样: 0 次",
+            fg_key='fg_dim', bg_key='bg_app', font=(FONT_MONO, FSM_SM))
         self.app.perf_pid_label.pack(side=tk.RIGHT)
 
         # ── 指标卡 ────────────────────────────────────────────
@@ -906,13 +961,20 @@ class LayoutV4:
             card.grid(row=0, column=col, sticky=tk.NSEW, padx=(0, 8))
             self.theme.register(card, 'panel')
 
-            self._label(card, text=title, fg_key='fg_dim', bg_key='bg_panel', font=(FONT_UI, 8)).pack(anchor=tk.W, padx=10, pady=(7, 0))
+            self._label(card, text=title, fg_key='fg_dim', bg_key='bg_panel', font=(FONT_UI, FS_SM)).pack(anchor=tk.W, padx=10, pady=(7, 0))
 
+            # ⚠️ 指标数值用**中等**号等宽字体：
+            #    28px 太大，"--" 会渲染成两条粗横杠、看着像色块；
+            #    20px 既醒目又不会失真。
             cur_label = self._label(card, text="--", fg_key=color_key,
-                                    bg_key='bg_panel', font=(FONT_MONO, 17, 'bold'))
+                                    bg_key='bg_panel', font=(FONT_MONO, -20, 'bold'))
             cur_label.pack(anchor=tk.W, padx=10)
 
-            sub_label = self._label(card, text="均值 --   峰值 --", fg_key='fg_dim', bg_key='bg_panel', font=(FONT_UI, 8))
+            # ⚠️ 副标题必须**换行**：6 张指标卡并排时每张只有 ~90px 宽，
+            #    "均值 --   峰值 --" 单行放不下会被截断成 "峰值 -"。
+            sub_label = self._label(card, text="均值 --\n峰值 --", fg_key='fg_dim',
+                                    bg_key='bg_panel', font=(FONT_UI, FS_XS),
+                                    justify=tk.LEFT)
             sub_label.pack(anchor=tk.W, padx=10, pady=(0, 8))
 
             self.app.perf_metric_labels[key] = (cur_label, sub_label)
@@ -1011,10 +1073,10 @@ class LayoutV4:
         self.theme.register(opt_row, 'canvas')
 
         def add_combo(parent_row, label, options, default, attr, width=7):
-            self._label(parent_row, text=label, fg_key='fg_muted', bg_key='bg_app', font=(FONT_UI, 9)).pack(side=tk.LEFT, padx=(0, 6))
+            self._label(parent_row, text=label, fg_key='fg_muted', bg_key='bg_app', font=(FONT_UI, FS_MD)).pack(side=tk.LEFT, padx=(0, 6))
             var = tk.StringVar(value=default)
             ttk.Combobox(parent_row, textvariable=var, values=options, width=width,
-                         font=(FONT_UI, 9), state="readonly",
+                         font=(FONT_UI, FS_MD), state="readonly",
                          style='App.TCombobox').pack(side=tk.LEFT, padx=(0, 16))
             setattr(self.app, attr, var)
             return var
@@ -1026,7 +1088,7 @@ class LayoutV4:
         add_combo(opt_row, "分辨率", Config.SCRCPY_MAX_SIZE_OPTIONS,
                   Config.SCRCPY_MAX_SIZE, "scrcpy_max_size_var", width=7)
 
-        self._label(opt_row, text="卡顿时先降码率，再降分辨率（WiFi 建议 4M + 1080p）", fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, 8)).pack(side=tk.LEFT)
+        self._label(opt_row, text="卡顿时先降码率，再降分辨率（WiFi 建议 4M + 1080p）", fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, FS_SM)).pack(side=tk.LEFT)
 
         # ── 投屏控制 ──────────────────────────────────────────
         _wrap2, content2 = self._section(body, "投屏控制")
@@ -1085,7 +1147,7 @@ class LayoutV4:
         self.theme.register(script_row, 'canvas')
 
         self.app.script_entry = ttk.Entry(
-            script_row, font=(FONT_UI, 9), style='App.TEntry')
+            script_row, font=(FONT_UI, FS_MD), style='App.TEntry')
         self.app.script_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
 
         ttk.Button(
@@ -1132,12 +1194,12 @@ class LayoutV4:
         head.pack_propagate(False)
         self.theme.register(head, 'side')
 
-        self._label(head, text="终端输出", fg_key='fg', bg_key='bg_side', font=(FONT_UI, 9, 'bold')).pack(side=tk.LEFT, padx=12)
+        self._label(head, text="终端输出", fg_key='fg', bg_key='bg_side', font=(FONT_UI, FS_MD, 'bold')).pack(side=tk.LEFT, padx=12)
 
         ttk.Button(head, text="清空", command=self._clear_output,
                    style='Secondary.TButton', width=6).pack(side=tk.RIGHT, padx=(0, 4))
         ttk.Button(head, text="⌄", command=self._toggle_terminal,
-                   style='Secondary.TButton', width=3).pack(side=tk.RIGHT, padx=(0, 8))
+                   style='Ghost.TButton', width=3).pack(side=tk.RIGHT, padx=(0, 8))
 
         # ── 搜索栏 ────────────────────────────────────────────
         search = tk.Frame(self.terminal, bg=self.theme.color('bg_side'), height=32)
@@ -1145,17 +1207,17 @@ class LayoutV4:
         search.pack_propagate(False)
         self.theme.register(search, 'side')
 
-        self._label(search, text="搜索", fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, 8)).pack(side=tk.LEFT, padx=(0, 6))
+        self._label(search, text="搜索", fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, FS_SM)).pack(side=tk.LEFT, padx=(0, 6))
 
         self.app.log_search_var = tk.StringVar()
         self.app.log_search_entry = ttk.Entry(
-            search, textvariable=self.app.log_search_var, font=(FONT_MONO, 9),
+            search, textvariable=self.app.log_search_var, font=(FONT_MONO, FSM_MD),
             style='App.TEntry')
         self.app.log_search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.app.log_search_entry.bind('<Return>', lambda e: self._search_log())
         self.app.log_search_entry.bind('<Escape>', lambda e: self._clear_search())
 
-        self.app.log_search_count = self._label(search, text="", fg_key='fg_dim', bg_key='bg_side', font=(FONT_MONO, 8), width=8, anchor=tk.CENTER)
+        self.app.log_search_count = self._label(search, text="", fg_key='fg_dim', bg_key='bg_side', font=(FONT_MONO, FSM_SM), width=8, anchor=tk.CENTER)
         self.app.log_search_count.pack(side=tk.LEFT, padx=4)
 
         self._search_btn(search, "▼", self._search_log_next, "下一个命中")
@@ -1167,7 +1229,7 @@ class LayoutV4:
         self.theme.register(text_wrap, 'side')
 
         self.app.status_text = tk.Text(
-            text_wrap, wrap=tk.WORD, font=(FONT_MONO, 9),
+            text_wrap, wrap=tk.WORD, font=(FONT_MONO, FSM_LG),
             bg=self.theme.color('terminal_bg'),
             fg=self.theme.color('terminal_fg'),
             relief=tk.FLAT, borderwidth=0,
@@ -1196,10 +1258,12 @@ class LayoutV4:
             command=self._toggle_error_only, style='App.TCheckbutton')
         cb.pack(side=tk.LEFT)
 
+        # ⚠️ 用紧凑样式：终端只有 340px 宽，Action.TButton 的 padding 会把
+        #    按钮文字挤掉。
         ttk.Button(foot, text="导出", command=self._export_log,
-                   style='Secondary.TButton', width=6).pack(side=tk.RIGHT, padx=(6, 0))
+                   style='Compact.TButton').pack(side=tk.RIGHT, padx=(6, 0))
         ttk.Button(foot, text="复制", command=self._copy_all_output,
-                   style='Secondary.TButton', width=6).pack(side=tk.RIGHT)
+                   style='Compact.TButton').pack(side=tk.RIGHT)
 
         # 进度条：app.py 用 pack/pack_forget 控制显隐
         prog_wrap = tk.Frame(self.terminal, bg=self.theme.color('bg_side'))
@@ -1230,33 +1294,43 @@ class LayoutV4:
     # ================================================================
     # 终端辅助
     # ================================================================
-    def _search_btn(self, parent, text, command, tooltip):
-        """带 tooltip 的紧凑搜索按钮"""
-        btn = ttk.Button(parent, text=text, command=command,
-                         style='Secondary.TButton', width=3)
-        btn.pack(side=tk.LEFT, padx=1)
+    def _attach_tip(self, widget, tooltip):
+        """给控件挂一个悬停提示
 
+        ttk 没有原生 tooltip，用一个无边框 Toplevel 模拟。
+        """
         def show_tip(event=None):
-            tip = tk.Toplevel(parent)
+            tip = tk.Toplevel(widget)
             tip.wm_overrideredirect(True)
-            x = btn.winfo_rootx() + btn.winfo_width() // 2
-            y = btn.winfo_rooty() - 22
+            x = widget.winfo_rootx() + widget.winfo_width() // 2
+            y = widget.winfo_rooty() - 24
             tip.wm_geometry(f"+{x}+{y}")
-            tip_lbl = tk.Label(tip, text=tooltip, background=self.theme.color('bg_elev'),
-                               foreground=self.theme.color('fg_muted'),
+            tip_lbl = tk.Label(tip, text=tooltip,
+                               background=self.theme.color('bg_elev'),
+                               foreground=self.theme.color('fg'),
                                relief='solid', borderwidth=1,
-                               font=(FONT_UI, 8))
+                               font=(FONT_UI, FS_SM))
             tip_lbl.pack()
             self.theme.register(tip_lbl, 'elev_label')
 
             def close(event=None):
-                tip.destroy()
+                try:
+                    tip.destroy()
+                except Exception:
+                    pass
 
             tip.bind('<Leave>', close)
             tip.bind('<ButtonPress>', close)
-            tip.after(1500, close)
+            tip.after(1800, close)
 
-        btn.bind('<Enter>', show_tip)
+        widget.bind('<Enter>', show_tip)
+
+    def _search_btn(self, parent, text, command, tooltip):
+        """带 tooltip 的紧凑搜索按钮"""
+        btn = ttk.Button(parent, text=text, command=command,
+                         style='Ghost.TButton', width=3)
+        btn.pack(side=tk.LEFT, padx=1)
+        self._attach_tip(btn, tooltip)
         return btn
 
     def _search_log(self):
