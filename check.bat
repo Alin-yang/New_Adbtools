@@ -14,37 +14,41 @@ if not exist "%PYTHON%" set "PYTHON=python"
 set FAILED=0
 
 echo.
-echo [1/8] 代码质量检查 (lint)
+echo [1/9] 代码质量检查 (lint)
 "%PYTHON%" tools\lint.py
 if errorlevel 1 set FAILED=1
 
 echo.
-echo [2/8] 核心路径回归测试
+echo [2/9] 核心路径回归测试
 "%PYTHON%" tests\test_core_regression.py || set FAILED=1
 
 echo.
-echo [3/8] 设备查询与监控测试
+echo [3/9] 设备查询与监控测试
 "%PYTHON%" tests\test_device_query_and_monitor.py || set FAILED=1
 
 echo.
-echo [4/8] 安装流程测试
+echo [4/9] 安装流程测试
 "%PYTHON%" tests\test_install_flow.py || set FAILED=1
 
 echo.
-echo [5/8] 异步与线程安全测试
+echo [5/9] 异步与线程安全测试
 "%PYTHON%" tests\test_async_and_fixes.py || set FAILED=1
 
 echo.
-echo [6/8] 性能优化测试
+echo [6/9] 性能优化测试
 "%PYTHON%" tests\test_perf_improvements.py || set FAILED=1
 
 echo.
-echo [7/8] 性能监控解析器测试
+echo [7/9] 性能监控解析器测试
 "%PYTHON%" tests\test_perf_parsers.py || set FAILED=1
 
 echo.
-echo [8/8] 终端搜索功能测试
+echo [8/9] 终端搜索功能测试
 "%PYTHON%" tests\test_log_search.py || set FAILED=1
+
+echo.
+echo [9/9] v4 工作台布局测试
+"%PYTHON%" tests\test_layout_v4.py || set FAILED=1
 
 echo.
 echo ================================

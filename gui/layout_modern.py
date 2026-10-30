@@ -55,6 +55,20 @@ class LayoutModern:
         
     def setup_gui(self):
         """构建完整的现代化布局（左右分栏）"""
+        # ⚠️ v3 是回退布局（ADBTOOL_LAYOUT=v3），但 app.py 统一从
+        #    app._ui_theme 取主题色，所以这里必须挂一个主题句柄上去，
+        #    否则终端 tag 会退回经典配色。
+        #    v3 自己的配色仍用 COLORS 字典（浅色），不做深色适配 ——
+        #    深色体验请用默认的 v4 布局。
+        try:
+            from gui.theme import ThemeManager
+            self.theme = ThemeManager(self.app.root, self.app)
+            self.app._ui_theme = self.theme
+            self.app._paint_connection_badge = self._paint_connection_badge
+        except Exception:
+            logging.exception("[布局] v3 主题初始化失败")
+            self.theme = None
+
         # 设置主容器
         self.setup_main_container()
 
@@ -95,7 +109,9 @@ class LayoutModern:
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         
         # 配置窗口（尺寸统一由 Config 控制，这里不要再硬编码覆盖）
-        self.app.root.title("ADB Tool v2.0")
+        # ⚠️ 标题栏版本号原本写死 "v2.0"（实际已到 3.3），
+        #    现在统一走 Config.APP_VERSION
+        self.app.root.title(f"ADB Tool v{Config.APP_VERSION}")
         self.app.root.geometry(Config.WINDOW_GEOMETRY)
         self.app.root.minsize(*Config.MIN_WINDOW_SIZE)
         
@@ -209,6 +225,20 @@ class LayoutModern:
         style.map('Danger.TButton',
                  background=[('active', '#C30010')])
     
+    def _paint_connection_badge(self, label):
+        """按设备状态给连接徽标上色（v4 用的同一套接口）"""
+        state = getattr(label, '_badge_state', 'off')
+        if self.theme is not None:
+            bg = {'ok': self.theme.color('success'),
+                  'err': self.theme.color('error'),
+                  'warn': self.theme.color('warning'),
+                  'off': self.theme.color('fg_dim')}.get(state, '#C8C6C4')
+            fg = self.theme.color('accent_fg')
+        else:
+            bg = {'ok': '#107C10', 'err': '#E81123'}.get(state, '#C8C6C4')
+            fg = 'white'
+        label.configure(bg=bg, fg=fg)
+
     def create_top_bar(self) -> None:
         """创建顶部栏"""
         # ⚠️ 高度必须 ≥ 嵌套 LabelFrame 的需求高度（实测 req_h=67）：
@@ -263,7 +293,7 @@ class LayoutModern:
         #    全部富余空间（实测膨胀到 508px），把旁边的按钮挤成 86px。
         #    现在不用 expand，给固定宽度；富余空间由顶栏右侧的状态区消化。
         self.app.ip_combobox = ttk.Combobox(
-            ip_row, width=22, font=('Microsoft YaHei UI', 9))
+            ip_row, width=26, font=('Microsoft YaHei UI', 9))
         self.app.ip_combobox.pack(side=tk.LEFT, padx=(0, 8))
         # 记录实际宽度，供窗口缩放时按比例调整
         self.app.ip_combobox['height'] = 8
@@ -410,8 +440,13 @@ class LayoutModern:
 
         # 配置主容器的grid
         content_frame.grid_rowconfigure(0, weight=1)
-        content_frame.grid_columnconfigure(0, weight=1, minsize=300)  # 左侧功能按钮区
-        content_frame.grid_columnconfigure(1, weight=3)  # 右侧输出框区（弹性扩展，更宽）
+        # ⚠️ 紧凑化的关键：左栏**按内容宽度**，不"填满剩余空间"。
+        #    原来 weight=1 让左栏吃掉所有富余空间（实测 906px），
+        #    而卡片内容实际只要 ~450px —— 右侧留了 450px 空白，
+        #    窗口被迫开到 1400 才放得下。
+        #    现在左栏 weight=0（取自然宽度），右栏吃剩余（终端本来就该宽）。
+        content_frame.grid_columnconfigure(0, weight=0, minsize=560)  # 左侧功能区
+        content_frame.grid_columnconfigure(1, weight=1, minsize=360)  # 右侧终端区
         
         # === 左侧：功能按钮区域 ===
         left_panel = ttk.Frame(content_frame, style='Card.TFrame')
@@ -419,7 +454,8 @@ class LayoutModern:
         
         # 配置左侧面板
         left_panel.grid_rowconfigure(0, weight=1)
-        left_panel.grid_columnconfigure(0, weight=1)
+        # ⚠️ 不设列权重：让卡片按内容宽度排布，不被拉伸到满宽
+        left_panel.grid_columnconfigure(0, weight=0)
         
         self.content_area = left_panel  # Tab内容放在左侧
         
@@ -451,36 +487,46 @@ class LayoutModern:
         main_container.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
         # ⚠️ main_container 只有一列：多余的空列会让这唯一的一列只分到一半宽度，
         #    卡片区就贴不满左侧面板（右侧留白）
-        main_container.grid_columnconfigure(0, weight=1)
-        main_container.grid_rowconfigure(0, weight=0)  # 按钮区域
-        main_container.grid_rowconfigure(1, weight=1)  # 弹性空白区域
+        # 左栏整体按内容宽度
+        main_container.grid_columnconfigure(0, weight=0)
+        # ⚠️ 按钮区域要参与纵向分配（weight=1），否则卡片不会拉伸，
+        #    底部会留一大片空白（实测 ~200px）。
+        main_container.grid_rowconfigure(0, weight=1)  # 按钮区域（纵向拉伸）
+        main_container.grid_rowconfigure(1, weight=0)
 
-        # 按钮容器（两列，卡片横向拉伸铺满，避免右侧留白）
+        # 按钮容器（两列）
         button_frame = ttk.Frame(main_container, style='Card.TFrame')
-        button_frame.grid(row=0, column=0, sticky="ew")
-        # 两列等宽（uniform 保证左右卡片一样宽），横向铺满整块区域
-        button_frame.grid_columnconfigure(0, weight=1, uniform="devcols")
-        button_frame.grid_columnconfigure(1, weight=1, uniform="devcols")
+        button_frame.grid(row=0, column=0, sticky="nsew")
+        # ⚠️ 紧凑化：列不设权重、**也不能用 uniform**。
+        #    uniform 会强制两列等宽，按最宽的卡片（系统工具 418px）算，
+        #    两列就是 860px —— 实测左栏宽度全是被它撑出来的。
+        #    去掉后两列按各自内容宽度排布，总宽 ~730px。
+        button_frame.grid_columnconfigure(0, weight=0)
+        button_frame.grid_columnconfigure(1, weight=0)
+        # 前两行卡片纵向拉伸（吃掉底部空白），第三行文本输入固定高度
+        button_frame.grid_rowconfigure(0, weight=1)
+        button_frame.grid_rowconfigure(1, weight=1)
+        button_frame.grid_rowconfigure(2, weight=0)
 
         # --- 第一行：ADB 服务管理 | 设备信息 ---
         self._create_card(button_frame, "ADB 服务管理", [
             ("🔌连接ADB", "connect_adb", "primary"),
             ("❌断开所有", "disconnect_adb", "danger"),
             ("🔄重启服务", "restart_adb_server", "secondary"),
-        ], row=0, col=0)
+        ], row=0, col=0, fill_vertical=True)
 
         self._create_card(button_frame, "设备信息", [
             ("📱查看设备", "show_device_info", "primary"),
             ("📋详细信息", "get_device_info_fast", "secondary"),
             ("🔍获取串号", "get_serial_number", "secondary"),
-        ], row=0, col=1)
+        ], row=0, col=1, fill_vertical=True)
 
         # --- 第二行：设备控制 | 系统工具 ---
         self._create_card(button_frame, "设备控制", [
             ("🔁重启设备", "reboot", "primary"),
             ("🔑Root权限", "root_device", "secondary"),
             ("📀重新挂载", "remount", "secondary"),
-        ], row=1, col=0)
+        ], row=1, col=0, fill_vertical=True)
 
         # ⚠️ 原「高级工具」Tab 只有「工厂菜单」一个按钮，单独占一个 Tab
         #   太浪费（实测纵向空白 82%）—— 已合并到这里
@@ -489,7 +535,7 @@ class LayoutModern:
             ("📝常用命令", "show_common_adb_commands", "secondary"),
             ("🔍Android版本", "get_android_version", "secondary"),
             ("🔧工厂菜单", "open_factory_menu", "secondary"),
-        ], row=1, col=1)
+        ], row=1, col=1, fill_vertical=True)
 
         # --- 第三行：文本输入（跨两列）---
         self._create_text_input_card(button_frame, row=2, col=0, colspan=2)
@@ -1084,7 +1130,7 @@ class LayoutModern:
         )
         # ⚠️ 纵向拉伸需要 NSEW（原来只有 EW，卡片不占满行高）
         card.grid(row=row, column=col, columnspan=colspan,
-                  sticky=tk.NSEW if fill_vertical else tk.EW,
+                  sticky=tk.NSEW if fill_vertical else tk.NW,
                   padx=6, pady=6)
         parent.columnconfigure(col, weight=1)
         if fill_vertical:
@@ -1107,11 +1153,12 @@ class LayoutModern:
                     command=getattr(self.app, method_name),
                     style=style
                 )
-                # ⚠️ 纵向拉伸时按钮不能跟着拉高（会变成大方块，很丑）。
-                #    做法：sticky 只用 EW（横向拉伸），再给行加权重让单元格变高，
-                #    grid 默认 anchor=center → 按钮在单元格内垂直居中。
-                btn.grid(row=0, column=i, sticky=tk.EW, padx=4, pady=4)
-                card.columnconfigure(i, weight=1)
+                # ⚠️ 紧凑：按钮按内容宽度，不再等宽拉伸。
+                #    原来 card.columnconfigure(i, weight=1) + sticky=EW
+                #    会把每个按钮拉到 131px（文字只要 59px），
+                #    光按钮内部空白就有 812px（占 50%），把左面板撑到 918px。
+                #    现在不设列权重 → 按钮取自然宽度，左边缘对齐。
+                btn.grid(row=0, column=i, sticky=tk.W, padx=3, pady=4)
                 if fill_vertical:
                     card.rowconfigure(0, weight=1)
     
@@ -1123,8 +1170,13 @@ class LayoutModern:
             style='Card.TLabelframe',
             padding=(10, 8)
         )
-        card.grid(row=row, column=col, columnspan=colspan, sticky=tk.EW, padx=6, pady=6)
-        parent.columnconfigure(col, weight=1)
+        # ⚠️ 这张卡跨 2 列（colspan=2）。
+        #    sticky 用 NW（不拉伸）—— 用 EW 会把两列一起撑到 906px，
+        #    整个左栏的宽度都是被它撑出来的。
+        #    Entry 内部 fill=X 会吃掉卡片自身宽度，视觉上仍是完整的一条。
+        card.grid(row=row, column=col, columnspan=colspan, sticky=tk.NW,
+                  padx=6, pady=6)
+        parent.columnconfigure(col, weight=0)
         
         entry_frame = ttk.Frame(card, style='Card.TFrame')
         entry_frame.pack(fill=tk.X)
@@ -1132,7 +1184,7 @@ class LayoutModern:
         self.app.text_input_entry = ttk.Entry(
             entry_frame,
             font=('Microsoft YaHei UI', 9),
-            width=30
+            width=48
         )
         self.app.text_input_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
         self.app.text_input_entry.insert(0, "仅支持数字输入")

@@ -635,12 +635,16 @@ class ADBToolApp:
         # 【新增】更新设备数量标签
         if hasattr(self, 'device_count_label'):
             device_count = len(devices)
-            self.device_count_label.config(text=f"已连接: {device_count} 台")
-            
+            # 文案要短：顶栏空间紧张（见 layout_v4 的 _build_topbar 注释）
+            self.device_count_label.config(text=f"{device_count} 台")
+
+        # ⚠️ 连接徽标的配色走主题系统（深/浅两套）——
+        #    这里只设「状态」，具体颜色由布局层根据主题渲染，
+        #    换肤时才能自动跟着变。
         if not devices:
-            self.connection_status_label.config(text="● 未连接", foreground="white", background="#C8C6C4")
+            self._set_connection_badge("● 未连接", 'off')
             return
-            
+
         # 如果没有输入 IP 地址，检查是否有 USB 设备
         if not ip_address or ip_address == "192.168.":
             # 查找 USB 设备（非 IP 格式的设备标识）
@@ -650,24 +654,47 @@ class ADBToolApp:
                 if ':' not in device and '.' not in device:
                     usb_device = device
                     break
-                
+
             if usb_device:
-                self.connection_status_label.config(text="✓ USB 设备", foreground="white", background="#107C10")
+                self._set_connection_badge("✓ USB 设备", 'ok')
             else:
-                self.connection_status_label.config(text="● 未连接", foreground="white", background="#C8C6C4")
+                self._set_connection_badge("● 未连接", 'off')
             return
-            
+
         # 有 IP 地址时，检查是否匹配任何已连接设备
         is_connected = False
         for device in devices:
             if device == ip_address or device.startswith(ip_address + ':'):
                 is_connected = True
                 break
-            
+
         if is_connected:
-            self.connection_status_label.config(text="✓ 已连接", foreground="white", background="#107C10")
+            self._set_connection_badge("✓ 已连接", 'ok')
         else:
-            self.connection_status_label.config(text="✗ 未连接", foreground="white", background="#E81123")
+            self._set_connection_badge("✗ 未连接", 'err')
+
+    def _set_connection_badge(self, text: str, state: str) -> None:
+        """设置连接状态徽标
+
+        Args:
+            text: 显示文案
+            state: 状态标识（ok / err / warn / off），具体颜色由主题决定
+        """
+        label = getattr(self, 'connection_status_label', None)
+        if label is None:
+            return
+        try:
+            label.config(text=text)
+            label._badge_state = state
+        except Exception:
+            return
+        # 交给布局层按当前主题上色（v4 有主题感知，v3 保持原样）
+        painter = getattr(self, '_paint_connection_badge', None)
+        if callable(painter):
+            try:
+                painter(label)
+            except Exception:
+                pass
 
     def show_device_info(self):
         """显示当前连接的设备详细信息（异步优化版）"""
@@ -1295,18 +1322,38 @@ class ADBToolApp:
         """
         # 动态调用布局模块的 setup_gui 方法
         self.layout_module.setup_gui(self)
-            
-        # 配置状态文本框的标签样式
-        self.status_text.tag_configure("success", foreground="green")
-        self.status_text.tag_configure("error", foreground="red")
-        self.status_text.tag_configure("info", foreground="blue")
-        self.status_text.tag_configure("warning", foreground="orange")  # 添加警告颜色
-            
+
+        # ⚠️ 终端的 tag 颜色**由主题系统统一接管**（见 gui/theme.py 的 TAG_ROLE）。
+        #    旧代码在这里硬编码 green/red/blue/orange，会把深色主题的配色覆盖掉，
+        #    导致换肤后终端颜色对不上。这里改成向布局层要当前主题色。
+        self._apply_terminal_tag_colors()
+
         # 立即设置默认值和拖拽功能（不延迟）
         self._setup_post_components()
-            
+
         # 延迟加载非关键组件以提高启动速度（从 100ms 减少到 50ms）
         self.root.after(50, self._delayed_initialization)
+
+    def _apply_terminal_tag_colors(self) -> None:
+        """按当前主题给终端的 tag 上色
+
+        v4 布局有主题管理器，直接用它；v3 布局没有则退回经典配色。
+        """
+        text = getattr(self, 'status_text', None)
+        if text is None:
+            return
+        # ⚠️ 用 _ui_theme 而不是 layout_instance.theme：
+        #    app._setup_gui() 调用布局后还会继续执行，
+        #    那时 layout_instance 尚未赋值（setup_gui 内部才赋）。
+        theme = getattr(self, '_ui_theme', None)
+        if theme is not None:
+            theme._paint(text, 'terminal', theme.tokens)
+            return
+        # 旧版布局的兜底配色
+        text.tag_configure("success", foreground="green")
+        text.tag_configure("error", foreground="red")
+        text.tag_configure("info", foreground="blue")
+        text.tag_configure("warning", foreground="orange")
     
     def _setup_post_components(self):
         """设置 GUI 组件创建完成后的操作"""
@@ -4152,6 +4199,26 @@ class ADBToolApp:
         self.status_text.insert(tk.END, "="*70 + "\n", "info")
         self.status_text.see(tk.END)
 
+    def _set_drop_highlight(self, entry, active: bool) -> None:
+        """拖拽悬停时的高亮反馈
+
+        ⚠️ 不能写死 white / lightblue / lightgreen ——
+        深色主题下这些浅色块会非常刺眼。统一改用主题的高亮底色。
+
+        Args:
+            entry: 目标输入框
+            active: True 表示进入拖拽悬停态
+        """
+        if entry is None:
+            return
+        theme = getattr(self, '_ui_theme', None)
+        if theme is None:
+            return
+        try:
+            entry.config(background=theme.color('bg_active' if active else 'bg_elev'))
+        except Exception:
+            pass
+
     def _setup_drag_drop(self):
         """设置拖拽APK文件和脚本文件功能"""
         # 幂等：app Tab 是懒加载的，重复触发时不要重复绑定
@@ -4185,7 +4252,7 @@ class ADBToolApp:
             
             def on_drop_apk(event):
                 """处理APK文件拖拽（优化版 - 异步提取包名，不阻塞UI）"""
-                self.apk_entry.config(background="white")
+                self._set_drop_highlight(self.apk_entry, False)
                 
                 # 获取拖拽的文件路径
                 files = event.data.split()
@@ -4221,11 +4288,11 @@ class ADBToolApp:
             
             def on_drag_enter_apk(event):
                 """鼠标进入拖拽区域时的视觉反馈"""
-                self.apk_entry.config(background="lightblue")
+                self._set_drop_highlight(self.apk_entry, True)
             
             def on_drag_leave_apk(event):
                 """鼠标离开拖拽区域时恢复原样"""
-                self.apk_entry.config(background="white")
+                self._set_drop_highlight(self.apk_entry, False)
             
             # 注册APK拖拽事件
             self.apk_entry.drop_target_register(DND_FILES)
@@ -4254,7 +4321,7 @@ class ADBToolApp:
                 
                 def on_drop_script(event):
                     """处理脚本文件拖拽"""
-                    self.script_entry.config(background="white")
+                    self._set_drop_highlight(self.script_entry, False)
                     
                     # 获取拖拽的文件路径
                     files = event.data.split()
@@ -4275,11 +4342,11 @@ class ADBToolApp:
                 
                 def on_drag_enter_script(event):
                     """鼠标进入拖拽区域时的视觉反馈"""
-                    self.script_entry.config(background="lightgreen")
+                    self._set_drop_highlight(self.script_entry, True)
                 
                 def on_drag_leave_script(event):
                     """鼠标离开拖拽区域时恢复原样"""
-                    self.script_entry.config(background="white")
+                    self._set_drop_highlight(self.script_entry, False)
                 
                 # 注册脚本拖拽事件
                 self.script_entry.drop_target_register(DND_FILES)
@@ -4641,16 +4708,22 @@ class ADBToolApp:
             self.perf_dropdown_toplevel.attributes('-topmost', True)  # 置顶
             
             # 创建 Listbox
+            # ⚠️ 选色走主题：深色模式下的纯白选中块会非常刺眼
+            theme = getattr(self, '_ui_theme', None)
+            sel_bg = theme.color('accent') if theme else '#0078D4'
+            sel_fg = theme.color('accent_fg') if theme else 'white'
             self.perf_dropdown_listbox = tk.Listbox(
                 self.perf_dropdown_toplevel,
                 font=('Microsoft YaHei UI', 9),
-                selectbackground='#0078D4',
-                selectforeground='white',
+                selectbackground=sel_bg,
+                selectforeground=sel_fg,
                 bd=1,
                 relief='solid',
                 highlightthickness=0
             )
             self.perf_dropdown_listbox.pack(fill=tk.BOTH, expand=True)
+            if theme is not None:
+                theme.register(self.perf_dropdown_listbox, 'listbox')
             
             # 绑定点击事件
             self.perf_dropdown_listbox.bind('<ButtonRelease-1>', self._on_perf_package_select)
@@ -4839,11 +4912,34 @@ class ADBToolApp:
             return
         try:
             if running:
-                self.perf_status_label.config(text="● 采集中", foreground="#107C10")
+                self.perf_status_label.config(text="● 采集中",
+                                              foreground=self._perf_color('success'))
             else:
-                self.perf_status_label.config(text="● 未开始", foreground="#888780")
+                self.perf_status_label.config(text="● 未开始",
+                                              foreground=self._perf_color('fg_dim'))
         except Exception:
             pass
+
+    def _perf_color(self, token: str) -> str:
+        """取当前主题下的颜色
+
+        性能页的阈值色（绿/黄/红）必须跟着主题走，
+        否则深色模式下会看到刺眼的旧配色。
+
+        Args:
+            token: 主题令牌名（success / warning / error / fg_dim ...）
+        """
+        theme = getattr(self, '_ui_theme', None)
+        if theme is not None:
+            try:
+                return theme.color(token)
+            except Exception:
+                pass
+        # 兜底：无主题管理器时用经典配色
+        return {
+            'success': '#107C10', 'warning': '#BA7517', 'error': '#A32D2D',
+            'accent': '#0078D4', 'fg_dim': '#888780',
+        }.get(token, '#107C10')
 
     def _on_perf_thread_sort(self, col: str):
         """线程表格点击表头排序"""
@@ -4962,6 +5058,8 @@ class ADBToolApp:
                 'cpu': '%', 'pss': ' MB', 'rss': ' MB', 'java': ' MB',
                 'native': ' MB', 'fps': '',
             }
+            # 记一份快照：切换主题时布局层要靠它还原指标卡的阈值色
+            snapshot = {}
             for key, (cur_label, sub_label) in getattr(
                     self, 'perf_metric_labels', {}).items():
                 m = stats.get(key, {})
@@ -4971,16 +5069,28 @@ class ADBToolApp:
                     cur_label.config(text="--")
                     sub_label.config(text="均值 --   P95 --   峰值 --")
                     continue
+                snapshot[key] = cur
                 cur_label.config(text=f"{cur:.1f}{unit}")
                 sub_label.config(text=f"均 {avg:.1f}  P95 {m.get('p95'):.1f}  峰 {peak:.1f}")
 
                 # 阈值变色
+                # ⚠️ 颜色走主题系统（深/浅两套），不能写死十六进制
                 if key == 'cpu':
-                    color = "#A32D2D" if cur > 80 else "#BA7517" if cur > 50 else "#107C10"
+                    color = self._perf_color('error' if cur > 80 else
+                                             'warning' if cur > 50 else 'success')
                     cur_label.config(foreground=color)
                 elif key == 'fps':
-                    color = "#A32D2D" if cur < 30 else "#BA7517" if cur < 50 else "#107C10"
+                    color = self._perf_color('error' if cur < 30 else
+                                             'warning' if cur < 50 else 'success')
                     cur_label.config(foreground=color)
+
+            # 把快照交给布局层（换肤时用它还原阈值色）
+            layout = getattr(self, 'layout_instance', None)
+            if layout is not None:
+                try:
+                    layout._metric_snapshot = snapshot
+                except Exception:
+                    pass
 
             # 卡顿率单独显示在状态栏式标签上（与 FPS 语义相近，不额外占卡片）
             jank = stats.get('jank', {}).get('cur')
@@ -4989,17 +5099,17 @@ class ADBToolApp:
                     text=f"卡顿率 {jank:.1f}%" if jank is not None else "卡顿率 --")
                 if jank is not None:
                     self.perf_jank_label.config(
-                        foreground="#A32D2D" if jank > 5 else
-                        "#BA7517" if jank > 2 else "#107C10")
+                        foreground=self._perf_color('error' if jank > 5 else
+                                                    'warning' if jank > 2 else 'success'))
 
             # 告警状态指示
             if hasattr(self, 'perf_status_label') and self.performance_monitor.monitoring:
                 if stats.get('alert'):
                     self.perf_status_label.config(text="● 采集中 · 超阈值",
-                                                  foreground="#A32D2D")
+                                                  foreground=self._perf_color('error'))
                 else:
                     self.perf_status_label.config(text="● 采集中",
-                                                  foreground="#107C10")
+                                                  foreground=self._perf_color('success'))
 
             # 采样明细表 + 线程表格
             if hasattr(self, 'perf_samples_tree'):

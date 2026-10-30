@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>ADB Tool — 界面重构方案 A：深色工作台</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg-app:#0E1116;      --bg-side:#131720;     --bg-panel:#171B24;
+    --bg-elev:#1D222D;    --bg-hover:#232936;
+    --line:#242A36;        --line-soft:#1C212B;
+    --tx:#E6E9EF;         --tx-2:#9BA3B4;        --tx-3:#6B7385;
+    --accent:#4C8DFF;     --accent-dim:rgba(76,141,255,.14);
+    --ok:#3DD68C;          --warn:#F5A623;        --err:#F26D6D;
+    --purple:#A78BFA;
+    --r:8px;
+  }
+  body {
+    font-family:"Inter","SF Pro Text","Segoe UI Variable","Microsoft YaHei UI",system-ui,sans-serif;
+    background:var(--bg-app); color:var(--tx); height:100vh; overflow:hidden;
+    font-size:13px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .app { display:grid; grid-template-columns:212px 1fr; height:100vh; }
+
+  /* ---------- 左侧导航 ---------- */
+  .side { background:var(--bg-side); border-right:1px solid var(--line-soft);
+          display:flex; flex-direction:column; }
+  .brand { height:48px; display:flex; align-items:center; gap:9px; padding:0 14px;
+           border-bottom:1px solid var(--line-soft); }
+  .logo { width:22px; height:22px; border-radius:6px;
+          background:linear-gradient(135deg,#4C8DFF,#A78BFA); position:relative; flex:none; }
+  .logo::after { content:""; position:absolute; inset:6px; border-radius:2px; background:var(--bg-side); }
+  .brand b { font-size:13.5px; font-weight:600; letter-spacing:.2px; }
+  .brand span { color:var(--tx-3); font-size:11px; font-weight:500; }
+
+  .nav { padding:10px 8px; flex:1; }
+  .navlabel { color:var(--tx-3); font-size:10.5px; font-weight:600; letter-spacing:.7px;
+              text-transform:uppercase; padding:6px 8px 7px; }
+  .navitem { display:flex; align-items:center; gap:10px; height:32px; padding:0 8px;
+             border-radius:6px; color:var(--tx-2); font-size:13px; margin-bottom:1px; }
+  .navitem .ic { width:16px; height:16px; flex:none; opacity:.75; }
+  .navitem .kbd { margin-left:auto; font-size:10px; color:var(--tx-3);
+                  background:var(--bg-elev); padding:1px 5px; border-radius:4px; }
+  .navitem.on { background:var(--accent-dim); color:#CFE0FF; font-weight:500; }
+  .navitem.on .ic { opacity:1; }
+  .navitem:hover { background:var(--bg-hover); color:var(--tx); }
+  .side-foot { padding:8px; border-top:1px solid var(--line-soft); }
+
+  /* ---------- 主区 ---------- */
+  .main { display:flex; flex-direction:column; min-width:0; }
+
+  .top { height:48px; flex:none; border-bottom:1px solid var(--line-soft);
+         display:flex; align-items:center; gap:10px; padding:0 14px; background:var(--bg-app); }
+  .field { display:flex; align-items:center; gap:7px; height:30px; padding:0 9px;
+           background:var(--bg-panel); border:1px solid var(--line); border-radius:6px; }
+  .field .lb { color:var(--tx-3); font-size:11.5px; }
+  .field .vl { color:var(--tx); font-size:12.5px; }
+  .field .caret { color:var(--tx-3); font-size:9px; }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--ok); flex:none;
+         box-shadow:0 0 0 3px rgba(61,214,140,.15); }
+  .dot.off { background:var(--tx-3); box-shadow:none; }
+  .spacer { flex:1; }
+  .search { display:flex; align-items:center; gap:8px; height:30px; width:250px;
+            padding:0 10px; background:var(--bg-panel);
+            border:1px solid var(--line); border-radius:6px; color:var(--tx-3); }
+  .search b { font-weight:500; color:var(--tx-2); }
+  .search .kbd { margin-left:auto; font-size:10px; background:var(--bg-elev);
+                 padding:1px 5px; border-radius:4px; color:var(--tx-3); }
+
+  .body { flex:1; display:grid; grid-template-columns:1fr 400px; min-height:0; }
+  .work { padding:18px 20px; overflow:hidden; min-width:0; }
+  .workinner { display:flex; flex-direction:column; height:100%; }
+
+  .h1 { font-size:18px; font-weight:600; letter-spacing:-.2px; }
+  .sub { color:var(--tx-2); font-size:12px; margin-top:2px; }
+
+  .toolbar { display:flex; align-items:center; gap:8px; margin:13px 0 11px; }
+  .btn { height:30px; padding:0 12px; border-radius:6px; font-size:12.5px; font-weight:500;
+         display:inline-flex; align-items:center; gap:6px; cursor:pointer; border:1px solid transparent; }
+  .btn.p { background:var(--accent); color:#fff; }
+  .btn.s { background:var(--bg-elev); color:var(--tx-2); border-color:var(--line); }
+  .btn.d { background:rgba(242,109,109,.12); color:var(--err); border-color:rgba(242,109,109,.28); }
+  .btn .ic { width:14px; height:14px; opacity:.9; }
+
+  /* 设备选择行 */
+  .devrow { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-bottom:11px; }
+  .dev { background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--r);
+         padding:9px 11px; }
+  .dev.on { border-color:rgba(76,141,255,.5); background:var(--accent-dim); }
+  .devtop { display:flex; align-items:center; gap:7px; }
+  .devname { font-size:13px; font-weight:600; }
+  .devmeta { color:var(--tx-3); font-size:10.5px; margin-top:4px; line-height:1.55; }
+  .devmeta em { font-style:normal; color:var(--tx-2); }
+  .chk { margin-left:auto; width:15px; height:15px; border-radius:4px; flex:none;
+         border:1.5px solid var(--line); display:flex; align-items:center; justify-content:center; }
+  .dev.on .chk { background:var(--accent); border-color:var(--accent); }
+
+  /* 列表 */
+  .panel { background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--r);
+           overflow:hidden; flex:none; }
+  .statrow { display:grid; grid-template-columns:repeat(4,1fr); gap:9px; margin-top:11px; }
+  .stat { background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--r);
+          padding:9px 11px; }
+  .stat .k { color:var(--tx-3); font-size:10.5px; }
+  .stat .v { font-size:16px; font-weight:600; margin-top:3px; font-variant-numeric:tabular-nums; }
+  .stat .v small { font-size:11px; color:var(--tx-3); font-weight:400; margin-left:3px; }
+  .recent { margin-top:11px; }
+  .rrow { display:flex; align-items:center; gap:10px; height:34px; padding:0 12px;
+          border-bottom:1px solid var(--line-soft); font-size:12px; color:var(--tx-2); }
+  .rrow:last-child { border-bottom:none; }
+  .rrow .rk { color:var(--tx-3); font-size:11px; width:78px; flex:none; }
+  .rrow .rv { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rrow .rt { color:var(--tx-3); font-size:11px; font-variant-numeric:tabular-nums; }
+  .phead { display:flex; align-items:center; gap:9px; height:38px; padding:0 13px;
+           border-bottom:1px solid var(--line-soft); }
+  .phead h3 { font-size:12.5px; font-weight:600; }
+  .tag { font-size:10.5px; padding:1.5px 7px; border-radius:20px;
+         background:var(--bg-elev); color:var(--tx-2); }
+  .tag.ok { background:rgba(61,214,140,.13); color:var(--ok); }
+  .row { display:flex; align-items:center; gap:10px; height:38px; padding:0 12px;
+         border-bottom:1px solid var(--line-soft); }
+  .row:last-child { border-bottom:none; }
+  .row .info { flex:1; min-width:0; }
+  .row .nm { font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .pk { color:var(--tx-3); font-size:10.5px; }
+  .row .sz { width:64px; text-align:right; flex:none; color:var(--tx-3); font-size:11px;
+             font-variant-numeric:tabular-nums; }
+  .row .badge { width:74px; text-align:center; flex:none; }
+  .badge { font-size:10.5px; padding:1.5px 7px; border-radius:5px; }
+  .badge.done { background:rgba(61,214,140,.13); color:var(--ok); }
+  .badge.run  { background:rgba(76,141,255,.14); color:var(--accent); }
+  .badge.wait { background:var(--bg-elev); color:var(--tx-3); }
+  .prog { width:78px; height:4px; border-radius:3px; background:var(--bg-elev);
+          overflow:hidden; flex:none; }
+  .prog i { display:block; height:100%; background:var(--accent); border-radius:3px; }
+
+  /* 右侧终端 */
+  .term { background:var(--bg-side); border-left:1px solid var(--line-soft);
+          display:flex; flex-direction:column; min-width:0; }
+  .termhead { height:44px; flex:none; display:flex; align-items:center; gap:8px;
+              padding:0 12px; border-bottom:1px solid var(--line-soft); }
+  .termhead h3 { font-size:12.5px; font-weight:600; }
+  .iconbtn { width:26px; height:26px; border-radius:5px; display:flex; align-items:center;
+             justify-content:center; color:var(--tx-3); }
+  .iconbtn:hover { background:var(--bg-hover); color:var(--tx); }
+  .termsearch { margin:0 12px 10px; height:28px; display:flex; align-items:center; gap:8px;
+                padding:0 9px; background:var(--bg-panel);
+                border:1px solid var(--line); border-radius:6px; color:var(--tx-3); font-size:11.5px; }
+  .termbody { flex:1; overflow:hidden; padding:0 12px 12px; font-family:"Cascadia Code",
+             "Consolas",monospace; font-size:11.5px; line-height:1.85; }
+  .ln { display:flex; gap:9px; }
+  .ln .t { color:var(--tx-3); flex:none; }
+  .ln .m { color:var(--tx-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ln.ok .m { color:var(--ok); } .ln.err .m { color:var(--err); }
+  .ln.acc .m { color:var(--accent); } .ln.warn .m { color:var(--warn); }
+  .ln .m b { color:var(--warn); font-weight:400; background:rgba(245,166,35,.16); border-radius:2px; }
+
+  .collapse { width:26px; height:26px; border-radius:5px; display:flex;
+              align-items:center; justify-content:center; color:var(--tx-3); }
+  .collapse:hover { background:var(--bg-hover); color:var(--tx); }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 左侧导航 -->
+  <aside class="side">
+    <div class="brand">
+      <div class="logo"></div>
+      <div><b>ADB Tool</b><br><span>v3.4</span></div>
+    </div>
+    <nav class="nav">
+      <div class="navlabel">工作流</div>
+      <div class="navitem on"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2v7M8 9v.01M3 6l5-4 5 4M3 6v6a1 1 0 001 1h8a1 1 0 001-1V6"/></svg>安装<span class="kbd">⌘1</span></div>
+      <div class="navitem"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 13l3-1 8-8-2-2-8 8-1 3zM9 4l2 2"/></svg>诊断<span class="kbd">⌘2</span></div>
+      <div class="navitem"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="4" width="12" height="8" rx="1.5"/><path d="M6 14h4"/></svg>设备</div>
+      <div class="navitem"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 3h10v10H3zM6 6l4 4M10 6l-4 4"/></svg>脚本</div>
+      <div class="navitem"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="3" width="13" height="9" rx="1.5"/><path d="M5 14h6"/></svg>投屏</div>
+      <div class="navlabel" style="margin-top:14px">最近</div>
+      <div class="navitem"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></svg>最近操作</div>
+    </nav>
+    <div class="side-foot">
+      <div class="navitem"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"/></svg>设置</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <!-- 全局上下文条 -->
+    <div class="top">
+      <div class="field"><span class="lb">设备</span><span class="dot"></span><span class="vl">192.168.0.51</span><span class="caret">▾</span></div>
+      <div class="field"><span class="lb">应用</span><span class="vl">com.gitvdemo.video</span><span class="caret">▾</span></div>
+      <div class="spacer"></div>
+      <div class="search"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><b>搜索功能或命令</b><span class="kbd">Ctrl K</span></div>
+    </div>
+
+    <div class="body">
+      <!-- 任务区 -->
+      <div class="work">
+        <div class="workinner">
+          <div class="h1">安装应用</div>
+          <div class="sub">选择目标设备与安装包，批量安装并自动校验版本</div>
+
+          <div class="toolbar">
+            <button class="btn p"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v10M3 8h10"/></svg>浏览 APK</button>
+            <button class="btn s"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h10v10H3zM6 6l4 4M10 6l-4 4"/></svg>拖入文件</button>
+            <div class="spacer"></div>
+            <button class="btn d"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.8 8.5h6.4l.8-8.5"/></svg>全部卸载</button>
+            <button class="btn p"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2v7M8 9v.01M3 6l5-4 5 4M3 6v6a1 1 0 001 1h8a1 1 0 001-1V6"/></svg>安装到 3 台设备</button>
+          </div>
+
+          <div class="devrow">
+            <div class="dev on"><div class="devtop"><span class="dot"></span><span class="devname">192.168.0.51</span><span class="chk"><svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2"><path d="M2 6.5l2.5 2.5L10 3"/></svg></span></div><div class="devmeta">TCL x32a0 · Android 9<br><em>223229</em> 已安装</div></div>
+            <div class="dev on"><div class="devtop"><span class="dot"></span><span class="devname">192.168.0.26</span><span class="chk"><svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2"><path d="M2 6.5l2.5 2.5L10 3"/></svg></span></div><div class="devmeta">MiBOX4 · Android 6.0.1<br><em>223218</em> 已安装</div></div>
+            <div class="dev"><div class="devtop"><span class="dot off"></span><span class="devname">10.1.246.102</span><span class="chk"></span></div><div class="devmeta">未授权 · offline<br>需要设备端确认</div></div>
+          </div>
+
+          <div class="panel">
+            <div class="phead">
+              <h3>待安装包</h3><span class="tag">5 个</span>
+              <div class="spacer"></div>
+              <span class="tag ok">2 已完成 · 1 进行中</span>
+            </div>
+            <div class="row">
+              <span class="chk" style="border-color:var(--accent);background:var(--accent)"><svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2"><path d="M2 6.5l2.5 2.5L10 3"/></svg></span>
+              <div class="info"><div class="nm">GitvVideo-release-tv16.11.999.223229</div><div class="pk">com.gitvdemo.video · versionCode 223229</div></div>
+              <span class="badge done">已安装</span>
+              <span class="sz">36.1 MB</span>
+            </div>
+            <div class="row">
+              <span class="chk" style="border-color:var(--accent);background:var(--accent)"><svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2"><path d="M2 6.5l2.5 2.5L10 3"/></svg></span>
+              <div class="info"><div class="nm">sample-app-debug.apk</div><div class="pk">com.example.sample · versionCode 42</div></div>
+              <span class="badge run">安装中 68%</span>
+              <div class="prog"><i style="width:68%"></i></div>
+              <span class="sz">92.0 MB</span>
+            </div>
+            <div class="row">
+              <span class="chk" style="border-color:var(--accent);background:var(--accent)"><svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2"><path d="M2 6.5l2.5 2.5L10 3"/></svg></span>
+              <div class="info"><div class="nm">GitvVideo-auto_player-223125</div><div class="pk">com.gitvdemo.video · versionCode 223125</div></div>
+              <span class="badge wait">等待中</span>
+              <span class="sz">36.0 MB</span>
+            </div>
+            <div class="row">
+              <span class="chk"></span>
+              <div class="info"><div class="nm">sample-app-release.apk</div><div class="pk">com.example.sample · versionCode 43</div></div>
+              <span class="badge wait">等待中</span>
+              <span class="sz">18.4 MB</span>
+            </div>
+            <div class="row">
+              <span class="chk"></span>
+              <div class="info"><div class="nm">GitvVideo-tv16.11.999.223218</div><div class="pk">com.gitvdemo.video · versionCode 223218</div></div>
+              <span class="badge wait">等待中</span>
+              <span class="sz">35.9 MB</span>
+            </div>
+          </div>
+
+          <div class="statrow">
+            <div class="stat"><div class="k">在线设备</div><div class="v">2<small>/ 3</small></div></div>
+            <div class="stat"><div class="k">待安装包</div><div class="v">5</div></div>
+            <div class="stat"><div class="k">本次传输</div><div class="v">92<small>MB</small></div></div>
+            <div class="stat"><div class="k">失败</div><div class="v" style="color:var(--err)">1</div></div>
+          </div>
+
+          <div class="panel recent">
+            <div class="phead"><h3>最近操作</h3><span class="tag">一键复现</span></div>
+            <div class="rrow"><span class="rk">安装</span><span class="rv">GitvVideo-tv16.11.999.223229 → 192.168.0.51</span><span class="rt">16:49</span></div>
+            <div class="rrow"><span class="rk">抓日志</span><span class="rv">com.gitvdemo.video · logcat -v threadtime</span><span class="rt">15:20</span></div>
+            <div class="rrow"><span class="rk">性能</span><span class="rv">com.gitvdemo.video · 采样 2s · 600 点</span><span class="rt">14:02</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 终端抽屉 -->
+      <aside class="term">
+        <div class="termhead">
+          <h3>终端</h3>
+          <span class="tag">3 台设备</span>
+          <div class="spacer"></div>
+          <div class="iconbtn"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.8 8.5h6.4l.8-8.5"/></svg></div>
+          <div class="collapse"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3l-5 5 5 5"/></svg></div>
+        </div>
+        <div class="termsearch"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>搜索输出<span style="margin-left:auto;font-size:10px">2 处命中</span></div>
+        <div class="termbody">
+          <div class="ln"><span class="t">16:49:38</span><span class="m acc">$ adb -s 192.168.0.51 install -r -d xxx.apk</span></div>
+          <div class="ln"><span class="t">16:49:39</span><span class="m">Performing Streamed Install</span></div>
+          <div class="ln"><span class="t">16:49:39</span><span class="m err">Get install_switch_flag: 1</span></div>
+          <div class="ln"><span class="t">16:49:39</span><span class="m">install apk has been enabled from pm by user!</span></div>
+          <div class="ln"><span class="t">16:49:39</span><span class="m ok">Success</span></div>
+          <div class="ln"><span class="t">16:49:39</span><span class="m ok">✓ 已校验 versionCode = 223229</span></div>
+          <div class="ln"><span class="t">16:50:12</span><span class="m">正在传输... 45%（43.28MB / 96.20MB）</span></div>
+          <div class="ln"><span class="t">16:50:12</span><span class="m warn">设备的安全开关拦截了 ADB 安装（install_switch_flag）</span></div>
+          <div class="ln"><span class="t">16:50:13</span><span class="m">改用 adb install 路径</span></div>
+          <div class="ln"><span class="t">16:50:18</span><span class="m ok">✓ 192.168.0.51 安装成功</span></div>
+          <div class="ln"><span class="t">16:50:19</span><span class="m ok">✓ 192.168.0.26 安装成功</span></div>
+          <div class="ln"><span class="t">16:50:19</span><span class="m err">✗ 10.1.246.102 未授权</span></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+</body>
+</html>

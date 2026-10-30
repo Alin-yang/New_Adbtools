@@ -1,7 +1,16 @@
 from app import ADBToolApp
 import tkinter as tk
-# 布局选项：layout_tab_view（原版）/ layout_optimized（优化版）/ layout_modern（现代化版-推荐）
-from gui import layout_modern as layout  # 使用现代化UI布局（参考WOA AutoBot风格）
+import os
+
+# 布局选项：
+#   layout_v4    全新工作台布局（默认：左侧导航 + 全局上下文栏 + 可折叠终端 + 深/浅主题）
+#   layout_modern 旧版布局（保留作回退，UI 可用环境变量 ADBTOOL_LAYOUT=v3 切回）
+_LAYOUT_ENV = os.environ.get('ADBTOOL_LAYOUT', 'v4').lower()
+
+if _LAYOUT_ENV in ('v3', 'modern', 'legacy'):
+    from gui import layout_modern as layout
+else:
+    from gui import layout_v4 as layout
 
 # 尝试使用支持拖拽的Tk
 try:

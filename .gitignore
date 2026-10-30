@@ -58,6 +58,7 @@ history/
 # Testing
 .pytest_cache/
 tests/_shots/
+tests/_shots_v4/
 .coverage
 htmlcov/
 

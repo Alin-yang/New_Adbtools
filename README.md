@@ -26,7 +26,9 @@ New_Adbtools/
 ├── device_monitor.py            # 设备状态实时后台监控
 ├── gui/
 │   ├── __init__.py
-│   └── layout_modern.py         # 现代化 UI 布局（当前使用）
+│   ├── layout_v4.py             # v4 工作台布局（当前使用）
+│   ├── theme.py                 # 主题系统（深/浅双套 + 运行时切换）
+│   └── layout_modern.py         # v3 布局（回退用：ADBTOOL_LAYOUT=v3）
 ├── modules/
 │   ├── __init__.py
 │   ├── device_query.py          # 设备查询统一入口（6 个查询函数的实现都在这）
@@ -36,7 +38,8 @@ New_Adbtools/
 │   ├── scrcpy/                  # scrcpy 工具集（scrcpy.exe/adb.exe/各类 DLL）
 │   ├── lint.py                  # 零依赖代码质量检查（死代码/危险模式）
 │   ├── lint_baseline.txt        # 存量问题基线（只报新增）
-│   └── diagnose_perf.py         # 性能监控真机诊断（采集原始输出对账）
+│   ├── diagnose_perf.py         # 性能监控真机诊断（采集原始输出对账）
+│   └── update_check_bat.py      # 更新 check.bat（保持 GBK + CRLF）
 ├── tests/
 │   ├── test_core_regression.py          # 核心路径回归
 │   ├── test_device_query_and_monitor.py # 设备查询与监控去抖
@@ -49,7 +52,9 @@ New_Adbtools/
 │   ├── probe_device_tab.py              # 容器树宽度溯源
 │   ├── profile_startup.py               # 启动耗时分解
 │   ├── measure_tabs_vertical.py         # 各 Tab 纵向空白量化
-│   ├── test_log_search.py               # 终端搜索/过滤功能测试
+│   ├── test_log_search.py               # 终端搜索/过滤功能测试（v3）
+│   ├── test_layout_v4.py                # v4 布局（主题/导航/终端/契约）
+│   ├── screenshot_v4.py                 # v4 自动截图（深/浅两套）
 │   └── verify_install_real_device.py    # 真机验证安装判定（需 adb）
 ├── ADBTool.spec                 # PyInstaller 打包配置（onefile）
 ├── ADBTool_onedir.spec          # PyInstaller 打包配置（onedir，启动更快）
@@ -65,7 +70,9 @@ New_Adbtools/
 
 ## 二、核心功能模块
 
-应用顶部共 **7 个 Tab**，对应 7 大功能域：
+界面左侧导航共 **6 个任务面板**，按「日常操作 / 进阶工具」两组组织：
+
+> v3 曾是顶部 7 个 Tab（按技术分类），v4 改为按任务流分组，见第三章。
 
 ### 2.1 设备管理模块（📱 设备管理）
 **功能卡片**:
@@ -213,39 +220,99 @@ class PerformanceMonitor:
 ### 2.7 高级工具模块（⚙️ 高级工具）
 - **工厂菜单**: 打开设备工厂菜单
 
-## 三、界面布局设计
+## 三、界面布局设计（v4 工作台）
 
-### 3.1 左右分栏布局结构
+### 3.1 整体结构
+
+v4 把 v3 的「顶部 Tab + 左右分栏」重构成「**左侧固定导航 + 顶栏全局上下文 + 可折叠终端**」：
+
 ```
-┌──────────────────────────────────────────────────────┐
-│  ADB Tool  v2.0 · 现代化UI      📱当前设备 ● 未连接  │  ← 顶部栏
-├──────────────────────────────────────────────────────┤
-│ 📱设备管理 │ 📦应用管理 │ 📋日志录屏 │ 🖥️投屏 │ ...  │  ← Tab 导航
-├──────────────────────┬───────────────────────────────┤
-│  左侧功能按钮区域      │  右侧实时终端输出             │
-│  (卡片式按钮组)       │  (弹性扩展，自动滚动)         │
-│  ┌──────────────┐    │  [12:00:00] ✓ 已连接 2 台设备 │
-│  │ 卡片标题       │    │  ...                         │
-│  │ [按钮][按钮]   │    │                               │
-│  └──────────────┘    │                               │
-└──────────────────────┴───────────────────────────────┘
+┌──────────┬──────────────────────────────────────┬──────────────┐
+│  侧边栏   │  顶栏：设备 ▾ │ 包名 ▾ │ 状态 │ 终端▸   │  终端         │
+│  188px   ├──────────────────────────────────────┤  340px      │
+│          │                                      │  可折叠       │
+│ 日常操作  │  工作区（当前任务面板，可滚动）         │  ┌─────────┐ │
+│  安装    │                                      │  │ 实时输出 │ │
+│  诊断    │  安装应用                             │  │         │ │
+│  设备    │  选择 APK，推送到目标设备              │  └─────────┘ │
+│ 进阶工具  │                                      │  [搜索][复制] │
+│  性能    │  [安装到设备] [卸载] [清除缓存]         │              │
+│  投屏    │                                      │              │
+│  脚本    │                                      │              │
+│──────────┤                                      │              │
+│ ☾ 深色模式│                                      │              │
+└──────────┴──────────────────────────────────────┴──────────────┘
 ```
 
-### 3.2 布局实现（layout_modern.py）
+**为什么这样改**
+
+| v3 的问题 | v4 的做法 |
+|-----------|-----------|
+| Tab 按**技术分类**（设备/应用/日志…），用户要先想功能属于哪个 Tab | 按**任务流**分组：日常操作（安装/诊断/设备）+ 进阶工具（性能/投屏/脚本） |
+| 右侧终端**永久占位** 360px，长路径日志被迫换行 | 终端**可折叠**（Ctrl+B / 顶栏按钮），折叠后工作区横向铺满 |
+| 卡片套卡片（LabelFrame 套 LabelFrame），层级弱 | 扁平化：分组标题 + 一行按钮，无卡片边框 |
+| 顶栏 70px + Tab 条 40px = 110px 垂直开销 | 顶栏统一 46px，导航移到左侧，垂直省下 ~64px |
+| 配色写死在布局里，`vista` 主题下大部分不生效 | **主题系统**统一管理，深/浅两套可运行时切换 |
+
+### 3.2 主题系统（gui/theme.py）
+
+**根因**：Tkinter 在 Windows 上默认用 `vista` 主题，会**忽略** `background`/`foreground` 配置 —— 这正是旧版 UI「配色怎么改都不生效、整体显得很 low」的真正原因。
+
+v4 的做法：
+
 ```python
-class LayoutModern:
-    COLORS = {
-        "primary": "#0078D4",   # 主色调（Windows蓝）
-        "success": "#107C10",
-        "warning": "#FFB900",
-        "error": "#E81123",
-        "bg_main": "#F3F2F1",
-        "bg_card": "#FFFFFF",
-        ...
-    }
-    # 左右分栏：左列 weight=1（功能按钮），右列 weight=3（输出框）
-    # Tab 选中：高亮背景 #E6F2FF + 蓝色文字
+# 1) 切到 clam 主题（完全可配置）
+style.theme_use('clam')
+
+# 2) 颜色令牌集中管理，深浅两套
+DARK  = {'bg_app': '#0E1116', 'bg_side': '#131720', 'accent': '#4C8DFF', ...}
+LIGHT = {'bg_app': '#F4F5F7', 'bg_side': '#FFFFFF', 'accent': '#2563EB', ...}
+
+# 3) ttk 样式按令牌批量重建（换肤时重跑一次即可全局生效）
+theme._build_styles(theme.tokens)
+
+# 4) 纯 tk 控件（Text/Label/Listbox）用「角色注册表」逐个重刷
+theme.register(widget, 'terminal')   # 终端：底色 + tag 颜色
+theme.register(widget, 'label')      # 文字标签：前景/背景
+theme.register(widget, 'badge')      # 连接徽标：按设备状态上色
 ```
+
+主题选择持久化在 `~/.adbtool_prefs.json`，下次启动自动恢复。
+
+### 3.3 布局实现（gui/layout_v4.py）
+
+```python
+class LayoutV4:
+    # 导航结构：按任务流分组
+    NAV_GROUPS = [
+        ('日常操作', [('install', '安装应用', ...), ('diagnose', '问题诊断', ...),
+                      ('device', '设备控制', ...)]),
+        ('进阶工具', [('perf', '性能监控', ...), ('mirror', '投屏控制', ...),
+                      ('script', '脚本执行', ...)]),
+    ]
+
+    # 面板懒加载：首次点开才构建（避免启动时建 6 套控件）
+    PANEL_BUILDERS = {'install': 'build_install_panel', ...}
+
+    def switch_nav(self, key):
+        if key not in self.panels:      # 懒加载
+            self.panels[key] = getattr(self, self.PANEL_BUILDERS[key])()
+        self.panels[key].tkraise()      # tkraise 比 grid_remove 重建快得多
+```
+
+**关键实现细节（都是踩过的坑）**
+
+- 网格行列**不能重叠**：顶栏在 `row=0`，工作区在 `row=1` —— 放同一格会被工作区盖住，设备/包名下拉框直接消失。
+- 顶栏元素总需求宽度必须 ≤ 主区宽度，否则后面的控件被挤没（表现为「控件凭空消失」）。当前 633px ≤ 672px。
+- 导航高亮条用 **place** 定位：pack/grid 的 width 切换在已布局容器里不生效，旧选中项的高亮条永远收不回去。
+- 面板内容放进 **Canvas + 滚动条**：小窗口下内容不会被顶出窗口（v3 的投屏页就是这么被裁掉的）。
+- 纯 tk 控件必须走 `theme.register()`：面板是懒加载的，换肤时不重刷就会残留上一套主题的配色。
+
+### 3.4 兼容与回退
+
+- v3 布局（`gui/layout_modern.py`）保留为回退路径：设环境变量 `ADBTOOL_LAYOUT=v3` 即可切回。
+- app.py 与布局解耦：它只认 `app.ip_combobox` / `app.status_text` / `app.perf_samples_tree` 等控件契约，
+  两套布局都满足（见 `tests/test_layout_v4.py` 的「app 契约保留」断言组）。
 
 ## 四、核心技术实现
 
@@ -530,7 +597,23 @@ adb shell am broadcast -a ADB_INPUT_TEXT --es msg "你好"
 
 ## 十、版本历史
 
-### v3.3（当前版本）
+### v4.0（当前版本）—— 界面完全重构
+- 🏗️ **布局重写**：新增 `gui/layout_v4.py`，从「顶部 Tab + 左右分栏」改为
+  「左侧固定导航 + 顶栏全局上下文 + 可折叠终端」；导航按**任务流**重新分组
+  （日常操作：安装/诊断/设备；进阶工具：性能/投屏/脚本）
+- 🎨 **主题系统**：新增 `gui/theme.py`，深色/浅色两套配色，**运行时一键切换**
+  （侧边栏底部按钮 或 Ctrl+T），选择持久化到 `~/.adbtool_prefs.json`
+  - 修复根因：Windows 默认 `vista` 主题会忽略 `background`/`foreground` 配置，
+    切到 `clam` 后配色才真正生效（这正是旧版「换色不生效、显得 low」的原因）
+- 🗜️ **终端可折叠**：Ctrl+B 或顶栏按钮折叠，工作区横向铺满，长路径日志不再换行
+- 📐 **紧凑化**：窗口 1200x680（v3 为 1400x620）；顶栏统一 46px，省掉 Tab 条的 40px
+- 🧹 **app.py 去硬编码色**：性能阈值色、连接徽标、拖放高亮、终端 tag 全部改走主题
+- 🧪 **新增测试** `tests/test_layout_v4.py`（60+ 断言）：面板懒加载、主题切换、
+  终端折叠、导航选中态、终端搜索、app 控件契约完整性
+- 🖼️ **新增截图脚本** `tests/screenshot_v4.py`：自动输出深/浅两套 × 6 面板截图
+- 🔁 **保留 v3 回退**：`ADBTOOL_LAYOUT=v3` 环境变量切回旧布局
+
+### v3.3
 - 🎯 **顶部设备区**：新增「连接」「断开」按钮（连设备不必再跨 Tab）；
   修「🔄 刷新设备」绑错功能（之前实际执行的是「查看设备信息」）；
   修设备下拉框被截断成「192.168.」
@@ -612,4 +695,4 @@ GitHub：https://github.com/Alin-yang/New_Adbtools
 ---
 
 **最后更新**: 2026-10-28
-**文档版本**: v3.3
+**文档版本**: v4.0
