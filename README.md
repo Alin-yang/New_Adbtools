@@ -46,7 +46,7 @@ New_Adbtools/
 │   ├── scrcpy/                  # scrcpy 工具集（scrcpy.exe/adb.exe/各类 DLL）
 │   ├── lint.py                  # 零依赖代码质量检查（死代码/危险模式）
 │   ├── lint_baseline.txt        # 存量问题基线（只报新增）
-│   ├── diagnose_perf.py         # 性能监控真机诊断（采集原始输出对账）
+│   ├── diagnose_perf.py         # 性能监控真机诊断（采集原始输出对账，v5 新 API）
 │   └── update_check_bat.py      # 更新 check.bat（保持 GBK + CRLF）
 ├── tests/
 │   ├── test_core_regression.py          # 核心路径回归
@@ -54,9 +54,13 @@ New_Adbtools/
 │   ├── test_install_flow.py             # 安装流程（含定制 ROM 场景）
 │   ├── test_async_and_fixes.py          # 线程安全
 │   ├── test_perf_improvements.py        # 性能
-│   ├── test_perf_parsers.py             # 性能监控解析器（各 Android 版本格式）
+│   ├── test_perf_v4.py                  # 性能 v5（口径分离/卡顿率/泄漏检测…）
+│   ├── test_perf_live_refresh.py        # 性能实时刷新链路（后台线程→UI 队列泵）
+│   ├── test_layout_v4.py                # v4 布局（主题/导航/终端/契约）
+│   ├── test_log_search.py               # 终端搜索/过滤功能测试
 │   ├── measure_layout.py                # 各 Tab 布局宽度量化
-│   ├── screenshot_tabs.py               # 自动截图各 Tab
+│   ├── screenshot_tabs.py               # 自动截图各 Tab（v3）
+│   ├── screenshot_v4.py                 # v4 自动截图（深/浅 × 面板 + 报告 + 监控中）
 │   ├── probe_device_tab.py              # 容器树宽度溯源
 │   ├── profile_startup.py               # 启动耗时分解
 │   ├── measure_tabs_vertical.py         # 各 Tab 纵向空白量化
@@ -190,36 +194,69 @@ class ScreenMirrorManager:
 > 分辨率选「原始分辨率」= 不传 `--max-size`（不缩放）。
 
 ### 2.5 性能监控模块（📊 性能监控）
-实时监控 Android 设备的进程级 + 线程级 CPU、内存（PSS/RSS/Java/Native）、FPS、Jank 等性能指标。v3.1 全面重写采集引擎。
+实时监控 Android 设备的进程级 + 线程级 CPU、内存（PSS/RSS/Java/Native）、FPS、Jank 等性能指标。
+**v5.0 完全重写采集引擎，v5.1 修复实时刷新失效。**
+
 **功能**:
 - 选择监控应用（支持下拉搜索/获取当前应用）；未填包名时进入**系统整体模式**
-- 设置采样间隔（默认 2s）
-- 开始/停止监控（停止时自动落盘一份 CSV，避免忘记导出丢失数据）
+- 设置采样间隔（默认 2s）；**场景选择器**（视频播放 / 界面流畅 / 内存体检 / 省电 / 启动 / 通用），
+  不同场景「什么算超标」不一样，阈值不再写死
+- 开始/停止监控（停止时自动落盘 CSV **并弹出测试报告**）
 - 单次快照
-- 导出 CSV 原始采样点 / 导出文本性能报告（落到 `<数据存储路径>/perf_reports/`）
+- 导出 CSV 原始采样点 / 导出文本性能报告 / **导出 HTML 报告**（自包含内联 SVG，可直接发给同事）
 - 实时数据展示：CPU / PSS / RSS / Java Heap / Native Heap / FPS / Jank%，每项含**当前/均值/P95/P05/峰值**
   （CPU/内存看 P95，FPS 看 P05）
 - **线程级 CPU 表**：展示 Top N 线程瞬时 CPU%，表头可点击排序
 - **采样明细表**：保留最近 60 条（时间/CPU%/PSS/RSS/Java/Native/FPS/卡顿%），最新在上并高亮
-- **告警机制**：进程 CPU% 或 PSS 连续 N 次（可配置）超阈值时触发告警回调，避免毛刺误报
+- **告警机制**：进程 CPU% 或 PSS 连续 N 次超阈值时触发（阈值由场景决定）
+- **基线对比**：每次测试自动存快照，可与任意一次历史并排比较
 
 > ⚠️ 不采集设备温度（明确不做的功能）。
 
-**实现逻辑**:
-```python
-class PerformanceMonitor:
-    # 一次采样同时产出进程级 + 线程级数据：
-    # adb shell cat /proc/<pid>/stat /proc/<pid>/task/*/stat 单次调用读回
-    # 进程与全部线程的 CPU jiffies，两次采样差分得到真实瞬时 CPU%（与采样间隔无关）
-    # 内存：一次 dumpsys meminfo 同时解析 PSS / RSS / Java Heap / Native Heap
-    # FPS：gfxinfo 累计帧数两次差分（与采样间隔无关）
-    # 卡顿率：同一次 gfxinfo 解析 "Janky frames: N (x%)"，零额外开销
-    # 智能降级：/proc 不可读自动回退 dumpsys cpuinfo（仅进程级）
-    # 系统整体模式：/proc/stat + /proc/meminfo 差分
-    # CLK_TCK 与 CPU 最大值自动探测，兼容多核设备
+#### 测试报告（停止监控后弹出）
+| 标签页 | 内容 |
+|---|---|
+| **顶部结论卡片** | CPU / 内存 / 帧率 + 与基线的对比 + 自动结论（如「内存疑似泄漏」） |
+| **趋势曲线** | 多指标叠加，可叠加上次基线虚线 |
+| **线程占用** | **按角色聚合**（渲染/音视频解码/GC/IPC/线程池/业务 SDK…），也可切回按线程 |
+| **帧时间分布** | 直方图 + 16.7ms(60fps) / 33.3ms(30fps) 预算线 |
+| **原始数据** | 逐次采样明细表 |
+
+其它能力：**内存泄漏自动检测**（PSS 线性回归算斜率，拟合度不够就不判）、
+**采样质量透明化**（报告显示实际间隔、有效率、是否降级、各项采集耗时）。
+
+#### 实现逻辑（v5.0 重写，8 个模块）
 ```
-> **采集解析只做「匹配失败就降级、不算错值」** —— 宁可显示空，也不给错数字。
-> 真机格式对账用 `tools/diagnose_perf.py`（见 5.3）。
+modules/perf_locator.py    PID 定位（pidof → ps → dumpsys 多级回退 + 合理性校验）
+modules/perf_parsers.py   纯函数解析器（/proc / gfxinfo / framestats / meminfo）
+modules/perf_collector.py  采集器（时间戳对齐、并行采集、不碰 UI）
+modules/perf_analysis.py   分析（自动结论 / 泄漏检测 / 线程角色归类）
+modules/perf_chart.py      纯 Canvas 图表（零依赖，128 点曲线 0.7ms）
+modules/perf_report.py     报告窗口 + HTML 导出
+modules/perf_baseline.py   基线存储与对比
+modules/perf_scenario.py   场景模板（阈值）
+```
+
+**重写前修掉的三个致命 bug**（均在真机 192.168.0.3 验证）：
+
+| Bug | 现象 | 根因 |
+|---|---|---|
+| **测错了进程** | CPU 恒为 0，线程表全是内核线程 | 该设备 `pidof <包名>` **忽略参数**，返回全部 155 个 PID → 取到 PID=1（init） |
+| **进程 CPU 少算 94%** | 进程 CPU 与线程表对不上 | `/proc/pid/stat`（线程组**总量** 12626）与 `task/pid/stat`（**单线程** 776）tid 相同被覆盖 |
+| **CPU 低估 38~56%** | 数值总是偏小 | 差分窗口把 `dumpsys` 的 1.5~3 秒阻塞算了进去 |
+
+**关键口径约定**：
+- **CPU 是单核百分比**（8 核可到 800%），与系统设置「占总 CPU」口径不同
+- **无渲染活动时 FPS 记 `None`**（显示 `--`），不用 0 冒充真实测得值
+- **卡顿率是窗口内的真实值**：用「总数差分 + janky 百分比反推」，
+  而不是进程启动至今的累计百分比（那个数值几乎不变，毫无意义）
+- **history 存原始值**（可为 None），不复制旧值（会造出伪造的平坦段）
+- **CLK_TCK 恒用 100**（Android 内核 USER_HZ 常量），不用 `/proc/stat`
+  自增速率推算（adb 传输延迟不可对齐，实测能推出 115~135，反而算错）
+- **慢采集移出关键路径**：`dumpsys meminfo` / `framestats` 各用独立后台线程，
+  否则会把采样周期从 2s 拖到 3.5s，并污染 CPU 差分窗口
+
+> 采集解析只做「匹配失败就降级、不算错值」—— 宁可显示空，也不给错数字。
 
 ### 2.6 脚本运行模块（🔧 脚本运行）
 **功能**:
@@ -364,12 +401,14 @@ def require_device_connected(func):
 不再有游离的 `threading.Thread`。
 
 **UI 线程安全**：后台线程**不允许**直接碰 Tk 控件，也不允许直接调
-`root.after()`（主线程正忙、不进事件循环时会抛
-`main thread is not in main loop`）。机制是「队列 + 主线程定时泵」：
+`root.after()`（Tk 的 `after()` 只能在主线程调用；主线程正忙、不进
+事件循环时会抛 `main thread is not in main loop`）。机制是
+「**队列 + 主线程常驻泵**」：
 
 ```
-后台线程  →  只往 queue.Queue 塞 callable
-主线程    →  20ms 定时器取出批量执行（app._run_in_ui）
+后台线程  →  只往 queue.Queue 塞 callable，绝不碰 after
+主线程    →  常驻泵每 50ms 醒一次，批量取出执行
+             （app._start_ui_pump / app._run_in_ui）
 ```
 
 `update_status()` / `_update_operation_status()` 自带线程判断，
@@ -377,6 +416,35 @@ def require_device_connected(func):
 
 > 之前散落着 100+ 处后台线程直调 `update_status()`、60+ 处后台线程
 > 直调 `root.after()`，现已全部收口。
+
+#### ⚠️ v5.1 修复的架构缺陷（血泪教训）
+
+旧设计是「**谁投递谁 `after(20, pump)` 一次**」。这个设计有个致命前提：
+**调用必须发生在主线程**。一旦某功能的 `_run_in_ui` 全部来自后台线程
+（如性能采集），就会：
+
+```
+后台线程调 root.after → 抛 "main thread is not in main loop"
+                      → 异常被 except 吞掉
+                      → 队列永远不被消费
+                      → 后台在采集，界面一动不动，且没有任何报错
+```
+
+表现就是「点了开始监控，指标卡全是 `--`，停止后报告里却有数据」。
+其它功能没暴露，是因为它们的 `_run_in_ui` 大多在主线程触发。
+
+**两条铁律**：
+
+1. **常驻泵必须在主线程启动**（`_setup_gui` 里调 `_start_ui_pump()`），
+   后台线程只管往队列塞东西。
+2. **`_run_in_ui(func)` 只接受一个 callable 参数**。要带参数就用 lambda
+   绑定：`app._run_in_ui(lambda snap=snapshot: cb(snap))`。
+   传两个参数会 TypeError，若被 `except` 吞掉同样是静默失效。
+
+> **凡是 catch 之后既不重试也不降级的，至少要 `logging.warning`**，
+> 并且必须有一条断言测试覆盖「回调真的被执行了」。
+> 静默吞掉的异常 = 永久的 bug。
+
 
 ### 4.5 多设备支持
 IP 下拉框统一显示 USB 序列号和网络 IP，`build_adb_command_with_device()` 为命令自动添加 `-s` 参数。
@@ -440,9 +508,17 @@ D://tool//python//python.exe tools\lint.py --strict  # 有新增问题就返回�
 ### 5.3 性能监控真机诊断
 ```bat
 D://tool//python//python.exe tools\diagnose_perf.py com.你的包名
+D://tool//python//python.exe tools\diagnose_perf.py com.你的包名 192.168.0.3:5555
 ```
 采集各条命令的**原始输出**并打印每个解析器的结果，拿回来对账用
 （确认 PSS / 卡顿率 / CPU% 在你的机型上是否解析正确）。
+
+输出会直接告诉你几件关键的事：
+- `ProcessLocator` 定位到哪个 PID，以及**该设备的 `pidof` 是否可信**
+- **进程级 jiffies vs 线程表求和**的差值（差值应等于主线程自己的量）
+- 10 秒窗口的**实测 CPU%**
+- `nproc` / `getconf` 是否存在（不存在会自动回退）
+- `framestats` 是否可用（不可用会降级到累计帧数差分）
 
 ---
 
@@ -601,7 +677,7 @@ adb shell am broadcast -a ADB_INPUT_TEXT --es msg "你好"
 - 默认分支：`test_about`
 - 开发分支：`new_view`（界面重构 + 新功能）
 - 提交信息：使用中文，描述清晰
-- **提交前跑 `check.bat`**（lint + 7 套单元测试），任一步失败不提交
+- **提交前跑 `check.bat`**（lint + 10 步检查，含 8 套单元测试 + 编译），任一步失败不提交
 - ⚠️ `.bat` 文件必须是 **GBK 编码** —— cmd.exe 按 ANSI 解码 UTF-8 会把命令行拆散，
   emoji 也编不进 GBK
 
