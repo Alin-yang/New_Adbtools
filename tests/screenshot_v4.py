@@ -163,5 +163,92 @@ def shoot_all(theme):
 
 shoot_all('dark')
 shoot_all('light')
+
+
+# ── 性能报告窗口截图 ────────────────────────────────────────────
+def _fake_session():
+    """造一份有内容的会话数据（不依赖真机，图形更丰富）"""
+    import random
+    random.seed(7)
+    history = []
+    t = 0
+    for i in range(60):
+        t += 2
+        cpu = 30 + 18 * (i / 60) + random.randint(-6, 6)
+        pss = 220 + i * 1.3 + random.randint(-3, 3)
+        fps = 58 if i % 17 else 22
+        jank = 0.4 if i % 17 else 14.0
+        history.append({
+            'ts': f'15:{t // 60:02d}:{t % 60:02d}',
+            'cpu': round(cpu, 2), 'pss': round(pss, 1),
+            'rss': round(pss + 90, 1), 'java': round(pss * 0.4, 1),
+            'native': round(pss * 0.3, 1), 'fps': fps, 'jank': jank,
+        })
+    durations = [8.1] * 40 + [12.5] * 25 + [17.8] * 15 + [24.0] * 8 + [45.2] * 4
+    threads = [
+        {'tid': 28055, 'name': 'PumaProgMgr', 'cur': 18.5, 'avg': 16.2, 'peak': 24.1},
+        {'tid': 28068, 'name': 'gala.SSDPSS/', 'cur': 14.2, 'avg': 13.1, 'peak': 19.8},
+        {'tid': 27700, 'name': 'HeapTaskDaemon', 'cur': 9.6, 'avg': 8.4, 'peak': 13.2},
+        {'tid': 28933, 'name': 'Thread-2327', 'cur': 7.1, 'avg': 6.2, 'peak': 10.4},
+        {'tid': 27947, 'name': 'apm_tracker', 'cur': 5.3, 'avg': 4.8, 'peak': 7.1},
+        {'tid': 27741, 'name': 'CurlMultiHandle', 'cur': 3.8, 'avg': 3.2, 'peak': 5.6},
+        {'tid': 27742, 'name': 'QtpEngine', 'cur': 2.4, 'avg': 2.1, 'peak': 3.9},
+        {'tid': 27698, 'name': 'FinalizerDaemon', 'cur': 1.6, 'avg': 1.2, 'peak': 2.4},
+        {'tid': 27769, 'name': 'T-log', 'cur': 1.1, 'avg': 0.9, 'peak': 1.8},
+    ]
+    stats = {
+        'cpu': {'cur': 48.3, 'avg': 41.2, 'peak': 62.7, 'p95': 58.4, 'p05': 26.1},
+        'pss': {'cur': 295.4, 'avg': 258.1, 'peak': 302.8, 'p95': 298.6, 'p05': 218.4},
+        'rss': {'cur': 385.2, 'avg': 348.0, 'peak': 392.6, 'p95': 388.4, 'p05': 308.1},
+        'java': {'cur': 118.2, 'avg': 103.3, 'peak': 121.0, 'p95': 119.5, 'p05': 87.4},
+        'native': {'cur': 88.6, 'avg': 77.4, 'peak': 90.8, 'p95': 89.7, 'p05': 65.5},
+        'fps': {'cur': 58.0, 'avg': 55.2, 'peak': 60.0, 'p95': 60.0, 'p05': 22.0},
+        'jank': {'cur': 2.1, 'avg': 3.4, 'peak': 16.8, 'p95': 14.2, 'p05': 0.3},
+        'p95_frame': {'cur': 18.6, 'avg': 16.2, 'peak': 24.0, 'p95': 21.3, 'p05': 12.8},
+        'p99_frame': {'cur': 32.4, 'avg': 28.1, 'peak': 45.2, 'p95': 38.6, 'p05': 18.4},
+        'alert': False, 'threads': threads,
+        'thread_sum': sum(t['cur'] for t in threads),
+        'sample_count': 60, 'elapsed': 120.0, 'pid': 27690, 'pids': [27690],
+        'mode': 'proc',
+        'quality': {'ok_points': 60, 'fail_points': 0, 'total_points': 60,
+                    'success_rate': 100.0, 'interval_actual': 2.1,
+                    'interval_set': 2.0,
+                    'costs': {'proc': 0.42, 'gfxinfo': 1.1, 'meminfo': 1.6},
+                    'degraded': False, 'mode': 'proc', 'clk_tck': 100,
+                    'clk_tck_estimated': False, 'cpu_max': 400.0},
+    }
+    session = {'package': 'com.gitvdemo.video', 'pid': 27690, 'stats': stats,
+               'history': history,
+               'frame_samples': [{'ts': h['ts'], 'durations': durations,
+                                  'jank_pct': h['jank']} for h in history],
+               'quality': stats['quality'], 'scenario': 'video'}
+    from modules import perf_analysis as A
+    session['conclusions'] = A.analyze(session)
+    return session
+
+
+from modules.perf_report import PerfReportWindow
+
+for _theme in ('dark', 'light'):
+    app._ui_theme.set_theme(_theme)
+    root.update_idletasks()
+    root.update()
+    _win = PerfReportWindow(app, _fake_session())
+    _win.win.lift()
+    _win.win.attributes('-topmost', True)
+    for _ in range(4):
+        root.update_idletasks()
+        root.update()
+    for _idx, _name in enumerate(['trend', 'threads', 'frames', 'raw']):
+        _win.nb.select(_idx)
+        for _ in range(4):
+            root.update_idletasks()
+            root.update()
+        time.sleep(0.25)
+        root.update()
+        _hwnd = user32.GetParent(_win.win.winfo_id()) or _win.win.winfo_id()
+        grab(f'report_{_theme}_{_name}.png')
+    _win.win.destroy()
+
 root.destroy()
 print("done")

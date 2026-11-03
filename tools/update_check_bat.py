@@ -1,4 +1,4 @@
-"""把 v4 布局测试加进 check.bat（GBK 编码，CRLF 行尾）
+"""更新 check.bat：加入 v4 性能测试，保持 GBK + CRLF
 
 check.bat 必须保持 GBK 编码 —— cmd.exe 按 ANSI(GBK) 解码，
 UTF-8 会把命令行拆散导致脚本全坏。
@@ -15,27 +15,25 @@ BAT = os.path.join(ROOT, 'check.bat')
 with io.open(BAT, encoding='gbk') as f:
     src = f.read()
 
-# 1) 在终端搜索测试之后插入 v4 布局测试
-old = (
-    'echo.\n'
-    'echo [8/8] 终端搜索功能测试\n'
-    '"%PYTHON%" tests\\test_log_search.py || set FAILED=1\n'
-)
-new = (
-    'echo.\n'
-    'echo [8/9] 终端搜索功能测试\n'
-    '"%PYTHON%" tests\\test_log_search.py || set FAILED=1\n'
-    '\n'
-    'echo.\n'
-    'echo [9/9] v4 工作台布局测试\n'
-    '"%PYTHON%" tests\\test_layout_v4.py || set FAILED=1\n'
-)
-if 'test_layout_v4.py' not in src:
+# 1) 旧版性能解析器测试 → 换成 v4 版（测的是重写后的新模块）
+src = src.replace(
+    'echo [7/9] 性能监控解析器测试\n'
+    '"%PYTHON%" tests\\test_perf_parsers.py || set FAILED=1',
+    'echo [7/10] 性能监控 v4 解析与分析测试\n'
+    '"%PYTHON%" tests\\test_perf_v4.py || set FAILED=1')
+
+# 2) 步骤数 9 → 10
+src = re.sub(r'\[(\d)/9\]', r'[\1/10]', src)
+
+# 3) 在最后一步后追加新测试（如果还没有）
+if 'test_perf_v4.py' not in src:
+    old = ('echo [9/10] v4 工作台布局测试\n'
+           '"%PYTHON%" tests\\test_layout_v4.py || set FAILED=1\n')
+    new = old + ('\necho.\n'
+                 'echo [10/10] 性能监控 v4 解析与分析测试\n'
+                 '"%PYTHON%" tests\\test_perf_v4.py || set FAILED=1\n')
     assert src.count(old) == 1, src.count(old)
     src = src.replace(old, new)
-
-# 2) 步骤编号统一改成 /9
-src = re.sub(r'\[(\d)/8\]', r'[\1/9]', src)
 
 # 写回：GBK + CRLF
 out = src.replace('\r\n', '\n').replace('\n', '\r\n')

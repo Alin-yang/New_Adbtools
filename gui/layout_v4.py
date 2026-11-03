@@ -920,11 +920,39 @@ class LayoutV4:
         self.app.perf_status_label = self._label(ctrl_row, text="● 未开始", fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, FS_MD, 'bold'))
         self.app.perf_status_label.pack(side=tk.RIGHT)
 
+        # ── 场景选择（决定关注指标与告警阈值）────────────────────
+        #    Combobox 显示场景名，内部用 key；用 <<ComboboxSelected>> 映射。
+        scenario_row = tk.Frame(content, bg=self.theme.color('bg_app'))
+        scenario_row.pack(fill=tk.X, pady=(8, 0))
+        self.theme.register(scenario_row, 'canvas')
+
+        self._label(scenario_row, text="场景", fg_key='fg_dim',
+                    bg_key='bg_app', font=(FONT_UI, FS_MD)).pack(
+            side=tk.LEFT, padx=(0, 6))
+
+        from modules import perf_scenario as _scn
+        self._scn_names = list(_scn.SCENARIOS.keys())
+        self._scn_labels = [_scn.SCENARIOS[k].name for k in self._scn_names]
+        self.app.perf_scenario_var = tk.StringVar(value=self._scn_labels[0])
+        self._scn_combo = ttk.Combobox(
+            scenario_row, textvariable=self.app.perf_scenario_var,
+            values=self._scn_labels, width=12, font=(FONT_UI, FS_MD),
+            state="readonly", style='App.TCombobox')
+        self._scn_combo.pack(side=tk.LEFT, padx=(0, 8))
+        self._scn_combo.bind('<<ComboboxSelected>>', self._on_scenario_changed)
+
+        self.app.perf_scenario_label = self._label(
+            scenario_row, text="", fg_key='fg_dim', bg_key='bg_app',
+            font=(FONT_UI, FS_SM), anchor=tk.W)
+        self.app.perf_scenario_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
         # 导出与状态行
         export_row = tk.Frame(content, bg=self.theme.color('bg_app'))
         export_row.pack(fill=tk.X, pady=(8, 0))
         self.theme.register(export_row, 'canvas')
 
+        ttk.Button(export_row, text="查看报告", command=self.app.open_perf_report,
+                   style='Primary.TButton').pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(export_row, text="单次快照", command=self.app.get_performance_snapshot,
                    style='Secondary.TButton').pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(export_row, text="导出 CSV", command=self.app.export_performance_csv,
@@ -1056,6 +1084,29 @@ class LayoutV4:
         self._paint_tree_tags(self.app.perf_thread_tree)
 
         return holder
+
+    def _on_scenario_changed(self, event=None):
+        """场景切换：更新提示文案与内部 key"""
+        from modules import perf_scenario as _scn
+        label = self.app.perf_scenario_var.get()
+        key = 'general'
+        for k, name in zip(self._scn_names, self._scn_labels):
+            if name == label:
+                key = k
+                break
+        self.app.perf_scenario_key = key
+        # 立即把新阈值推给采集器（监控中也能生效）
+        try:
+            self.app.apply_perf_scenario(key)
+        except Exception:
+            pass
+        scn = _scn.get(key)
+        self.app.perf_scenario_label.configure(text=scn.advice)
+        try:
+            self.app.update_status(
+                f"🎯 场景已切换：{scn.name} —— {scn.desc}", True, "info")
+        except Exception:
+            pass
 
     def _paint_tree_tags(self, tree, has_alert=False):
         """表格斑马纹 / 高亮行的配色"""

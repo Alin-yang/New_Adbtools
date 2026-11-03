@@ -34,7 +34,14 @@ New_Adbtools/
 │   ├── __init__.py
 │   ├── device_query.py          # 设备查询统一入口（6 个查询函数的实现都在这）
 │   ├── screen_mirror.py         # 投屏管理（scrcpy 封装）
-│   └── performance_monitor.py   # 性能监控（CPU/内存/FPS/卡顿率）
+│   ├── perf_locator.py          # 性能：PID 定位（多级回退 + 校验）
+│   ├── perf_parsers.py          # 性能：纯函数解析器（/proc/gfxinfo/framestats）
+│   ├── perf_collector.py        # 性能：采集器（时间戳对齐，不碰 UI）
+│   ├── perf_analysis.py         # 性能：自动结论 / 泄漏检测 / 线程角色归类
+│   ├── perf_chart.py            # 性能：纯 Canvas 图表（零依赖）
+│   ├── perf_report.py           # 性能：报告窗口 + HTML 导出
+│   ├── perf_baseline.py         # 性能：基线存储与对比
+│   └── perf_scenario.py         # 性能：场景模板（阈值）
 ├── tools/
 │   ├── scrcpy/                  # scrcpy 工具集（scrcpy.exe/adb.exe/各类 DLL）
 │   ├── lint.py                  # 零依赖代码质量检查（死代码/危险模式）
@@ -55,6 +62,7 @@ New_Adbtools/
 │   ├── measure_tabs_vertical.py         # 各 Tab 纵向空白量化
 │   ├── test_log_search.py               # 终端搜索/过滤功能测试（v3）
 │   ├── test_layout_v4.py                # v4 布局（主题/导航/终端/契约）
+│   ├── test_perf_v4.py                  # 性能 v4（口径分离/卡顿率/泄漏检测…）
 │   ├── screenshot_v4.py                 # v4 自动截图（深/浅两套）
 │   └── verify_install_real_device.py    # 真机验证安装判定（需 adb）
 ├── ADBTool.spec                 # PyInstaller 打包配置（onefile）
@@ -598,7 +606,62 @@ adb shell am broadcast -a ADB_INPUT_TEXT --es msg "你好"
 
 ## 十、版本历史
 
-### v4.2（当前版本）—— 顶栏精简 + 包名框加宽
+### v5.0（当前版本）—— 性能监控模块完全重写 + 测试报告
+用户反馈「性能测试的采集方式和数据结果都不行」，要求全改。排查后确认
+**旧实现有三个致命 bug**，数据基本是错的，本版全部重写。
+
+#### 🔴 修掉的三个致命 bug（均已在真机 192.168.0.3 验证）
+| Bug | 现象 | 根因 | 修复 |
+|-----|------|------|------|
+| **测错了进程** | CPU 恒为 0，线程表全是内核线程 | 小米盒子 Android 6 的 `pidof <包名>` **忽略参数**，返回全部 155 个 PID → 取到 PID=1（init） | 新增 `perf_locator.py`：多级回退（pidof → ps → dumpsys）+ 合理性校验 |
+| **进程 CPU 少算 94%** | 进程 CPU 与线程表对不上 | `/proc/pid/stat`（线程组**总量**）与 `/proc/pid/task/pid/stat`（**单线程**）tid 相同，覆盖式赋值后取到主线程的值 | `perf_parsers.parse_proc_snapshot` 按 cat 的参数顺序**分离两种口径** |
+| **CPU 系统性低估 38~56%** | 数值总是偏小 | `_diff_cpu` 的 `now` 取在 `dumpsys` 阻塞**之后**，dumpsys 的 1.5~3 秒被算进了差分窗口 | 采集点自带**读取完成时刻**时间戳；dumpsys 采集移出关键路径 |
+
+真机对照（MiBOX4 / com.gitvdemo.video / pid 27690）：
+```
+/proc/27690/stat             合计=12626   ← 线程组总量（进程真实 CPU）
+/proc/27690/task/27690/stat  合计=  776   ← 仅主线程
+                             差值 11850 = 其它 203 个线程的 CPU
+→ 旧实现取到的正是 776：进程 CPU 只算了 6%
+```
+
+#### 🆕 新增：测试结束弹出结果报告
+- **顶部结论卡片**：CPU / 内存 / 帧率 + **与基线对比** + 自动结论
+- **四个标签页**：
+  - 趋势曲线（可切指标、可叠加上次基线）
+  - 线程占用（**按角色聚合**：渲染/音视频解码/GC/IPC/线程池…）
+  - 帧时间分布（直方图 + 16.7ms/33.3ms 预算线）
+  - 原始数据（表格）
+- **导出 HTML 报告**（自包含内联 SVG，可直接发给同事）/ CSV
+- **基线对比系统**：自动存快照，可与任意一次历史对比
+
+#### 🆕 新增：其它能力
+- **场景化阈值**（视频播放/界面流畅/内存体检/省电/启动/通用）——
+  不同场景「什么算超标」不一样，不再写死 80%/800MB
+- **内存泄漏自动检测**：PSS 线性回归算斜率（MB/min），拟合度不够就不判
+- **采样质量透明化**：报告里显示实际间隔、有效率、是否降级、各项采集耗时
+- **无渲染活动可表达**：帧数差分为 0 时 FPS 记 None（显示 `--`），
+  不用 0 冒充真实测得值（0 会被误读成"应用卡死"）
+- **卡顿率是窗口内的真实值**：用「总数差分 + janky 百分比反推」算，
+  而不是直接用进程启动至今的累计百分比（那个数值几乎不变，毫无意义）
+
+#### 📁 模块拆分（职责分离）
+```
+modules/perf_locator.py    PID 定位（多级回退 + 校验）
+modules/perf_parsers.py   纯函数解析器（/proc / gfxinfo / framestats / meminfo）
+modules/perf_collector.py  采集器（时间戳对齐、并行采集、不碰 UI）
+modules/perf_analysis.py   分析（自动结论 / 泄漏检测 / 线程角色归类）
+modules/perf_chart.py      纯 Canvas 图表（零依赖，128 点曲线 0.7ms）
+modules/perf_report.py     报告窗口 + HTML 导出
+modules/perf_baseline.py   基线存储与对比
+modules/perf_scenario.py   场景模板
+```
+旧模块 `modules/performance_monitor.py` 已删除。
+
+#### 🧪 测试
+新增 `tests/test_perf_v4.py`（60+ 断言），把每个真机验证过的行为固化成回归断言。
+
+### v4.2 —— 顶栏精简 + 包名框加宽
 - 🚫 **去掉重复的终端折叠按钮**
   - 顶栏的「终端 ▸」改为**只在终端折叠后出现**（常态彻底不占横向空间）
   - 终端面板标题栏里的「⌄」负责收起，顶栏那个负责展开 —— 职责不同，不是重复
@@ -728,4 +791,4 @@ GitHub：https://github.com/Alin-yang/New_Adbtools
 ---
 
 **最后更新**: 2026-10-28
-**文档版本**: v4.2
+**文档版本**: v5.0

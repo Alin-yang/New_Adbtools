@@ -27,8 +27,11 @@ TARGETS = [
     'cache_manager.py', 'adaptive_cache.py', 'main.py',
     'gui/layout_modern.py', 'gui/layout_v4.py', 'gui/theme.py',
     'gui/win_render.py',
-    'modules/performance_monitor.py', 'modules/screen_mirror.py',
-    'modules/device_query.py',
+    'modules/screen_mirror.py', 'modules/device_query.py',
+    'modules/perf_locator.py', 'modules/perf_parsers.py',
+    'modules/perf_collector.py', 'modules/perf_analysis.py',
+    'modules/perf_chart.py', 'modules/perf_report.py',
+    'modules/perf_baseline.py', 'modules/perf_scenario.py',
 ]
 
 # 反射调用白名单：这些名字是靠 getattr(app, "名字") 绑定的

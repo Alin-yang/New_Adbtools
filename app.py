@@ -32,7 +32,10 @@ from config import Config
 from cache_manager import cache_manager
 import concurrent.futures
 from device_monitor import DeviceStatusManager
-from modules.performance_monitor import PerformanceMonitor
+from modules.perf_collector import PerfCollector
+from modules import perf_analysis as perf_analysis
+from modules import perf_baseline as perf_baseline
+from modules import perf_scenario as perf_scenario
 
 # 配置日志输出（使用轮转日志处理器）
 from logging.handlers import RotatingFileHandler
@@ -323,8 +326,13 @@ class ADBToolApp:
         self._history_save_timer = None
         self._pending_history_save = False
         
-        # 性能监控器
-        self.performance_monitor = PerformanceMonitor(self)
+        # 性能监控器（v4 重写版：时间戳对齐 + 口径分离 + 多级 PID 定位）
+        self.performance_monitor = PerfCollector(
+            self,
+            device=self.get_ip_address(),
+            update_callback=self._update_performance_ui)
+        # 性能场景（决定关注指标与告警阈值）
+        self.perf_scenario_var = tk.StringVar(value='general')
 
     def _load_all_history_async(self):
         """异步加载所有历史记录（合并 IP 和 pkg 历史）"""
@@ -4863,6 +4871,9 @@ class ADBToolApp:
                     interval = 2
 
             self._hide_perf_dropdown()
+            # 场景模板决定告警阈值（视频播放和界面流畅的标准不一样）
+            self.performance_monitor.set_scenario(
+                self._current_perf_scenario().key)
             self.performance_monitor.update_callback = self._update_performance_ui
             self.performance_monitor.start(package_name, interval)
             self._set_perf_status(True)
@@ -4872,7 +4883,12 @@ class ADBToolApp:
             self.update_status(f"✗ 启动性能监控失败: {str(e)}", False)
 
     def stop_performance_monitor(self):
-        """停止性能监控（停止后自动落盘一份 CSV，避免忘记导出丢失数据）"""
+        """停止性能监控
+
+        停止后：
+        1. 自动落盘一份 CSV（避免忘记导出丢失数据）
+        2. 生成会话数据并**弹出测试报告**（趋势曲线 / 线程占用 / 结论）
+        """
         try:
             success = self.performance_monitor.stop()
             self._set_perf_status(False)
@@ -4887,11 +4903,79 @@ class ADBToolApp:
                 except Exception as e:
                     logging.error(f"[性能监控] 自动保存失败: {str(e)}", exc_info=True)
 
+                # 弹出结果报告
+                try:
+                    self._open_perf_report()
+                except Exception as e:
+                    logging.error(f"[性能监控] 报告弹出失败: {str(e)}", exc_info=True)
+
             return success
         except Exception as e:
             logging.error(f"[性能监控] 停止失败: {str(e)}", exc_info=True)
             self.update_status(f"✗ 停止性能监控失败: {str(e)}", False)
             return False
+
+    def _build_perf_session(self):
+        """把当前采集数据整理成「一次测试会话」
+
+        会话 = 统计快照 + 逐次采样 + 帧样本 + 自动结论
+        """
+        mon = self.performance_monitor
+        stats = mon.stats()
+        history = []
+        for row in mon.history:
+            history.append({
+                'ts': row[0], 'cpu': row[1], 'pss': row[2], 'rss': row[3],
+                'java': row[4], 'native': row[5], 'fps': row[6], 'jank': row[7],
+            })
+        session = {
+            'package': mon.package_name or '',
+            'pid': stats.get('pid'),
+            'stats': stats,
+            'history': history,
+            'frame_samples': list(getattr(mon, '_frame_samples', [])),
+            'quality': stats.get('quality', {}),
+            'scenario': getattr(self, 'perf_scenario_key', 'general'),
+        }
+        try:
+            session['conclusions'] = perf_analysis.analyze(session)
+        except Exception:
+            session['conclusions'] = []
+        return session
+
+    def _open_perf_report(self, baseline=None):
+        """弹出性能测试报告窗口"""
+        from modules.perf_report import PerfReportWindow
+        session = self._build_perf_session()
+        win = PerfReportWindow(self, session, baseline)
+        self._perf_report_window = win
+        return win
+
+    def open_perf_report(self):
+        """「查看报告」按钮入口"""
+        try:
+            if not self.performance_monitor.history:
+                self.update_status("⚠ 暂无采样数据，请先开始监控", False)
+                return
+            self._open_perf_report()
+        except Exception as e:
+            logging.error(f"[性能监控] 打开报告失败: {str(e)}", exc_info=True)
+            self.update_status(f"✗ 打开报告失败: {str(e)}", False)
+
+    def _current_perf_scenario(self):
+        """当前选中的场景（优先用布局层记录的 key）"""
+        key = getattr(self, 'perf_scenario_key', None)
+        if key:
+            return perf_scenario.get(key)
+        return perf_scenario.get('general')
+
+    def apply_perf_scenario(self, key: str):
+        """场景切换时把新阈值推给采集器（立即生效，不用重启监控）"""
+        self.perf_scenario_key = key
+        try:
+            self.performance_monitor.set_scenario(key)
+        except Exception:
+            pass
 
     def clear_performance_data(self):
         """清空性能统计数据"""
@@ -4949,7 +5033,7 @@ class ADBToolApp:
             else:
                 self._perf_thread_sort_col = col
                 self._perf_thread_sort_rev = (col != 'name')
-            threads = list(self.performance_monitor.stats.get('threads', []))
+            threads = list(self.performance_monitor.stats().get('threads', []))
             self._fill_thread_table(threads)
         except Exception as e:
             logging.debug(f"[性能监控] 排序失败: {e}")
@@ -5035,7 +5119,7 @@ class ADBToolApp:
         性能数据回调（引擎已调度到主线程）
 
         Args:
-            stats: PerformanceMonitor.stats 快照（指标聚合 + 线程列表 + 历史计数）
+            stats: PerfCollector.stats() 快照（指标聚合 + 线程列表 + 历史计数）
             status_msg: 非 None 表示状态消息（启动/停止/异常提示）
         """
         try:
@@ -5048,7 +5132,7 @@ class ADBToolApp:
                 mode_text = {'proc': '精确差分', 'cpuinfo': '降级模式',
                              'system': '系统整体'}.get(
                     stats.get('mode'), stats.get('mode') or '--')
-                duration = PerformanceMonitor._fmt_duration(stats.get('elapsed', 0))
+                duration = PerfCollector._fmt_duration(stats.get('elapsed', 0))
                 self.perf_pid_label.config(
                     text=(f"PID: {stats.get('pid') or '--'}   模式: {mode_text}   "
                           f"采样: {stats.get('sample_count', 0)} 次   时长 {duration}"))
@@ -5136,7 +5220,7 @@ class ADBToolApp:
 
             ts, cpu, pss, rss, java, native, fps, jank = history[-1]
             tags = ('last',)
-            if self.performance_monitor.stats.get('alert'):
+            if self.performance_monitor.stats().get('alert'):
                 tags = ('last', 'alert')
             tree.insert('', 0, tags=tags, values=(
                 ts,
