@@ -61,6 +61,19 @@ a = Analysis(
     hiddenimports=[
         'tkinterdnd2',
         'tkinterdnd2.TkinterDnD',
+        # ⚠️ 性能监控 v5 的新模块必须显式列出（与 ADBTool.spec 保持一致）：
+        #    `from modules import perf_scenario as S` 这类**包内导入**
+        #    PyInstaller 的静态分析有时抓不全，漏掉会在运行时才报
+        #    "No module named perf_scenario"。datas 里的 ('modules','modules')
+        #    只是把 .py 文件带过去，不等于被 PYZ 收录为可 import 模块。
+        'modules.perf_locator',
+        'modules.perf_parsers',
+        'modules.perf_collector',
+        'modules.perf_analysis',
+        'modules.perf_chart',
+        'modules.perf_report',
+        'modules.perf_baseline',
+        'modules.perf_scenario',
     ],
     hookspath=[],
     hooksconfig={},
