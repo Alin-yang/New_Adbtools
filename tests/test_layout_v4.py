@@ -135,7 +135,8 @@ check("顶栏元素未超出可用宽度", total_req <= avail,
 
 # ⚠️ 回归守护：包名框必须保持可读宽度。
 #    之前像素字号让控件变宽，包名框被压到 73px（完全看不出内容）。
-check("包名框宽度可读", app.pkg_combobox.winfo_width() >= 90,
+# ⚠️ 包名框要能显示**完整包名**（如 com.gitvdemo.video 这类较长串）
+check("包名框宽度可读", app.pkg_combobox.winfo_width() >= 170,
       f"width={app.pkg_combobox.winfo_width()}")
 check("设备框宽度可读", app.ip_combobox.winfo_width() >= 100,
       f"width={app.ip_combobox.winfo_width()}")
@@ -163,17 +164,27 @@ check("按钮文字未被截断", not truncated,
 
 # ── 5. 终端折叠 / 展开 ────────────────────────────────────
 check("终端默认展开", not lay._terminal_collapsed)
+# ⚠️ 顶栏的「终端 ▸」按钮只在**折叠后**出现：
+#    常态下它会占掉 ~78px，把包名框挤窄（包名要看全）。
+check("展开时顶栏无折叠按钮（不占包名框空间）",
+      not lay.collapse_btn.winfo_ismapped())
+
 lay._toggle_terminal()
 pump()
 check("可折叠终端", lay._terminal_collapsed)
 check("折叠后终端列宽归零",
       lay.root_frame.grid_columnconfigure(3).get('minsize') == 0,
       str(lay.root_frame.grid_columnconfigure(3).get('minsize')))
+check("折叠后顶栏出现展开入口（否则无法恢复）",
+      lay.collapse_btn.winfo_ismapped())
+
 lay._toggle_terminal()
 pump()
 check("可展开终端", not lay._terminal_collapsed)
 check("展开后终端列宽恢复",
       lay.root_frame.grid_columnconfigure(3).get('minsize') == Config.TERMINAL_WIDTH)
+check("展开后顶栏折叠按钮再次隐藏",
+      not lay.collapse_btn.winfo_ismapped())
 
 # ── 6. 主题切换 ───────────────────────────────────────────
 theme.set_theme('light')

@@ -382,8 +382,13 @@ class LayoutV4:
         self.theme.register(bar, 'canvas')
         self.topbar = bar
 
-        # ── 右侧：终端折叠 ────────────────────────────────────
-        # 先 pack RIGHT：它会占据右端，剩下的空间留给左侧上下文
+        # ── 右侧：终端折叠（仅在终端已折叠时出现）─────────────
+        # ⚠️ 常态**不占任何横向空间**：
+        #    pack(RIGHT) 会优先占位，把包名框挤窄（包名要能看全）。
+        #    所以展开状态下用 pack_forget 把它藏掉，
+        #    只有终端折叠后（工作区变宽、顶栏有富余）才显示出来做「恢复入口」。
+        #    终端面板自己的标题栏里也有一个「⌄」折叠按钮，两者功能不重复：
+        #    那个负责「收起」，这个负责「展开」。
         right = tk.Frame(bar, bg=self.theme.color('bg_app'))
         right.pack(side=tk.RIGHT, padx=8)
         self.theme.register(right, 'canvas')
@@ -392,8 +397,9 @@ class LayoutV4:
             right, text="终端 ▸", command=self._toggle_terminal,
             style='Ghost.TButton', width=7,
         )
-        self.collapse_btn.pack(side=tk.LEFT)
-        self._attach_tip(self.collapse_btn, "折叠/展开终端（Ctrl+B）")
+        # 初始不显示（终端默认展开）
+        self.collapse_btn.pack_forget()
+        self._attach_tip(self.collapse_btn, "展开终端（Ctrl+B）")
 
         # ── 设备上下文 ────────────────────────────────────────
         self._ctx_field(bar, '设备')
@@ -433,8 +439,11 @@ class LayoutV4:
         # ── 包名上下文 ────────────────────────────────────────
         self._ctx_field(bar, '包名')
 
+        # ⚠️ 包名框要能看**完整包名**（如 com.gitvdemo.video 之类很长），
+        #    所以给足宽度；顶栏的终端折叠按钮已改为折叠时才显示，
+        #    常态不占空间，这里可以把宽度让出来。
         self.app.pkg_combobox = ttk.Combobox(
-            bar, width=15, font=(FONT_UI, FS_MD), style='App.TCombobox')
+            bar, width=22, font=(FONT_UI, FS_MD), style='App.TCombobox')
         self.app.pkg_combobox.pack(side=tk.LEFT, padx=(0, 6))
         self.app.pkg_combobox['height'] = 10
         # app.py 里 pkg_entry 就是 pkg_combobox 的别名（历史遗留）
@@ -1278,18 +1287,27 @@ class LayoutV4:
         self.app.progress.pack_forget()
 
     def _toggle_terminal(self):
-        """折叠 / 展开终端"""
+        """折叠 / 展开终端
+
+        ⚠️ 顶栏的「终端 ▸」按钮只在**折叠后**出现：
+           常态下它会占掉 ~78px，把包名框挤窄（包名要看全）。
+           终端面板标题栏里的「⌄」负责收起，顶栏这个负责展开 ——
+           两个入口职责不同，不是重复。
+        """
         self._terminal_collapsed = not self._terminal_collapsed
 
         if self._terminal_collapsed:
             self.terminal.grid_remove()
             self.root_frame.grid_columnconfigure(3, weight=0, minsize=0)
-            self.collapse_btn.configure(text="终端 ◂")
+            # 折叠后才显示「展开」入口
+            self.collapse_btn.configure(text="终端 ▸")
+            self.collapse_btn.pack(side=tk.LEFT)
         else:
             self.terminal.grid()
             self.root_frame.grid_columnconfigure(
                 3, weight=0, minsize=Config.TERMINAL_WIDTH)
-            self.collapse_btn.configure(text="终端 ▸")
+            # 展开时收起入口（终端自己的「⌄」按钮就够了）
+            self.collapse_btn.pack_forget()
 
     # ================================================================
     # 终端辅助
