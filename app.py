@@ -1339,6 +1339,12 @@ class ADBToolApp:
         # 立即设置默认值和拖拽功能（不延迟）
         self._setup_post_components()
 
+        # ⚠️ 启动 UI 队列的**常驻泵**（必须在主线程）：
+        #    后台线程（如性能采集）投递的回调全靠它消费。
+        #    之前是「谁投递谁 after 一次」，一旦调用全来自后台线程
+        #    就彻底失效 —— 界面永远不刷新。
+        self._start_ui_pump()
+
         # 延迟加载非关键组件以提高启动速度（从 100ms 减少到 50ms）
         self.root.after(50, self._delayed_initialization)
 
@@ -1910,7 +1916,8 @@ class ADBToolApp:
         ⚠️ 不能直接用 root.after()：
         从后台线程调用 Tcl（after/insert/config…）在主线程正忙时不进事件循环时
         会抛 "main thread is not in main loop"，而且会阻塞后台线程。
-        所以改成：后台线程只把 callable 塞进队列，主线程的定时器负责取出执行。
+        所以改成：后台线程只把 callable 塞进队列，主线程的**常驻泵**
+        （_start_ui_pump 启动）负责取出执行。
         """
         try:
             self._ui_queue.put_nowait(func)
@@ -1919,18 +1926,67 @@ class ADBToolApp:
         self._schedule_ui_pump()
 
     def _schedule_ui_pump(self):
-        """安排主线程的 UI 队列泵（只调度一次）"""
-        if getattr(self, '_ui_pump_scheduled', False):
+        """确保 UI 队列泵已就位
+
+        ⚠️⚠️ Tk 的 after() **只能在主线程调用**。
+        后台线程调用会抛 "main thread is not in main loop"，
+        而异常一旦被吞掉，队列里的任务就**永远不会被消费** ——
+        表现为「后台明明在采集，界面却一直不刷新」。
+
+        所以这里只做两件事：
+        ① 常驻泵还没启动时，在主线程把它启动起来；
+        ② 已经启动就直接返回（后台线程只需往队列里塞东西）。
+        """
+        if getattr(self, '_ui_pump_started', False):
             return
-        self._ui_pump_scheduled = True
+        # 只有主线程能安全地启动 after 定时器
+        if threading.current_thread() is not threading.main_thread():
+            return
+        self._start_ui_pump()
+
+    def _start_ui_pump(self):
+        """主线程：启动**常驻**的 UI 队列泵
+
+        ⚠️ 必须在主线程启动（root.after 只能主线程调）。
+        没有它，后台线程投递的任务永远不会被执行。
+
+        之前的设计是「谁投递谁 after 一次」，但那依赖调用发生在主线程，
+        一旦全部来自后台线程（如性能采集）就彻底失效。
+        常驻泵没有这个前提依赖，更可靠。
+        """
+        if getattr(self, '_ui_pump_started', False):
+            return
+        self._ui_pump_started = True
+        self._ui_pump_depth = 0
+
+        def _tick():
+            # ⚠️ 递归深度保护：某些测试 mock 的 root.after() 会**立即**执行回调，
+            #    导致 _tick 无限递归直到栈溢出。真实 Tk 不会这样，
+            #    但这里加个保险，避免任何 mock 环境把程序搞崩。
+            depth = getattr(self, '_ui_pump_depth', 0)
+            if depth > 3:
+                self._ui_pump_started = False
+                return
+            self._ui_pump_depth = depth + 1
+            try:
+                self._pump_ui_queue()
+            except Exception:
+                logging.debug("[UI 队列] 常驻泵异常", exc_info=True)
+            finally:
+                self._ui_pump_depth = depth
+            # 继续排下一次（常驻，直到窗口关闭）
+            try:
+                self.root.after(50, _tick)
+            except Exception:
+                self._ui_pump_started = False
+
         try:
-            self.root.after(20, self._pump_ui_queue)
+            self.root.after(50, _tick)
         except Exception:
-            self._ui_pump_scheduled = False
+            self._ui_pump_started = False
 
     def _pump_ui_queue(self):
         """主线程：从队列取出 UI 操作批量执行"""
-        self._ui_pump_scheduled = False
         try:
             while True:
                 func = self._ui_queue.get_nowait()
@@ -1939,12 +1995,6 @@ class ADBToolApp:
                 except Exception:
                     logging.exception("[UI 队列] 执行失败")
         except queue.Empty:
-            pass
-        # 期间又来了新任务则继续排程
-        try:
-            if not self._ui_queue.empty():
-                self._schedule_ui_pump()
-        except Exception:
             pass
 
     def _update_status_safe(self, message, success: bool):
@@ -5133,8 +5183,21 @@ class ADBToolApp:
                              'system': '系统整体'}.get(
                     stats.get('mode'), stats.get('mode') or '--')
                 duration = PerfCollector._fmt_duration(stats.get('elapsed', 0))
+                pid = stats.get('pid')
+                # ⚠️ 定位不到进程时**明确说明原因**，而不是光显示「--」。
+                #    最常见的原因是目标应用还没启动 —— 用户看到满屏「--」
+                #    根本猜不到问题在哪。
+                if pid:
+                    pid_text = str(pid)
+                elif stats.get('sample_count', 0) >= 2:
+                    pid_text = '未找到进程'
+                else:
+                    pid_text = '--'
+                extra = ''
+                if not pid and stats.get('sample_count', 0) >= 2:
+                    extra = '（应用可能未启动）'
                 self.perf_pid_label.config(
-                    text=(f"PID: {stats.get('pid') or '--'}   模式: {mode_text}   "
+                    text=(f"PID: {pid_text}{extra}   模式: {mode_text}   "
                           f"采样: {stats.get('sample_count', 0)} 次   时长 {duration}"))
 
             # 指标卡（当前大字 + 均值/峰值小字）
@@ -5151,11 +5214,16 @@ class ADBToolApp:
                 cur, avg, peak = m.get('cur'), m.get('avg'), m.get('peak')
                 if cur is None:
                     cur_label.config(text="--")
-                    sub_label.config(text="均值 --   P95 --   峰值 --")
+                    # ⚠️ 必须与布局层的初始文本一致（两行）：
+                    #    6 张指标卡并排时每张只有 ~90px 宽，
+                    #    单行 "均值 --   P95 --   峰值 --" 会被截断成 "峰值 -"。
+                    sub_label.config(text="均值 --\n峰值 --")
                     continue
                 snapshot[key] = cur
                 cur_label.config(text=f"{cur:.1f}{unit}")
-                sub_label.config(text=f"均 {avg:.1f}  P95 {m.get('p95'):.1f}  峰 {peak:.1f}")
+                # 两行显示：均值 / 峰值（含 P95）
+                sub_label.config(text=(f"均 {avg:.1f}  P95 {m.get('p95'):.1f}\n"
+                                       f"峰 {peak:.1f}"))
 
                 # 阈值变色
                 # ⚠️ 颜色走主题系统（深/浅两套），不能写死十六进制

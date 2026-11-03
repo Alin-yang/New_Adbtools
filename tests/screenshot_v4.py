@@ -250,5 +250,98 @@ for _theme in ('dark', 'light'):
         grab(f'report_{_theme}_{_name}.png')
     _win.win.destroy()
 
+
+# ── 「监控进行中」截图（验证实时刷新在视觉上正常）─────────────────
+# ⚠️ 需要真机；没设备时跳过（截图脚本不能因为缺设备就失败）
+import subprocess
+_dev_ok = False
+try:
+    _out = subprocess.run('adb devices', shell=True, capture_output=True,
+                          timeout=15).stdout.decode('utf-8', 'ignore')
+    _devices = [l.split('\t')[0].strip() for l in _out.splitlines()
+                 if '\tdevice' in l]
+    _dev_ok = bool(_devices)
+except Exception:
+    _devices = []
+    _dev_ok = False
+
+if _dev_ok:
+    import time as _t
+    for _theme in ('dark', 'light'):
+        app._ui_theme.set_theme(_theme)
+        root.update_idletasks()
+        root.update()
+        lay.switch_nav('perf')
+        for _ in range(3):
+            root.update_idletasks()
+            root.update()
+        # 找一个**正在运行**的第三方应用
+        # ⚠️ 必须选正在运行的：应用没启动 → PID 定位失败 → 降级 cpuinfo
+        #    → cpuinfo 里也没有它的记录 → 界面全是「--」，截不到有效画面。
+        # 用 `ps` 直接看运行中的进程（比 pm list packages 准）。
+        _pkg = ''
+        _target_dev = ''
+        _sys = ('com.android.', 'com.google.android.', 'android.',
+                'com.qualcomm.', 'org.chromium.', 'com.mediatek.',
+                'com.svox.pico', 'com.cyanogen.')
+        for _dev in _devices:
+            try:
+                _ps = subprocess.run(
+                    f'adb -s {_dev} shell ps', shell=True,
+                    capture_output=True, timeout=25).stdout.decode('utf-8', 'ignore')
+            except Exception:
+                continue
+            _cands = []
+            for _l in _ps.splitlines():
+                _parts = _l.split()
+                if not _parts:
+                    continue
+                _last = _parts[-1]
+                # ⚠️ 两种 ps 输出格式都要兼容：
+                #    新版 Android：NAME = "1234/com.foo.bar"
+                #    老版 toybox（实测 Android 6）：NAME = "com.foo.bar"（无 PID 前缀）
+                _name = _last.split('/', 1)[1] if '/' in _last else _last
+                if not _name.startswith(('com.', 'net.', 'org.')):
+                    continue
+                if _name.startswith(_sys):
+                    continue
+                if _name not in _cands:
+                    _cands.append(_name)
+            if _cands:
+                _pkg = _cands[0]
+                _target_dev = _dev
+                break
+        if not _pkg:
+            print('未找到正在运行的第三方应用，跳过「监控中」截图')
+            continue
+        print(f'「监控中」截图使用设备 {_target_dev} 包名 {_pkg}')
+        try:
+            app.perf_package_entry.delete(0, tk.END)
+            app.perf_package_entry.insert(0, _pkg)
+            # 让采集器用找到的那台设备
+            try:
+                app.performance_monitor.device = _target_dev
+                app.performance_monitor.locator.device = _target_dev
+            except Exception:
+                pass
+            app.start_performance_monitor()
+            # 等到有 3 次采样
+            for _ in range(30):
+                _t.sleep(1)
+                root.update_idletasks()
+                root.update()
+                if app.performance_monitor.stats().get('sample_count', 0) >= 3:
+                    break
+            _t.sleep(0.6)
+            root.update_idletasks()
+            root.update()
+            grab(f'live_monitoring_{_theme}.png')
+            app.stop_performance_monitor()
+            for _ in range(3):
+                root.update_idletasks()
+                root.update()
+        except Exception as e:
+            print(f'live monitoring screenshot skipped: {e}')
+
 root.destroy()
 print("done")

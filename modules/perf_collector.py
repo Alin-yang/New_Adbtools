@@ -937,10 +937,15 @@ class PerfCollector:
         app = self.app
         if app is not None and hasattr(app, '_run_in_ui'):
             try:
-                app._run_in_ui(self.update_callback, snapshot)
+                # ⚠️ app._run_in_ui 只接受**一个** callable 参数。
+                #    直接传 (callback, snapshot) 会抛 TypeError，
+                #    而这里的 except 会把它吞掉 —— 结果是
+                #    「采到数据但界面永远不刷新」，且没有任何报错。
+                #    所以用 lambda 把 snapshot 绑进去。
+                app._run_in_ui(lambda snap=snapshot: self.update_callback(snap))
                 return
             except Exception as e:
-                logging.debug(f"[性能采集] UI 调度失败: {e}")
+                logging.warning(f"[性能采集] UI 调度失败: {e}")
                 return
         try:
             self.update_callback(snapshot)

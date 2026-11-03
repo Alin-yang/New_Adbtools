@@ -2,7 +2,7 @@
 
 用法: python tests/test_async_and_fixes.py
 """
-import sys, os, time, types, queue
+import sys, os, time, types, queue, threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -118,6 +118,7 @@ def make_stub(slow=2.0):
     s.run_adb_with_target = fake_adb
 
     for name in ('_run_in_ui', '_schedule_ui_pump', '_pump_ui_queue',
+                 '_start_ui_pump',
                  '_update_status_safe', 'run_in_background',
                  '_update_install_status', '_set_progress_mode', '_set_progress_value',
                  'kill_app_process', 'start_app', 'root_device', 'remount',
@@ -125,6 +126,27 @@ def make_stub(slow=2.0):
                  'get_package_path', 'open_factory_menu', 'send_text_input'):
         setattr(s, name, getattr(appmod.ADBToolApp, name).__get__(s))
     s.update_status = lambda msg, success, msg_type="normal": s.messages.append((msg, success))
+
+    # ⚠️ 必须给 stub 起一个**常驻 UI 泵**（真实 app 在 _setup_gui 里做）：
+    #    现在 _run_in_ui 只往队列塞东西，由主线程的常驻泵消费。
+    #    没有泵的话，后台线程投递的状态消息会被静默丢弃。
+    #    FakeRoot.after 是「立即执行」，会触发递归保护，所以这里用
+    #    一个独立的守护线程按固定节奏消费队列，行为更接近真实环境。
+    s._ui_pump_started = True
+    _pump_stop = {'stop': False}
+
+    def _stub_pump():
+        while not _pump_stop['stop']:
+            try:
+                s._pump_ui_queue()
+            except Exception:
+                pass
+            time.sleep(0.02)
+
+    _pump_thread = threading.Thread(target=_stub_pump, daemon=True,
+                                    name='StubUIPump')
+    _pump_thread.start()
+    s._stop_stub_pump = lambda: _pump_stop.__setitem__('stop', True)
     return s
 
 

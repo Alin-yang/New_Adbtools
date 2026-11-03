@@ -51,6 +51,10 @@ echo [9/10] v4 工作台布局测试
 "%PYTHON%" tests\test_layout_v4.py || set FAILED=1
 
 echo.
+echo [10/10] 性能实时刷新链路测试
+"%PYTHON%" tests\test_perf_live_refresh.py || set FAILED=1
+
+echo.
 echo ================================
 REM 必须显式 exit /b 0 或 1：
 REM "exit /b %%FAILED%%" 在 if 块里是解析时展开的，拿到的还是初始空值。

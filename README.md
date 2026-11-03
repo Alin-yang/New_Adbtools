@@ -63,6 +63,7 @@ New_Adbtools/
 │   ├── test_log_search.py               # 终端搜索/过滤功能测试（v3）
 │   ├── test_layout_v4.py                # v4 布局（主题/导航/终端/契约）
 │   ├── test_perf_v4.py                  # 性能 v4（口径分离/卡顿率/泄漏检测…）
+│   ├── test_perf_live_refresh.py        # 性能实时刷新链路（后台线程→UI 队列泵）
 │   ├── screenshot_v4.py                 # v4 自动截图（深/浅两套）
 │   └── verify_install_real_device.py    # 真机验证安装判定（需 adb）
 ├── ADBTool.spec                 # PyInstaller 打包配置（onefile）
@@ -606,7 +607,39 @@ adb shell am broadcast -a ADB_INPUT_TEXT --es msg "你好"
 
 ## 十、版本历史
 
-### v5.0（当前版本）—— 性能监控模块完全重写 + 测试报告
+### v5.1（当前版本）—— 修复实时刷新失效
+用户反馈「点开始监控后没有实时显示采集数据，只有点击停止后才从报告里体现」。
+排查发现是**架构级缺陷**，静默失败：
+
+#### 🔴 根因：UI 队列泵的线程模型错误
+```
+旧设计：谁投递谁 root.after(20, pump) 一次
+  ├─ Tk 的 after() 只能在【主线程】调用
+  ├─ 后台线程调用 → 抛 "main thread is not in main loop"
+  └─ 异常被 except 吞掉 → 队列永远不被消费
+      → 后台在采集，界面永远不刷新（且没有任何报错）
+```
+其它功能没暴露问题，是因为它们的 `_run_in_ui` 大多在主线程触发；
+**性能采集是纯后台线程驱动，100% 命中**。
+
+**修复**：主线程启动**常驻泵**（`_start_ui_pump`，50ms 一跳），
+后台线程只往队列里塞东西，不再碰 `after`。
+
+#### 顺带修掉的
+- `PerfCollector._publish` 用 `app._run_in_ui(callback, snapshot)` **两参数**调用，
+  而 `_run_in_ui` 只接受一个 callable → TypeError 被吞 → 同样静默失效。
+  改成 `lambda snap=snapshot: ...` 绑定。
+- 指标卡副标题：布局层是两行、UI 更新却写单行 → 窄卡片里被截断成「峰值 -」。
+  现在两边统一为两行。
+- 定位不到进程时，PID 标签明确显示「未找到进程（应用可能未启动）」，
+  而不是让用户对着满屏「--」猜原因。
+
+#### 🧪 新增回归测试
+`tests/test_perf_live_refresh.py`：守护后台线程投递必须被执行、
+`_publish` 的投递方式、副标题两行格式、mock 采集驱动 UI 刷新。
+`check.bat` 扩到 10 步。
+
+### v5.0 —— 性能监控模块完全重写 + 测试报告
 用户反馈「性能测试的采集方式和数据结果都不行」，要求全改。排查后确认
 **旧实现有三个致命 bug**，数据基本是错的，本版全部重写。
 
@@ -791,4 +824,4 @@ GitHub：https://github.com/Alin-yang/New_Adbtools
 ---
 
 **最后更新**: 2026-10-28
-**文档版本**: v5.0
+**文档版本**: v5.1
