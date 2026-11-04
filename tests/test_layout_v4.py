@@ -141,6 +141,29 @@ check("包名框宽度可读", app.pkg_combobox.winfo_width() >= 170,
 check("设备框宽度可读", app.ip_combobox.winfo_width() >= 100,
       f"width={app.ip_combobox.winfo_width()}")
 
+# ⚠️ 顶栏必须有「刷新设备列表」入口
+#    用户反馈「刷新功能怎么没有了」—— v4 重构时它只留在了设备控制面板里，
+#    顶栏（全局上下文区）没有了，而 v3 顶栏是有这个按钮的。
+check("顶栏有刷新按钮", hasattr(app, 'btn_refresh_top'))
+if hasattr(app, 'btn_refresh_top'):
+    _rb = app.btn_refresh_top
+    check("刷新按钮在顶栏可见", _rb.winfo_ismapped())
+    check("刷新按钮有文字（不是小图标）",
+          len(str(_rb.cget('text'))) >= 2, repr(_rb.cget('text')))
+    # 绑定的必须是 refresh_device_list（之前 v3 绑错过 show_device_info）
+    # ⚠️ ttk.Button 的 cget('command') 返回的是 Tcl 内部对象（一个数字），
+    #    拿不到 Python 函数 → 改为查布局源码里的绑定语句。
+    import io as _io
+    _src = _io.open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), 'gui', 'layout_v4.py'),
+        encoding='utf-8').read()
+    _bound_ok = ('command=self.app.refresh_device_list' in _src)
+    check("刷新按钮绑定 refresh_device_list（不是 show_device_info）",
+          _bound_ok and hasattr(app, 'refresh_device_list'))
+    # 刷新按钮不该把顶栏挤爆
+    check("刷新按钮宽度合理（<70px）", _rb.winfo_width() < 70,
+          f"width={_rb.winfo_width()}")
+
 # 所有按钮的文字都不能被截断（像素字号变宽后的常见问题）
 import tkinter.font as tkfont
 truncated = []

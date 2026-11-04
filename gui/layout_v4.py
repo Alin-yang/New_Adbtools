@@ -393,6 +393,18 @@ class LayoutV4:
         right.pack(side=tk.RIGHT, padx=8)
         self.theme.register(right, 'canvas')
 
+        # ── 刷新设备列表 ─────────────────────────────────────
+        # ⚠️ 用**文字「刷新」**而不是 `↻` 图标：
+        #    用户反馈「刷新功能怎么没有了」—— 30px 的图标按钮在深色
+        #    主题下太不显眼，等于没有。文字明确、一眼能认。
+        #    （压缩连接/断开按钮的 width 后腾出了足够空间）
+        self.app.btn_refresh_top = ttk.Button(
+            right, text="刷新", command=self.app.refresh_device_list,
+            style='TopSecondary.TButton', width=4,
+        )
+        self.app.btn_refresh_top.pack(side=tk.LEFT, padx=(0, 6))
+        self._attach_tip(self.app.btn_refresh_top, "刷新设备列表（重新扫描已连接设备）")
+
         self.collapse_btn = ttk.Button(
             right, text="终端 ▸", command=self._toggle_terminal,
             style='Ghost.TButton', width=7,
@@ -426,14 +438,18 @@ class LayoutV4:
         #    ⇄ / ⏻ 这类字符在「微软雅黑 UI」里字形缺失，会渲染成方块；
         #    文字虽然占宽一点，但用户一看就懂，不用悬停猜。
         #    宽度用 style 里的 padding 控制，不要用 width（那是字符数）。
+        # ⚠️ width=4 而不是默认：ttk.Button 的 width 单位是「字符数」，
+        #    默认 6 会让这两个只有两个字的按钮各占 108px —— 顶栏横向
+        #    空间紧张（只剩 ~40px），必须省出位置放「刷新」按钮。
+        #    文字实际宽约 26px < 4 字符宽，不会被截断。
         self.app.btn_connect_top = ttk.Button(
             bar, text="连接", command=self.app.connect_adb,
-            style='TopPrimary.TButton')
+            style='TopPrimary.TButton', width=4)
         self.app.btn_connect_top.pack(side=tk.LEFT, padx=(0, 4))
 
         self.app.btn_disconnect_top = ttk.Button(
             bar, text="断开", command=self.app.disconnect_adb,
-            style='TopSecondary.TButton')
+            style='TopSecondary.TButton', width=4)
         self.app.btn_disconnect_top.pack(side=tk.LEFT, padx=(0, 10))
 
         # ── 包名上下文 ────────────────────────────────────────

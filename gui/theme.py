@@ -461,6 +461,20 @@ class ThemeManager:
                               ('active', t['bg_hover'])],
                   foreground=[('active', t['fg'])])
 
+        # 顶栏图标按钮（刷新）：比 TopSecondary 更紧凑，
+        # 顶栏横向空间只剩几十像素，padding 每边省 1px 都有意义。
+        style.configure('TopIcon.TButton', background=t['btn'],
+                        foreground=t['btn_fg'], font=(FONT_UI, FS_LG),
+                        bordercolor=t['btn_border'],
+                        lightcolor=t['btn_border'],
+                        darkcolor=t['btn_border'], relief='flat',
+                        borderwidth=1, padding=(4, 2),
+                        focuscolor=t['btn_hover'])
+        style.map('TopIcon.TButton',
+                  background=[('pressed', t['btn_pressed']),
+                              ('active', t['btn_hover'])],
+                  foreground=[('active', t['fg'])])
+
         # 紧凑按钮（终端底部这类横向紧张的地方）
         # ⚠️ Action.TButton 的 padding(12,7) 在 340px 宽的终端里放不下两个，
         #    文字会被挤掉 —— 这里用更小的 padding。

@@ -257,6 +257,7 @@ class HangingProc:
 
     def __init__(self, lines):
         self._lines = list(lines)
+        self._i = 0
         self.returncode = None
         self.stdout = self
         self.terminated = False
@@ -268,6 +269,12 @@ class HangingProc:
         self._done = True
 
     def readline(self):
+        # ⚠️ 采集器用 readline() 循环读（不是 for-iter），
+        #    这里必须真的吐出那些行，否则读线程会立刻 EOF。
+        if self._i < len(self._lines):
+            line = self._lines[self._i]
+            self._i += 1
+            return line
         return ''
 
     def poll(self):

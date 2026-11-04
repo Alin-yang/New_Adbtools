@@ -679,7 +679,30 @@ adb shell am broadcast -a ADB_INPUT_TEXT --es msg "你好"
 
 ## 十、版本历史
 
-### v5.2（当前版本）—— 修复精简 ROM / 慢设备上的安装失败
+### v5.3（当前版本）—— 顶栏恢复「刷新」按钮 + 修复两处长期失败的测试
+用户反馈「刷新功能怎么没有了」—— v4 重构时把顶栏的刷新按钮删了，
+只剩设备控制面板里一个，用户找不到。v3 顶栏本来是有的。
+
+**改动**：
+- 顶栏右侧恢复「刷新」按钮（文字，不是小图标 —— 30px 的图标在深色主题下
+  根本不显眼，等于没有），带 tooltip「刷新设备列表（重新扫描已连接设备）」
+- 为腾出横向空间：**连接/断开按钮的 `width` 从默认 6 改成 4**
+  （ttk.Button 的 width 单位是「字符数」，默认 6 让这两个两字按钮各占 **108px**）
+  → 顶栏从「超宽 1px、包名框被挤到 149px」变成「余 95px、包名框 207px」
+- 新增 `TopIcon.TButton` 样式（顶栏图标按钮专用，更紧凑的 padding）
+
+**顺带修掉两处一直在失败的测试**（之前只看了 ALL PASS 计数，没看结论）：
+- `tests/test_core_regression.py` 引用了 v5.0 已删除的 `modules/performance_monitor.py`
+  → 改用 `modules/perf_parsers.py`
+- `tests/test_install_flow.py` 的 stub 缺 v5.1 新增的 `_start_ui_pump`，
+  且我加的同步 `_run_in_ui` 覆盖被后面的 `for` 循环覆盖回去
+  → 修正顺序（覆盖必须在绑定之后）+ stub 补全 v5.2 新增的方法
+
+**顺带修掉 `_run_pm_install` 的一个死循环**：stdout 关闭但进程未退出时，
+原代码直接 `continue` → 进程不退出就永远循环（占满 CPU）。
+现在改成 `process.wait(timeout=...)` 等它退出。
+
+### v5.2 —— 修复精简 ROM / 慢设备上的安装失败
 用户反馈安装 36MB APK 到康佳电视（Android 5.1.1）失败，日志里同时出现
 `Command timed out after 15 seconds`、`head: not found`、
 `remote Is a directory`，还重复传了两遍 36MB。真机排查后确认是**五个问题叠加**：
@@ -928,4 +951,4 @@ GitHub：https://github.com/Alin-yang/New_Adbtools
 ---
 
 **最后更新**: 2026-10-28
-**文档版本**: v5.2
+**文档版本**: v5.3

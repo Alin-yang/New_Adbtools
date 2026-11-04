@@ -194,7 +194,9 @@ check("分辨率 0 = 不缩放（不传 --max-size）", '--max-size' not in cmd0
 print()
 print("=" * 72)
 print("=== 7. 性能监控：PSS 在各 Android 版本都能解析 ===")
-from modules.performance_monitor import PerfParsers
+# ⚠️ v5.0 起性能模块已重写为 modules/perf_parsers.py，
+#    旧的 modules/performance_monitor.py 已删除。
+from modules import perf_parsers as PerfParsers
 a10 = """
  App Summary
            Java Heap:   12345

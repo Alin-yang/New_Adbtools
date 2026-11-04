@@ -78,7 +78,8 @@ class Config:
     # v5.1 = 修复实时刷新失效（UI 队列泵改为常驻，主线程启动）
     # v5.2 = 修复精简 ROM / 慢设备上的安装失败（busybox 回退、动态超时、
     #        pm install 心跳、Success 即时判定）
-    APP_VERSION = "5.2"
+    # v5.3 = 顶栏恢复「刷新」按钮 + 压缩连接/断开按钮宽度 + 修两处失效测试
+    APP_VERSION = "5.3"
 
     # 进度条配置
     PROGRESS_BAR_LENGTH = 150

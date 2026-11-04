@@ -81,14 +81,26 @@ def make_stub():
     s.get_ip_address = lambda: "192.168.0.26"
     s.messages = []
     s.update_status = lambda msg, success, msg_type="normal": s.messages.append((msg, success))
-    for name in ('_run_in_ui', '_schedule_ui_pump', '_pump_ui_queue',
+    for name in ('_run_in_ui', '_schedule_ui_pump', '_pump_ui_queue', '_start_ui_pump',
                  '_update_install_status', '_update_status_safe',
                  '_set_progress_mode', '_set_progress_value', '_show_progress', '_hide_progress',
                  '_install_with_retry', '_install_via_push_pm', '_run_pm_install',
                  '_run_adb_capture', '_install_via_adb_install', '_run_install_with_progress',
-                 '_check_remote_file_readable'):
+                 '_check_remote_file_readable', '_remote_size', '_remote_file_ready',
+                 '_install_on_device'):
         setattr(s, name, getattr(appmod.ADBToolApp, name).__get__(s))
     s._kill_process = appmod.ADBToolApp.__dict__['_kill_process'].__func__
+    # 静态方法要单独绑定（不是实例方法，__get__ 会拿到函数本身）
+    s._first_meaningful_line = appmod.ADBToolApp.__dict__['_first_meaningful_line'].__func__
+
+    # ⚠️⚠️ 这一段必须放在上面的 for 循环**之后** ——
+    #    v5.1 起 UI 队列由「主线程常驻泵」驱动，_schedule_ui_pump 会转调它。
+    #    stub 里没有真的常驻泵，所以让 _run_in_ui **同步消费队列** ——
+    #    否则 _schedule_ui_pump 看到 _ui_pump_started=True 就直接返回，
+    #    消息全堆在队列里没人消费（表现为 status_text 一片空白）。
+    s._ui_pump_started = True
+    s._run_in_ui = lambda func: (s._ui_queue.put_nowait(func),
+                                 s._pump_ui_queue())
     return s
 
 real_popen = subprocess.Popen
@@ -226,6 +238,11 @@ cmds4 = []
 
 def fake_popen4(cmd, **kw):
     cmds4.append(cmd)
+    # ⚠️ 顺序要紧：v5.2 起 pm install 也走 Popen，
+    #    必须先判 "pm install" —— 否则它会命中下面的 "install" 分支，
+    #    拿不到「pm 路径失败 → 回退 adb install」这个测试前提。
+    if "pm install" in cmd:
+        return FakeProc([], rc=1)      # pm 路径失败（设备拒绝）
     if "push" in cmd:
         return FakeProc(PUSH_LINES, rc=0)
     if "install" in cmd:

@@ -2625,8 +2625,13 @@ class ADBToolApp:
         out_queue: "queue.Queue" = queue.Queue()
 
         def _reader():
+            # ⚠️ 用 readline() 循环而不是 `for line in stdout`：
+            #    后者要求 stdout 支持迭代协议，测试的 FakeProc 不支持。
             try:
-                for line in process.stdout:
+                while True:
+                    line = process.stdout.readline()
+                    if not line:
+                        break
                     out_queue.put(line)
             except Exception:
                 pass
@@ -2651,9 +2656,19 @@ class ADBToolApp:
                 except queue.Empty:
                     got = ''
 
-                if got is None:          # 读取线程结束
+                if got is None:          # 读取线程结束（stdout 已关闭）
                     if process.poll() is not None:
                         break
+                    # ⚠️ stdout 关了但进程还活着 —— 等它退出（带超时）。
+                    #    直接 continue 会变成**死循环**（进程不退出时
+                    #    poll() 永远是 None），把 CPU 占满。
+                    try:
+                        process.wait(timeout=max(1.0, deadline - time.time()))
+                    except Exception:
+                        pass
+                    if process.poll() is not None:
+                        break
+                    time.sleep(0.1)
                     continue
 
                 if got:
