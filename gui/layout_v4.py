@@ -456,11 +456,15 @@ class LayoutV4:
         )
         self.app.btn_device_picker.pack(side=tk.LEFT, padx=(0, 5))
         self._attach_tip(self.app.btn_device_picker,
-                         "切换设备（列出在线设备，单击即切换）")
+                         "切换设备（列出在线设备，单击任意一行即可切换）")
 
         # 浮层实例：懒创建（第一次点按钮时才建）
+        # ⚠️ 宿主是 **root_frame（主窗口内的容器）**，不是独立的 Toplevel ——
+        #    Toplevel 是独立的 OS 顶层窗口，移动主窗口它纹丝不动，
+        #    用户会以为「弹窗卡住了」。挂在主窗口内部就会自动跟随。
         self.device_picker = DevicePicker(self.app, self.theme,
-                                          self.app.btn_device_picker)
+                                          self.app.btn_device_picker,
+                                          self.root_frame)
 
         # ⚠️ 连接/断开用**中文文字**而不是图标：
         #    ⇄ / ⏻ 这类字符在「微软雅黑 UI」里字形缺失，会渲染成方块；

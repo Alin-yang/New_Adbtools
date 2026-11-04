@@ -77,10 +77,32 @@ def main():
         root.update()
     picker = lay.device_picker
     check("浮层能打开", picker.is_open(),
-          picker.win.geometry() if picker.win else '')
+          picker.win.place_info() if picker.win else '')
 
-    # 4. 渲染了内容（渲染路径涉及 Canvas/Frame/主题注册）
+    # 4. 渲染了内容（渲染路径涉及 Canvas/主题注册）
     _out("       渲染条目数: " + str(len(picker._rows)))
+
+    # 4b. 浮层必须挂在主窗口内部（跟随移动，不是独立 Toplevel）
+    check("浮层是主窗口的子孙（跟随主窗口移动）",
+          str(picker.win).startswith(str(root)), str(picker.win))
+
+    # 4c. 整行都是点击热区（用户反馈「以为要点『可切换』」）
+    if picker._rows:
+        _dev0, _top0, _bot0 = picker._rows[0]
+        _hits = []
+        for _frac in (0.05, 0.5, 0.95):
+            _hits.append(picker._row_at(_top0 + (_bot0 - _top0) * _frac))
+        check("行内任意位置都命中同一行", all(h == 0 for h in _hits), _hits)
+
+    # 4d. 滚动性能（纯 Canvas，不能卡）
+    import time as _time
+    _t0 = _time.perf_counter()
+    for _ in range(30):
+        picker._canvas.yview_scroll(-1, 'units')
+        root.update()
+    _elapsed = (_time.perf_counter() - _t0) * 1000
+    check("30 次滚动耗时 < 200ms（纯 Canvas 不卡）", _elapsed < 200,
+          "%.1fms" % _elapsed)
 
     # 5. 点选切换
     picked = []
@@ -92,7 +114,8 @@ def main():
 
     app.select_device = _spy
     if picker._rows:
-        picker._on_pick(picker._rows[0][0])
+        _ev = type('E', (), {'y': picker._rows[0][1] + 5})()
+        picker._on_click(_ev)
         check("点选条目触发切换", len(picked) == 1, picked)
     else:
         _out("       (无在线设备，跳过点选测试)")
@@ -122,6 +145,16 @@ def main():
           "需求=%s 可用=%s" % (total_req, avail))
     check("包名框宽度可读", app.pkg_combobox.winfo_width() >= 170,
           "width=%s" % app.pkg_combobox.winfo_width())
+
+    # 8. 浮层宽度（用 place_info —— 浮层是 place 定位的，不是独立窗口）
+    # ⚠️ 必须在浮层**打开时**查：place_forget 后 place_info() 拿不到尺寸。
+    lay._toggle_device_picker()
+    for _ in range(3):
+        root.update_idletasks()
+        root.update()
+    _info = picker.win.place_info()
+    _width = int(_info.get('width') or 0)
+    check("浮层宽度为 360px", _width == 360, _info.get('width'))
 
     root.destroy()
 

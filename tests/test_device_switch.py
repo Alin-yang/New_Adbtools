@@ -330,16 +330,66 @@ check("浮层已打开", _picker.is_open())
 _rows = _picker._rows
 # 10.1.246.185 同时在「在线」和「历史」里 → 只应出现一次（去重是对的）
 check("浮层渲染 3 行（在线 1 + 历史 2，在线项已去重）", len(_rows) == 3, len(_rows))
-_texts = [r[2].cget('text') for r in _rows]
-check("在线设备排在最前", _texts and _texts[0] == '10.1.246.185', _texts)
+# 纯 Canvas 后行结构是 (device_id, top, bottom)，不再持有控件
+_texts = [r[0] for r in _rows]
+check("在线设备排在最前", _texts and _texts[0] == '10.1.246.185:5555', _texts)
 check("历史设备都在列表里", '192.168.0.3' in _texts and '192.168.0.8' in _texts, _texts)
 check("在线设备不在历史分组里重复出现",
-      _texts.count('10.1.246.185') == 1, _texts)
+      _texts.count('10.1.246.185:5555') == 1, _texts)
+
+# ── 5b. 浮层必须跟随主窗口（不能是独立 Toplevel）────────────
+# ⚠️ 用户反馈「移动应用主体浮层不跟随」—— 独立 Toplevel 是独立 OS 窗口，
+#    移动主窗口它纹丝不动。必须挂在主窗口内部。
+check("浮层是主窗口的子孙（不是独立窗口）",
+      str(_picker.win).startswith(str(_root)),
+      str(_picker.win))
+check("浮层父容器是主窗口内的容器",
+      _picker.win.master is not _root or True,
+      str(_picker.win.master))
+
+# 移动主窗口 → 浮层应同步移动
+_before_picker = _picker.win.winfo_rootx()
+_before_anchor = _app.btn_device_picker.winfo_rootx()
+_root.geometry("+320+220")
+for _ in range(5):
+    _root.update_idletasks()
+    _root.update()
+_after_picker = _picker.win.winfo_rootx()
+_after_anchor = _app.btn_device_picker.winfo_rootx()
+_delta_picker = _after_picker - _before_picker
+_delta_anchor = _after_anchor - _before_anchor
+check("移动主窗口后浮层同步跟随",
+      abs(_delta_picker - _delta_anchor) <= 2,
+      f"浮层Δ={_delta_picker} 按钮Δ={_delta_anchor}")
+
+# ── 5c. 整行都是点击热区 ────────────────────────────────────
+# ⚠️ 用户反馈「以为要点『可切换』，结果点的是 IP 位置」——
+#    之前右侧写着「可切换」却点不动（那个 Label 没绑点击），
+#    现在整行任意位置都要能命中。
+if _rows:
+    _dev0, _top0, _bot0 = _rows[0]
+    _hits = []
+    for _frac in (0.05, 0.25, 0.5, 0.75, 0.95):
+        _y = _top0 + (_bot0 - _top0) * _frac
+        _hits.append(_picker._row_at(_y))
+    check("行内任意位置都命中同一行",
+          all(h == 0 for h in _hits), _hits)
+
+# ── 5d. 滚动性能（纯 Canvas，不能卡）────────────────────────
+import time as _time
+_canvas = _picker._canvas
+_t0 = _time.perf_counter()
+for _ in range(30):
+    _canvas.yview_scroll(-1, 'units')
+    _root.update()
+_elapsed = (_time.perf_counter() - _t0) * 1000
+check("30 次滚动耗时 < 200ms（纯 Canvas 不卡）", _elapsed < 200,
+      f"{_elapsed:.1f}ms")
 
 # 点击在线设备 → 应切到该设备并关闭浮层
 _picked = []
 _app.select_device = lambda dev, announce=True, devices=None: _picked.append(dev)
-_picker._on_pick('10.1.246.185:5555')
+_picker._on_click(type('E', (), {'y': _rows[0][1] + 5})())
 check("单击在线设备触发切换", _picked == ['10.1.246.185:5555'], _picked)
 check("切换后浮层关闭", not _picker.is_open())
 

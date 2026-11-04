@@ -331,8 +331,10 @@ class LayoutModern:
         self.app.ip_combobox.bind('<<ComboboxSelected>>', self._on_ip_selected)
 
         # ⚠️ 设备切换入口（v5.4）—— 与 v4 顶栏保持一致的能力：
-        #   点开是分组浮层（在线 / 离线与历史），单击即切换当前目标。
+        #   点开是分组浮层（在线 / 离线与历史），单击任意一行即可切换当前目标。
         #   v3 顶栏空间比 v4 宽松（右侧有 status_frame），放得下。
+        # ⚠️ 宿主用 top_bar（主窗口内的容器）—— 浮层必须是主窗口的子控件，
+        #    用独立 Toplevel 的话移动主窗口它不会跟随。
         try:
             from gui.device_picker import DevicePicker
             picker_btn = ttk.Button(
@@ -340,7 +342,8 @@ class LayoutModern:
                 style='Secondary.TButton', width=8)
             picker_btn.pack(side=tk.LEFT, padx=(0, 6))
             self.app.btn_device_picker = picker_btn
-            self.device_picker = DevicePicker(self.app, self.theme, picker_btn)
+            self.device_picker = DevicePicker(self.app, self.theme,
+                                              picker_btn, self.top_bar)
         except Exception:
             logging.exception("[布局] v3 设备切换浮层初始化失败")
 
