@@ -119,6 +119,15 @@ app.get_online_devices = lambda: ['10.1.246.185:5555', '192.168.1.99:5555']
 app.ip_combobox.set('10.1.246.185:5555')
 app.update_connection_status(ip_address='10.1.246.185',
                              devices=['10.1.246.185:5555', '192.168.1.99:5555'])
+# ⚠️ 预置型号缓存（模拟真机上已拉到的信息）——
+#    离线设备查不到 getprop，只能靠之前在线时缓存下来的型号。
+_picker = app.layout_instance.device_picker
+_picker._meta_cache = {
+    '10.1.246.185': {'model': 'Konka Android TV 551', 'version': '5.1.1'},
+    '192.168.1.99': {'model': 'Redmi K60', 'version': '13'},
+    '192.168.0.3': {'model': 'Pixel 6', 'version': '14'},
+    '192.168.0.8': {'model': 'HUAWEI Mate 60', 'version': '11'},
+}
 pump()
 
 app.layout_instance._toggle_device_picker()

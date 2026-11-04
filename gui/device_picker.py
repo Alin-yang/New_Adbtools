@@ -43,6 +43,11 @@ import logging
 import tkinter as tk
 
 from gui.theme import FONT_UI, FONT_MONO, FS_XS, FS_SM, FS_MD
+# ⚠️ 顶层 import（不要放进函数里）：
+#    utils 里的 load/save_device_info_cache 只在运行时被调用，
+#    放函数内 import 会让 lint 判定为「死代码」。
+from utils import (load_device_info_cache, save_device_info_cache,
+                    run_adb_command, parse_getprop_all)
 
 # 浮层宽度（px）—— 够放下 IP + 型号副标题
 POPUP_WIDTH = 360
@@ -79,10 +84,47 @@ class DevicePicker:
         self.win = None           # 浮层容器（host 的子控件）
         self._canvas = None       # 列表画布
         self._rows = []           # 渲染后的条目 [(device_id, y0, y1)]
-        self._meta_cache = {}     # {device_id: {'model':..., 'version':...}}
-        self._meta_time = {}      # {device_id: 时间戳}
+        self._meta_cache = {}     # {归一化设备标识: {'model':..., 'version':...}}
+        self._meta_time = {}      # {归一化设备标识: 时间戳}
         self._loading_meta = set()
         self._hover_index = -1
+        self._reposition_pending = False
+        # 上一次主窗口的尺寸（用来区分「移动」和「缩放」）
+        # ⚠️ 初始化成 0 的话，浮层打开时窗口的**首次** Configure
+        #    （尺寸从 0 变成实际值）会被误判成「缩放」→ 触发一次
+        #    布局未稳定时的重定位 → 浮层偏出去。这里直接记当前实际尺寸。
+        try:
+            self._last_host_w = self.app.root.winfo_width()
+            self._last_host_h = self.app.root.winfo_height()
+        except Exception:
+            self._last_host_w = 0
+            self._last_host_h = 0
+        # 上一次算出的锚点偏移（用于识别「取值不可信」的中间态）
+        self._last_ax = None
+        # 上一次定位时用的浮层总高（变了才需要重新 place）
+        self._placed_height = 0
+        # ⚠️ 启动时加载磁盘缓存 —— 离线设备查不到 getprop，
+        #    只能靠之前在线时存下来的型号信息。
+        self._load_meta_cache()
+
+    def _load_meta_cache(self):
+        """从磁盘加载设备信息缓存"""
+        try:
+            cached = load_device_info_cache(self.app)
+            if cached:
+                self._meta_cache.update(cached)
+                # 磁盘缓存没有时间戳，给个旧时间让它 5 分钟后重新拉
+                for key in cached:
+                    self._meta_time.setdefault(key, 0)
+        except Exception as e:
+            logging.debug(f"[设备切换] 加载设备信息缓存失败: {e}")
+
+    def _save_meta_cache(self):
+        """把设备信息缓存写回磁盘（离线设备也要能显示型号）"""
+        try:
+            save_device_info_cache(self._meta_cache, self.app)
+        except Exception as e:
+            logging.debug(f"[设备切换] 保存设备信息缓存失败: {e}")
 
     # ------------------------------------------------------------------
     # 开关
@@ -102,6 +144,16 @@ class DevicePicker:
         """显示浮层"""
         try:
             self._build()
+            # ⚠️ 重置定位基准：打开浮层时必须无条件按当前布局定位一次，
+            #    不能被「与上次偏差过大」的校验挡住
+            self._last_ax = None
+            self._placed_height = 0
+            # ⚠️ **先 _place() 再 refresh()**：
+            #    refresh() → _render() 里会按内容高度重定位，
+            #    但那一刻 canvas 还没真正布局完，算出来的高度/位置不准。
+            #    先用当前状态定位一次（保证浮层出现在正确位置），
+            #    再刷新内容（内容高度变了会再触发一次重定位）。
+            self._place()
             self.refresh()
             self._place()
             self.win.place_info()  # 触发一次布局
@@ -120,9 +172,16 @@ class DevicePicker:
             pass
 
     def is_open(self) -> bool:
+        """浮层是否处于「打开」状态
+
+        ⚠️ 用 **place_info 的 x 是否为空**判断，而不是 `winfo_ismapped()`：
+           place 之后控件还没完成映射，ismapped 会间歇性地返回 False
+           （实测测试偶发失败）。place_info 才是「我们让它显示了」的准确信号。
+        """
         try:
-            return (self.win is not None and self.win.winfo_exists()
-                    and self.win.winfo_ismapped())
+            if self.win is None or not self.win.winfo_exists():
+                return False
+            return self.win.place_info().get('x') is not None
         except Exception:
             return False
 
@@ -193,8 +252,73 @@ class DevicePicker:
         # 点击主窗口其它地方关闭
         self.app.root.bind('<Button-1>', self._on_root_click, add='+')
 
+        # ⚠️ 监听主窗口的 <Configure> → **只在尺寸变化时**重新定位浮层。
+        #    浮层是 place 到 host 里的，坐标相对 host —— host 跟着窗口走，
+        #    浮层**自动跟随**（实测：完全不动 place，浮层与按钮的相对差恒为 0）。
+        #    只有**尺寸**变化时 grid 会重排、按钮在 host 内的位置真的变了，
+        #    才需要重算一次。
+        #    ⚠️ 位置（移动）变化时**绝对不要**重算：
+        #    那一刻 host 可能还没移动到位，
+        #    `anchor.winfo_rootx() - host.winfo_rootx()` 会取到中间态，
+        #    实测能让浮层偏出去 50~100px。
+        self.app.root.bind('<Configure>', self._on_host_configure, add='+')
+
         # 主题切换后重刷配色
         self.theme.on_change(lambda name: self._retheme())
+
+    def _on_host_configure(self, event=None):
+        """主窗口**尺寸**变化 → 重新定位浮层
+
+        ⚠️ 只在**尺寸**变化时重定位，位置（移动）变化时**不要**重算：
+           浮层是 place 到 host 里的，坐标相对 host —— host 跟着窗口走，
+           浮层自然跟随（这是内嵌浮层最大的好处）。
+           移动窗口时重算会取到中间态，把浮层放到错误位置。
+        """
+        try:
+            if not self.is_open():
+                return
+            # 只响应主窗口自身的 Configure（子控件的 Configure 也会触发）
+            if event is not None and event.widget is not self.app.root:
+                return
+            # 位置变化（移动）→ 不用重算
+            if event is not None:
+                if (event.width == self._last_host_w
+                        and event.height == self._last_host_h):
+                    return
+                self._last_host_w = event.width
+                self._last_host_h = event.height
+            if self._reposition_pending:
+                return
+            self._reposition_pending = True
+            self.app.root.after_idle(self._do_reposition)
+        except Exception:
+            pass
+
+    def _do_reposition(self):
+        """实际执行重新定位
+
+        ⚠️ **重定位后必须校验**：如果算出来的位置和锚点对不上
+           （说明这次取到的是布局中间态），就恢复上一次的位置 ——
+           内嵌浮层本身会跟着窗口走，位置稍微偏一点用户能接受，
+           偏出去 50px 就很明显了。
+        """
+        try:
+            self._reposition_pending = False
+            if not self.is_open():
+                return
+            before = self.win.place_info()
+            old_x = before.get('x')
+            old_y = before.get('y')
+            self._place()
+            # 校验：算出来的 x 与锚点是否还对得上
+            ax, _ay = self._offset_in_host(self.anchor)
+            new_x = int(self.win.place_info().get('x') or 0)
+            if old_x is not None and abs(new_x - int(old_x)) > 40:
+                # 这次算出来的位置偏了 → 恢复
+                self.win.place_configure(x=int(old_x),
+                                         y=int(old_y) if old_y is not None else None)
+        except Exception:
+            pass
 
     def _retheme(self):
         """主题切换后重刷浮层配色"""
@@ -210,17 +334,52 @@ class DevicePicker:
     # 定位
     # ------------------------------------------------------------------
 
+    def _offset_in_host(self, widget):
+        """算 widget 相对 host（root 客户区）的偏移
+
+        ⚠️ `winfo_x()`/`winfo_y()` 是相对**直接父容器**的偏移，
+           要逐级向上累加才是相对 host 的位置。
+           ⚠️ 不能用 `winfo_rootx()` 差值 —— 那是屏幕坐标，
+              与 place 用的客户区坐标差一个窗口边框宽度。
+
+        Returns:
+            (x, y): 相对 host 的像素偏移
+        """
+        x = y = 0
+        w = widget
+        try:
+            while w is not None and w is not self.host:
+                x += w.winfo_x()
+                y += w.winfo_y()
+                w = w.master
+        except Exception:
+            pass
+        return x, y
+
     def _place(self):
         """把浮层定位到锚点按钮下方
 
-        ⚠️ 浮层是**主窗口的子控件**（place 到 host 里），
-           所以坐标是相对 host 的，不是屏幕坐标 ——
-           这样主窗口移动/缩放时浮层自动跟随（这正是用 Toplevel 做不到的）。
+        ⚠️ 浮层是**主窗口的子控件**（place 到 app.root），
+           坐标相对 root 的**客户区**。
+           内嵌在主窗口内 → 移动窗口时浮层自动跟随。
+
+        ⚠️ **坐标必须逐级累加 winfo_x()/winfo_y()**：
+           锚点按钮的父容器是顶栏（bar），而 bar 在 root_frame 里用 grid 管理，
+           root_frame 又在 root 里用 pack 管理。
+           `winfo_x()` 是相对**直接父容器**的偏移，逐级相加才是相对 root 的位置。
+           ⚠️ 用 `winfo_rootx()` 差值是**错的**：
+              那是屏幕坐标，而 place 用的是客户区坐标，
+              两者差一个窗口边框宽度（实测偏 50px）。
+           ⚠️ 也不能把浮层放进 grid 管理的容器（root_frame/top_bar）：
+              **grid 和 place 混用在同一个父容器里坐标系统会打架**。
+
+        ⚠️ **只在打开时定位一次**：
+           内嵌浮层会跟着主窗口自动移动，
+           移动窗口时重算反而会取到「还没移动到位」的中间态，把浮层放偏。
 
         ⚠️ **左对齐到按钮左边缘**，不要右对齐：
            按钮在顶栏偏右（x≈270），浮层宽 360，右对齐算出来的 x 是负数
            → 被 clamp 到 4 → 浮层跑到窗口最左边挡住侧边栏导航。
-           左对齐既符合下拉菜单的直觉，也不会越界。
         """
         try:
             if self.win is None or not self.win.winfo_exists():
@@ -228,9 +387,8 @@ class DevicePicker:
             self.host.update_idletasks()
             self.anchor.update_idletasks()
 
-            # 锚点按钮在 host 内的相对位置
-            ax = self.anchor.winfo_rootx() - self.host.winfo_rootx()
-            ay = self.anchor.winfo_rooty() - self.host.winfo_rooty()
+            # 锚点按钮相对 host（root 客户区）的位置：逐级累加
+            ax, ay = self._offset_in_host(self.anchor)
             ah = self.anchor.winfo_height()
 
             width = POPUP_WIDTH
@@ -282,13 +440,18 @@ class DevicePicker:
     # ------------------------------------------------------------------
 
     def refresh(self):
-        """重新拉设备列表并重绘内容"""
+        """重新拉设备列表并重绘内容
+
+        ⚠️ **这里不调 _place()**：
+           浮层的位置在打开时算一次就够了（内嵌浮层会自己跟着窗口走）。
+           refresh() 会被后台设备监控频繁触发，
+           那时窗口可能正在移动 → 重定位会取到中间态 → 浮层跑偏。
+        """
         try:
             if self.win is None or not self.win.winfo_exists():
                 return
             devices = self.app.get_online_devices()
             self._render(devices)
-            self._place()
         except Exception as e:
             logging.error(f"[设备切换] 刷新列表失败: {e}", exc_info=True)
 
@@ -318,6 +481,9 @@ class DevicePicker:
             online_norm = set()
             for d in online_devices:
                 online_norm.add(self._normalize(d))
+            # 记录在线集合 —— _apply_meta 刷新型号时要用它判断
+            # 该行是「在线设备」还是「离线历史」，好决定要不要带「已离线」
+            self._online_norm = online_norm
 
             y = 4
             width = POPUP_WIDTH - 12
@@ -333,6 +499,12 @@ class DevicePicker:
                                     and self._normalize(device) == current_norm),
                         bg=bg, fg=fg, dim=dim, accent=accent,
                         success=success)
+                # ⚠️ **后台补型号**（v5.4.1 修：这里原来漏了调用，
+                #    导致副标题永远是「在线/已离线」，用户看不到
+                #    哪个 IP 对应哪台设备 —— 而这正是这个列表存在的意义）。
+                #    在线设备才查得到型号，离线的查不到。
+                for device in online_devices:
+                    self._load_meta_async(device)
             else:
                 c.create_text(10, y + 8, text="当前没有在线设备",
                               anchor=tk.NW, font=(FONT_UI, FS_SM), fill=dim)
@@ -371,6 +543,14 @@ class DevicePicker:
             c.configure(height=view_h)
             # 记录视口高度，_place() 用它算浮层总高
             self._view_height = view_h
+
+            # ⚠️ 浮层高度变了要跟着变（内容变多/变少）。
+            #    只在**高度真的变了**时才重定位 —— 位置不动，
+            #    避免窗口移动过程中取到中间态。
+            if self._placed_height != view_h + CHROME_HEIGHT:
+                self._placed_height = view_h + CHROME_HEIGHT
+                if self.is_open():
+                    self._place()
 
             # 更新标题右侧的计数
             if hasattr(self, '_count_label') and self._count_label.winfo_exists():
@@ -419,8 +599,12 @@ class DevicePicker:
                       anchor=tk.W, font=(FONT_MONO, FS_MD), fill=fg)
 
         # 型号 · 版本（副行）
+        # ⚠️ 打 tag（sub<行号>）—— 后台拉到型号后要**精确**更新这一行，
+        #    不能用 find_overlapping 按坐标猜（会误改到别的行）。
+        idx = len(self._rows)
         c.create_text(28, top + 31, text=self._meta_text(device, online),
-                      anchor=tk.W, font=(FONT_UI, FS_XS), fill=dim)
+                      anchor=tk.W, font=(FONT_UI, FS_XS), fill=dim,
+                      tags=(f'sub{idx}',))
 
         # 右侧标记
         if is_current:
@@ -464,6 +648,11 @@ class DevicePicker:
             device = self._rows[idx][0]
             self.hide()
             self.app.select_device(device)
+            # ⚠️ 型号未知时后台补拉一次：
+            #    这台设备可能刚连上（列表刷新前是离线的），
+            #    拉到后写进缓存，下次打开就能看到型号。
+            if self._normalize(device) not in self._meta_cache:
+                self._load_meta_async(device)
         except Exception as e:
             logging.error(f"[设备切换] 选中设备失败: {e}", exc_info=True)
 
@@ -539,63 +728,77 @@ class DevicePicker:
         return device
 
     def _meta_text(self, device, online):
-        """副标题：型号 · Android 版本（没有就显示在线状态）"""
-        meta = self._meta_cache.get(device)
+        """副标题：型号 · Android 版本（离线设备还要标出「已离线」）
+
+        ⚠️ 缓存按**归一化 key** 存（去端口的 IP / USB 序列号）：
+           在线列表里是「10.1.246.185:5555」，历史列表里是「10.1.246.185」，
+           用同一把 key 才能命中同一台设备的型号。
+        ⚠️ 离线设备**必须**也显示「已离线」——
+           用户切设备时要能一眼分清「这台能连」和「这台连不上」。
+        """
+        meta = self._meta_cache.get(self._normalize(device))
+        parts = []
         if meta:
             parts = [p for p in (meta.get('model'), meta.get('version')) if p]
-            if parts:
-                return ' · '.join(parts)
-        return '在线' if online else '已离线'
+        if not online:
+            parts.append('已离线')
+        return ' · '.join(parts) if parts else '在线'
 
     def _load_meta_async(self, device):
         """后台补型号信息（一次全量 getprop，别逐条查）"""
         import time
         now = time.time()
-        cached_at = self._meta_time.get(device, 0)
-        if device in self._meta_cache and (now - cached_at) < META_CACHE_TTL:
+        key = self._normalize(device)
+        cached_at = self._meta_time.get(key, 0)
+        if key in self._meta_cache and (now - cached_at) < META_CACHE_TTL:
             return
-        if device in self._loading_meta:
+        if key in self._loading_meta:
             return
-        self._loading_meta.add(device)
+        self._loading_meta.add(key)
 
         def _work():
             try:
                 meta = self._fetch_meta(device)
                 if meta:
-                    self._meta_cache[device] = meta
-                    self._meta_time[device] = time.time()
+                    self._meta_cache[key] = meta
+                    self._meta_time[key] = time.time()
+                    # ⚠️ 存盘 —— 设备离线后查不到 getprop，
+                    #    靠这份缓存才能显示「这个 IP 是哪台机器」
+                    self._save_meta_cache()
                     # ⚠️ 必须回主线程刷新 UI
                     self.app._run_in_ui(
                         lambda d=device, m=meta: self._apply_meta(d, m))
             except Exception as e:
                 logging.debug(f"[设备切换] 读取型号失败 {device}: {e}")
             finally:
-                self._loading_meta.discard(device)
+                self._loading_meta.discard(key)
 
         try:
             self.app.run_in_background(_work)
         except Exception:
-            self._loading_meta.discard(device)
+            self._loading_meta.discard(key)
 
     def _apply_meta(self, device, meta):
-        """把型号信息刷到对应的副标题上"""
+        """把型号信息刷到对应的副标题上
+
+        ⚠️ 用 **tag 精确定位**副标题 item，不要用 find_overlapping ——
+           那个会按坐标范围匹配，主行/副行/其它文字都可能命中，
+           结果把型号写到错误的行上。
+        """
         try:
             if not self.is_open():
                 return
-            parts = [p for p in (meta.get('model'), meta.get('version')) if p]
-            if not parts:
-                return
-            # 找到该行对应的副标题 item 并更新文字
+            key = self._normalize(device)
             for i, (d, top, bottom) in enumerate(self._rows):
-                if d == device:
-                    # 副标题在 create_text 时是第 4 个 item（背景/点/主行/副行）
-                    items = self._canvas.find_overlapping(
-                        28, top + 26, 28 + 200, top + 36)
-                    for it in items:
-                        if self._canvas.type(it) == 'text':
-                            self._canvas.itemconfigure(it, text=' · '.join(parts))
-                            break
-                    break
+                if self._normalize(d) != key:
+                    continue
+                # 离线行要保留「已离线」标记
+                is_online = key in getattr(self, '_online_norm', set())
+                text = self._meta_text(d, is_online)
+                tag = f'sub{i}'
+                if self._canvas.find_withtag(tag):
+                    self._canvas.itemconfigure(tag, text=text)
+                break
         except Exception:
             pass
 
@@ -606,7 +809,6 @@ class DevicePicker:
            逐条 getprop 每条都要 spawn 一个 adb 进程（~200ms），
            取 2 个属性 10 台设备要 4 秒；全量一次只要 ~0.3 秒/台。
         """
-        from utils import run_adb_command, parse_getprop_all
         # -s 用带端口的完整标识，USB 设备用序列号
         output, ok = run_adb_command(
             "adb shell getprop", retries=1, timeout=8, target_device=device)

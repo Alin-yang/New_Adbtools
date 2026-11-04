@@ -26,7 +26,7 @@ TARGETS = [
     'app.py', 'utils.py', 'config.py', 'decorators.py', 'device_monitor.py',
     'cache_manager.py', 'adaptive_cache.py', 'main.py',
     'gui/layout_modern.py', 'gui/layout_v4.py', 'gui/theme.py',
-    'gui/win_render.py',
+    'gui/win_render.py', 'gui/device_picker.py',
     'modules/screen_mirror.py', 'modules/device_query.py',
     'modules/perf_locator.py', 'modules/perf_parsers.py',
     'modules/perf_collector.py', 'modules/perf_analysis.py',

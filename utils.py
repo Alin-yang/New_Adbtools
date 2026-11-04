@@ -4,6 +4,8 @@ import os
 import glob
 import re
 import time
+import json
+import logging
 from typing import Tuple, Optional, List, Dict
 from config import Config
 from modules.device_query import DeviceQuery
@@ -1023,7 +1025,7 @@ def load_ip_history(app_instance=None) -> List[str]:
 
 def save_ip_history(ip_list: List[str], app_instance=None) -> None:
     """保存IP历史记录
-    
+
     Args:
         ip_list: IP地址列表
         app_instance: 应用实例，用于获取用户定义的日志路径
@@ -1035,14 +1037,68 @@ def save_ip_history(ip_list: List[str], app_instance=None) -> None:
         for ip in ip_list:
             if ip and ip.strip() and is_valid_ip(ip.strip()) and ip.strip() not in unique_ips:
                 unique_ips.append(ip.strip())
-        
+
         # 只保留最近的指定数量的IP
         unique_ips = unique_ips[:Config.MAX_IP_HISTORY]
-        
+
         with open(history_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(unique_ips))
     except Exception as e:
         print(f"保存IP历史记录失败: {e}")
+
+
+# ================================================================
+# 设备信息缓存（IP/序列号 → 型号 + 系统版本）
+# ================================================================
+# ⚠️ 为什么要持久化到磁盘：
+#   离线设备**查不到** getprop（设备不在线，跑不了 shell）。
+#   但用户切换设备时恰恰需要知道「这个 IP 是哪台机器」——
+#   所以在线时拉一次型号存下来，设备离线后仍能显示。
+#   只存内存的话重启就丢，等于没做。
+
+def load_device_info_cache(app_instance=None) -> Dict[str, Dict]:
+    """加载设备信息缓存
+
+    Args:
+        app_instance: 应用实例，用于获取用户定义的日志路径
+
+    Returns:
+        Dict[str, Dict]: {归一化设备标识: {'model':..., 'version':...}}
+                        读不出来时返回空字典（不影响使用）
+    """
+    info_file = Config.get_device_info_file_path(app_instance)
+    try:
+        if os.path.exists(info_file):
+            with open(info_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                # 只保留结构正确的项
+                return {k: v for k, v in data.items()
+                        if isinstance(v, dict) and v.get('model')}
+    except Exception as e:
+        logging.debug(f"[设备信息] 读取缓存失败: {e}")
+    return {}
+
+
+def save_device_info_cache(cache: Dict[str, Dict], app_instance=None) -> None:
+    """保存设备信息缓存
+
+    Args:
+        cache: {归一化设备标识: {'model':..., 'version':...}}
+        app_instance: 应用实例，用于获取用户定义的日志路径
+    """
+    info_file = Config.get_device_info_file_path(app_instance)
+    try:
+        os.makedirs(os.path.dirname(info_file), exist_ok=True)
+        # 只保留有型号的项，且限制条数（防止文件无限膨胀）
+        clean = {k: v for k, v in cache.items()
+                 if isinstance(v, dict) and v.get('model')}
+        if len(clean) > 50:
+            clean = dict(list(clean.items())[:50])
+        with open(info_file, 'w', encoding='utf-8') as f:
+            json.dump(clean, f, ensure_ascii=False, indent=1)
+    except Exception as e:
+        logging.debug(f"[设备信息] 保存缓存失败: {e}")
 
 
 def is_valid_ip(ip: str) -> bool:

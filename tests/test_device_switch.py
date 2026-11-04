@@ -348,19 +348,46 @@ check("浮层父容器是主窗口内的容器",
       str(_picker.win.master))
 
 # 移动主窗口 → 浮层应同步移动
+# ⚠️ **测「浮层与按钮的相对位置」这个不变量**，不要测各自的 Δ。
+#    各自 Δ 的差值受两个因素干扰：
+#      ① `geometry("+x+y")` 是绝对定位，实际移动量与 x 无关（Windows 边框/阴影）
+#      ② 浮层（place 整数坐标）和按钮（grid 布局）在两次 update 之间
+#         可能处于不同的布局状态，rootx 取值差几个像素
+#    相对位置（浮层左边缘 - 按钮左边缘）才是真正要保证的东西：
+#    内嵌浮层 place 到 host 里，host 跟着窗口走 → 相对位置应恒定。
+import time as _t
+
+
+def _settle(n=8):
+    """等布局稳定：多轮 update 让 Tk 完成重排"""
+    for _ in range(n):
+        _root.update_idletasks()
+        _root.update()
+        _root.after(1)
+        _t.sleep(0.01)
+
+
+_settle()
 _before_picker = _picker.win.winfo_rootx()
-_before_anchor = _app.btn_device_picker.winfo_rootx()
+_before_gap = _before_picker - _app.btn_device_picker.winfo_rootx()
+# ⚠️ 「移动前」也要重新打开一次浮层再测：
+#    前面 5c/5d 的操作（滚动、点选）会关闭浮层，
+#    留着关闭状态测不出真实的对齐情况。
+_picker.hide()
+_settle()
+_app.layout_instance._toggle_device_picker()
+_settle()
+_before_picker = _picker.win.winfo_rootx()
+_before_gap = _before_picker - _app.btn_device_picker.winfo_rootx()
 _root.geometry("+320+220")
-for _ in range(5):
-    _root.update_idletasks()
-    _root.update()
-_after_picker = _picker.win.winfo_rootx()
-_after_anchor = _app.btn_device_picker.winfo_rootx()
-_delta_picker = _after_picker - _before_picker
-_delta_anchor = _after_anchor - _before_anchor
-check("移动主窗口后浮层同步跟随",
-      abs(_delta_picker - _delta_anchor) <= 2,
-      f"浮层Δ={_delta_picker} 按钮Δ={_delta_anchor}")
+_settle()
+_after_gap = _picker.win.winfo_rootx() - _app.btn_device_picker.winfo_rootx()
+check("移动主窗口后浮层与按钮的相对位置不变（自动跟随）",
+      abs(_after_gap - _before_gap) <= 2,
+      f"移动前间距={_before_gap} 移动后间距={_after_gap}")
+check("浮层确实跟着窗口移动了（不是原地不动）",
+      _picker.win.winfo_rootx() != _before_picker,
+      f"rootx={_picker.win.winfo_rootx()}")
 
 # ── 5c. 整行都是点击热区 ────────────────────────────────────
 # ⚠️ 用户反馈「以为要点『可切换』，结果点的是 IP 位置」——
@@ -382,9 +409,43 @@ _t0 = _time.perf_counter()
 for _ in range(30):
     _canvas.yview_scroll(-1, 'units')
     _root.update()
-_elapsed = (_time.perf_counter() - _t0) * 1000
-check("30 次滚动耗时 < 200ms（纯 Canvas 不卡）", _elapsed < 200,
-      f"{_elapsed:.1f}ms")
+elapsed = (_time.perf_counter() - _t0) * 1000
+check("30 次滚动耗时 < 200ms（纯 Canvas 不卡）", elapsed < 200,
+      f"{elapsed:.1f}ms")
+
+# ── 5e. 设备信息（型号）必须能拉到 ──────────────────────────
+# ⚠️ v5.4.1 的真 bug：重构时漏掉了 _load_meta_async 的调用，
+#    副标题永远显示「在线/已离线」——用户看不到「哪个 IP 对应哪台设备」，
+#    而这正是这个列表存在的意义。这里必须有防回归断言。
+# ⚠️ 浮层此刻是打开状态，要先关掉再开，否则 toggle() 会把它关掉而不是重渲染。
+_picker.hide()
+_root.update()
+_loaded = []
+_orig_load_meta = _picker._load_meta_async
+_picker._load_meta_async = lambda dev: _loaded.append(dev)
+_app.layout_instance._toggle_device_picker()
+for _ in range(3):
+    _root.update_idletasks()
+    _root.update()
+check("渲染时会为在线设备拉取型号",
+      '10.1.246.185:5555' in _loaded, _loaded)
+_picker._load_meta_async = _orig_load_meta
+
+# 型号缓存：按归一化 key 存（带端口/不带端口要命中同一台）
+_picker._meta_cache = {'10.1.246.185': {'model': 'Konka TV', 'version': '5.1.1'}}
+check("型号按归一化 key 命中（带端口的设备标识）",
+      'Konka TV' in _picker._meta_text('10.1.246.185:5555', True),
+      _picker._meta_text('10.1.246.185:5555', True))
+check("型号按归一化 key 命中（不带端口的历史项）",
+      'Konka TV' in _picker._meta_text('10.1.246.185', False),
+      _picker._meta_text('10.1.246.185', False))
+check("离线设备同时显示型号和「已离线」",
+      '已离线' in _picker._meta_text('10.1.246.185', False),
+      _picker._meta_text('10.1.246.185', False))
+check("在线设备不显示「已离线」",
+      '已离线' not in _picker._meta_text('10.1.246.185', True),
+      _picker._meta_text('10.1.246.185', True))
+_picker._meta_cache = {}
 
 # 点击在线设备 → 应切到该设备并关闭浮层
 _picked = []

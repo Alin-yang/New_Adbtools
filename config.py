@@ -48,6 +48,11 @@ class Config:
     # IP历史记录配置
     MAX_IP_HISTORY = 10  # 最大IP历史记录数
     IP_HISTORY_FILE = "ip_history.txt"
+    # 设备信息缓存（IP → 型号/系统版本）
+    # ⚠️ 为什么要持久化：离线设备查不到 getprop，
+    #    但用户切设备时要知道「这个 IP 是哪台机器」。
+    #    在线时拉一次型号存下来，之后离线了也能显示。
+    DEVICE_INFO_FILE = "device_info.json"
     
     # 包名历史记录配置
     MAX_PKG_HISTORY = 10  # 最大包名历史记录数（保留最近10个）
@@ -163,7 +168,22 @@ class Config:
         log_path = get_user_defined_log_path(app_instance)
         history_dir = os.path.join(log_path, "history")
         return os.path.join(history_dir, cls.PKG_HISTORY_FILE)
-    
+
+    @classmethod
+    def get_device_info_file_path(cls, app_instance=None) -> str:
+        """获取设备信息缓存文件的完整路径（IP → 型号/系统版本）
+
+        ⚠️ 离线设备查不到 getprop，只能靠之前在线时缓存下来的信息 ——
+           否则切换设备时只看到 IP，看不出是哪台机器。
+
+        Args:
+            app_instance: 应用实例，用于获取用户定义的日志路径
+        """
+        from utils import get_user_defined_log_path
+        log_path = get_user_defined_log_path(app_instance)
+        history_dir = os.path.join(log_path, "history")
+        return os.path.join(history_dir, cls.DEVICE_INFO_FILE)
+
     # 性能监控告警配置（连续超阈值若干次才告警，避免毛刺误报）
     PERF_ALERT_CPU_PERCENT = 80   # 进程 CPU% 告警线（多核设备可比 100% 高）
     PERF_ALERT_MEM_MB = 800       # PSS 内存(MB) 告警线

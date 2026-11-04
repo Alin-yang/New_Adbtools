@@ -342,8 +342,10 @@ class LayoutModern:
                 style='Secondary.TButton', width=8)
             picker_btn.pack(side=tk.LEFT, padx=(0, 6))
             self.app.btn_device_picker = picker_btn
+            # ⚠️ 宿主用 app.root（主窗口本身）—— top_bar 在 grid 布局中，
+            #    place 混用会导致坐标偏移。
             self.device_picker = DevicePicker(self.app, self.theme,
-                                              picker_btn, self.top_bar)
+                                              picker_btn, self.app.root)
         except Exception:
             logging.exception("[布局] v3 设备切换浮层初始化失败")
 
