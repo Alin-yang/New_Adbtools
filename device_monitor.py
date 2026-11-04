@@ -168,38 +168,54 @@ class DeviceStatusManager:
     def _on_device_list_changed(self, devices: List[str]):
         """
         设备列表变化时的处理
-        
+
         Args:
             devices: 新的设备列表
         """
         if not self.app or not hasattr(self.app, 'ip_combobox'):
             return
-        
+
         # 更新 IP 历史记录
         current_history = list(self.app.ip_history)
-        
+
         # 添加新设备到历史记录（标准化格式：IP去端口，USB设备直接保存）
         for device in devices:
             # 标准化设备标识：如果是IP地址带端口，去除端口号
             normalized_device = device
             if ':' in device and '.' in device:  # IP地址格式（包含冒号和点号）
                 normalized_device = device.split(':')[0]  # 只保留IP部分
-            
+
             # 如果设备不在历史记录中，添加到最前面
             if normalized_device not in current_history:
                 current_history.insert(0, normalized_device)
-        
+
         # 限制历史记录数量
-        current_history = current_history[:15]  # 最多保留 15 条
-        
+        # ⚠️ 原来这里硬编码 15，与 Config.MAX_IP_HISTORY(=10) 不一致 ——
+        #    两条路径写同一个 ip_history，长度却不一样，历史列表会忽长忽短。
+        current_history = current_history[:Config.MAX_IP_HISTORY]
+
         # 更新 UI
         self.app.ip_history = current_history
-        self.app.ip_combobox['values'] = current_history
-        
+        # ⚠️ 走 app._safe_update_combobox 而不是直接写 ['values']：
+        #    统一入口带异常保护，且与 app.py 其它路径行为一致。
+        if hasattr(self.app, '_safe_update_combobox'):
+            self.app._safe_update_combobox('ip', current_history)
+        else:
+            self.app.ip_combobox['values'] = current_history
+
         # 调度保存到文件（防抖）
         if hasattr(self.app, '_schedule_history_save'):
             self.app._schedule_history_save()
-        
+
+        # 【v5.4】设备列表变了，若恰好只有 1 台在线且与当前目标不符 → 自动跟上。
+        # 不点「刷新」按钮也能自动切到刚插上的那台设备。
+        follower = getattr(self.app, '_auto_follow_single_device', None)
+        if callable(follower):
+            try:
+                follower(devices)
+            except Exception:
+                pass
+
         # 通知其他组件
         for callback in self._device_change_callbacks:
             try:

@@ -230,8 +230,8 @@ class ADBToolApp:
             def _apply():
                 if not devices:
                     self.update_status("未检测到已连接设备", False)
-                    # 仍要更新连接状态（可能显示"未连接"）
-                    self.update_connection_status()
+                    # 仍要更新连接状态（明确传入空列表 → 徽标显示「● 无设备」）
+                    self.update_connection_status(devices=[])
                     return
 
                 # 把检测到的设备并入历史（去重，保持当前选中项不变）
@@ -250,18 +250,31 @@ class ADBToolApp:
                 # 保持用户当前选中的设备（不要被自动切走）
                 if current:
                     try:
-                        self.ip_combobox.delete(0, tk.END)
-                        self.ip_combobox.insert(0, current)
+                        # ⚠️ 用 set() 而不是 delete(0,END)+insert(0,x)：
+                        #    ttk.Combobox 的 delete/insert 操作的是**输入框文本**，
+                        #    不是下拉列表 values（实测 delete(0,END) 后 values 不变）。
+                        #    用 set 更直白，也不会误伤 values。
+                        self.ip_combobox.set(current)
                     except Exception:
                         pass
 
-                self.update_connection_status()
+                # 【v5.4】刷新后若恰好只有 1 台在线设备，自动切过去。
+                # 解决「刷新后终端说检测到 1 台在线，顶栏还是旧 IP + 未连接」。
+                switched = self._auto_follow_single_device(devices)
+
+                # ⚠️ 复用刚刚查到的 devices，不再让 update_connection_status
+                #    重新 spawn 一次 adb（get_connected_devices_parallel 走的是
+                #    不带缓存的 query()，这里再查一次就是白等一轮）。
+                self.update_connection_status(devices=devices)
                 names = "、".join(
                     d.split(':')[0] if (':' in d and '.' in d) else d
                     for d in devices
                 )
                 self.update_status(f"已刷新：{len(devices)} 台设备在线（{names}）", True)
-
+                # 自动切换的提示放在最后 —— 它才是用户最需要看到的那句
+                if switched:
+                    self.update_status(
+                        f"✓ 已自动切换到唯一在线设备 {self.get_ip_address()}", True)
             self._run_in_ui(_apply)
 
         self.run_in_background(_work)
@@ -457,23 +470,26 @@ class ADBToolApp:
                 if hasattr(self, 'ip_combobox'):
                     logging.info(f"[启动检测] ip_combobox 存在，准备更新IP")
                     
-                    # 【关键修复】优先选择 USB 设备，其次才是网络 IP
-                    first_device = None
+                    # 【v5.4 修复】优先选择**本次实际检测到的**在线设备，
+                    #   而不是从 ip_history 里挑。
+                    #   原来从历史里挑 → 历史里排第一的可能是台早已离线的
+                    #   旧设备，于是启动后目标设备是离线的，徽标显示「目标离线」。
+                    #   正确做法：先在本次检测结果里找 USB（序列号无点号冒号），
+                    #   找不到再取第一台网络设备。
                     usb_device = None
                     network_device = None
-                    
-                    for device in self.ip_history:
+                    for device in detected_devices:
                         # 判断是否为 USB 设备（不包含点号和冒号）
                         if '.' not in device and ':' not in device:
                             usb_device = device
                             break
                         # 记录第一个网络 IP
-                        elif network_device is None and ('.' in device or ':' in device):
+                        if network_device is None and ('.' in device or ':' in device):
                             network_device = device
-                    
+
                     # 优先使用 USB 设备，如果没有则使用网络 IP
                     first_device = usb_device if usb_device else network_device
-                    
+
                     logging.info(f"[启动检测] USB设备={usb_device}, 网络IP={network_device}, 最终选择={first_device}")
                     
                     if first_device:
@@ -500,8 +516,10 @@ class ADBToolApp:
                                 
                                 if first_device and should_update:
                                     logging.info(f"[启动检测] 正在更新 IP 输入框为: {first_device}")
-                                    self.ip_combobox.delete(0, tk.END)
-                                    self.ip_combobox.insert(0, first_device)
+                                    # ⚠️ 用 set() 而不是 delete+insert：
+                                    #    ttk.Combobox 的 delete/insert 操作的是输入框文本，
+                                    #    不是下拉列表；set() 语义更直白。
+                                    self.ip_combobox.set(first_device)
                                     logging.info(f"[启动检测] IP 输入框已更新，当前值: {self.ip_combobox.get()}")
                                     # 延迟调用 update_connection_status 确保 UI 已更新
                                     self.root.after(100, lambda: self.update_connection_status(first_device))
@@ -623,9 +641,16 @@ class ADBToolApp:
     def update_connection_status(self, ip_address: Optional[str] = None, devices=None):
         """更新连接状态标签（支持 USB 设备）
 
+        ⚠️ 语义（v5.4 起）：这里同时回答两个**不同**的问题，
+           以前混成一个标签，导致「刷新后明明检测到 1 台在线，顶栏还是未连接」：
+
+           ① **当前目标设备**连上了没有 → 决定徽标的主文案
+           ② **adb 上有几台设备在线**     → 决定徽标的副标（可切换台数）
+
         Args:
             ip_address: 目标设备 IP/序列号，None 表示取输入框当前值
-            devices: 已知的设备列表；传 None 时自行查询（查询失败则保持显示不变）
+            devices: 已知的在线设备列表；传 None 时自行查询
+                     （查询失败返回 None → 保持现有显示不变，避免误报断连）
         """
         if not hasattr(self, 'connection_status_label'):
             return
@@ -649,11 +674,19 @@ class ADBToolApp:
         # ⚠️ 连接徽标的配色走主题系统（深/浅两套）——
         #    这里只设「状态」，具体颜色由布局层根据主题渲染，
         #    换肤时才能自动跟着变。
+        #
+        # 【v5.4 改造】三态拆分：
+        #   ok   → "✓ 已连接"        当前目标设备在线
+        #   err  → "✗ 目标离线 · N"  有别的设备在线，但不是当前目标
+        #   off  → "● 无设备"        adb 上确实一台都没有
+        #
+        # 以前「未连接」一个词同时表达「没有设备」和「设备在但不是我选的那个」，
+        # 用户看到「刷新后检测到 1 台在线」却仍显示未连接，完全无法判断发生了什么。
         if not devices:
-            self._set_connection_badge("● 未连接", 'off')
+            self._set_connection_badge("● 无设备", 'off')
             return
 
-        # 如果没有输入 IP 地址，检查是否有 USB 设备
+        # 没有输入 IP 地址：检查是否有 USB 设备
         if not ip_address or ip_address == "192.168.":
             # 查找 USB 设备（非 IP 格式的设备标识）
             usb_device = None
@@ -666,7 +699,7 @@ class ADBToolApp:
             if usb_device:
                 self._set_connection_badge("✓ USB 设备", 'ok')
             else:
-                self._set_connection_badge("● 未连接", 'off')
+                self._set_connection_badge("● 无设备", 'off')
             return
 
         # 有 IP 地址时，检查是否匹配任何已连接设备
@@ -679,7 +712,9 @@ class ADBToolApp:
         if is_connected:
             self._set_connection_badge("✓ 已连接", 'ok')
         else:
-            self._set_connection_badge("✗ 未连接", 'err')
+            # 【关键】有设备在线，但当前目标不在线 —— 这是「目标选错了」，
+            # 不是「设备没连上」。文案必须区分开，并提示有多少台可以切。
+            self._set_connection_badge(f"✗ 目标离线 · {len(devices)} 台", 'err')
 
     def _set_connection_badge(self, text: str, state: str) -> None:
         """设置连接状态徽标
@@ -703,6 +738,87 @@ class ADBToolApp:
                 painter(label)
             except Exception:
                 pass
+
+    # ================================================================
+    # 设备切换（多设备场景）
+    # ================================================================
+
+    def get_online_devices(self) -> list:
+        """取当前在线设备列表（查询失败返回空列表，不抛异常）"""
+        try:
+            devices = get_connected_devices_cached_safe()
+            return list(devices) if devices else []
+        except Exception:
+            return []
+
+    def select_device(self, device: str, announce: bool = True, devices=None) -> None:
+        """把指定设备设为当前目标，并刷新相关 UI
+
+        Args:
+            device: 设备标识（IP 或 USB 序列号）
+            announce: 是否在终端打印提示
+            devices: 已知的在线设备列表；传 None 会自行查询一次
+        """
+        if not device:
+            return
+        try:
+            # IP 设备统一去掉端口后写入历史（与 ip_history 的既有格式一致）
+            normalized = device
+            if ':' in device and '.' in device:
+                normalized = device.split(':')[0]
+
+            # 写入历史（去重、置顶、限长）
+            if normalized not in self.ip_history:
+                self.ip_history.insert(0, normalized)
+                self.ip_history = self.ip_history[:Config.MAX_IP_HISTORY]
+                self._schedule_history_save()
+
+            # 同步下拉框：**用 set() 而不是 delete+insert**。
+            # ⚠️ ttk.Combobox 的 delete/insert 操作的是**输入框里的文本**，
+            #    不是下拉列表（values）—— 实测 delete(0,END) 后 values 不变。
+            #    所以这里只用 set 设文本，values 由 _safe_update_combobox 单独管。
+            if hasattr(self, 'ip_combobox'):
+                self.ip_combobox.set(normalized)
+                self._safe_update_combobox('ip', self.ip_history)
+
+            # 刷新状态徽标（复用已知列表，避免再 spawn 一次 adb）
+            self.update_connection_status(ip_address=normalized, devices=devices)
+
+            if announce:
+                self.update_status(f"✓ 已切换到设备 {normalized}", True)
+            logging.info(f"[设备切换] 当前目标改为 {normalized}")
+        except Exception as e:
+            logging.error(f"[设备切换] 失败: {e}", exc_info=True)
+            self.update_status(f"切换设备失败：{e}", False)
+
+    def _auto_follow_single_device(self, devices) -> bool:
+        """刷新后若**恰好只有 1 台**在线设备，自动把它设为当前目标
+
+        ⚠️ 只在「恰好 1 台」时自动切：
+           多台在线时自动切会打断用户正在跑的安装/录屏（目标设备会被换掉），
+           这种情况应该只提示、让用户自己选。
+
+        Returns:
+            bool: 是否发生了自动切换
+        """
+        try:
+            if not devices or len(devices) != 1:
+                return False
+            only = devices[0]
+            normalized = only.split(':')[0] if (':' in only and '.' in only) else only
+            current = self.get_ip_address()
+
+            # 已经是它了 → 不用动
+            if current and (current == normalized or current == only):
+                return False
+
+            # 当前目标是空的 / 还是默认占位符 → 直接跟上
+            # ⚠️ 复用 devices，别让 select_device 再查一次 adb
+            self.select_device(normalized, announce=False, devices=devices)
+            return True
+        except Exception as e:
+            logging.warning(f"[设备自动跟随] 失败: {e}")
+            return False
 
     def show_device_info(self):
         """显示当前连接的设备详细信息（异步优化版）"""
@@ -811,8 +927,11 @@ class ADBToolApp:
                 logging.info(f"[同步操作] 已更新下拉框历史记录：{self.ip_history}")
             
             # 设置当前选中的设备（使用统一格式）
-            self.ip_combobox.delete(0, tk.END)
-            self.ip_combobox.insert(0, normalized_device)
+            # ⚠️ 用 set() 而不是 delete+insert：
+            #    ttk.Combobox 的 delete/insert 操作的是输入框里的文本，
+            #    不是下拉列表（values）—— 实测 delete(0,END) 后 values 不变。
+            #    set() 语义直白，也不会误伤 values。
+            self.ip_combobox.set(normalized_device)
             logging.info(f"[同步操作] 已设置 IP 输入框值为：{normalized_device}")
             
             # 触发 IP 变更事件

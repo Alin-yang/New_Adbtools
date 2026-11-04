@@ -119,6 +119,7 @@ for name, widget in [
     ("连接状态徽标", app.connection_status_label),
     ("连接按钮", app.btn_connect_top),
     ("断开按钮", app.btn_disconnect_top),
+    ("设备切换按钮", app.btn_device_picker),
     ("设备数标签", app.device_count_label),
 ]:
     try:
@@ -140,6 +141,31 @@ check("包名框宽度可读", app.pkg_combobox.winfo_width() >= 170,
       f"width={app.pkg_combobox.winfo_width()}")
 check("设备框宽度可读", app.ip_combobox.winfo_width() >= 100,
       f"width={app.ip_combobox.winfo_width()}")
+
+# ⚠️ 回归守护：设备框要能显示完整 IP（如 10.1.246.185 是 12 字符）
+check("设备框能显示完整 IP", app.ip_combobox.winfo_width() >= 110,
+      f"width={app.ip_combobox.winfo_width()}")
+
+# ── 4b. 设备切换入口（v5.4）────────────────────────────────
+# 顶栏必须有「设备切换」入口 —— 多设备在线时用户要能直接切换，
+# 不能只能手动敲 IP。
+check("顶栏有设备切换按钮", hasattr(app, 'btn_device_picker'))
+if hasattr(app, 'btn_device_picker'):
+    _pb = app.btn_device_picker
+    check("设备切换按钮在顶栏可见", _pb.winfo_ismapped())
+    check("设备切换按钮有文字", len(str(_pb.cget('text'))) >= 2,
+          repr(_pb.cget('text')))
+    # 不能挤掉包名框（宽度预算）
+    check("设备切换按钮宽度合理（<80px）", _pb.winfo_width() < 80,
+          f"width={_pb.winfo_width()}")
+check("布局有设备切换浮层实例",
+      hasattr(lay, 'device_picker'))
+check("设备切换浮层挂在 app 上（app.py 契约）",
+      hasattr(app, 'btn_device_picker'))
+# 浮层不能挤爆顶栏：算上按钮后仍要有富余
+if hasattr(app, 'btn_device_picker'):
+    check("加设备切换按钮后顶栏仍有富余（>=20px）",
+          avail - total_req >= 20, f"富余={avail - total_req}")
 
 # ⚠️ 顶栏必须有「刷新设备列表」入口
 #    用户反馈「刷新功能怎么没有了」—— v4 重构时它只留在了设备控制面板里，
@@ -362,6 +388,36 @@ check("连接徽标文案已更新", "已连接" in app.connection_status_label.
 app._set_connection_badge("● 未连接", 'off')
 pump()
 check("连接徽标可切换状态", "未连接" in app.connection_status_label.cget("text"))
+
+# ── 9b. 徽标三态语义（v5.4）───────────────────────────────
+# 「已连接 / 目标离线 / 无设备」必须区分开 ——
+# 以前一个「未连接」同时表达两种情况，用户刷新后看到"检测到 1 台在线"
+# 却显示未连接，完全无法判断发生了什么。
+app.update_connection_status(ip_address='192.168.0.3',
+                             devices=['192.168.0.3:5555'])
+pump()
+check("目标在线 → 徽标是「已连接」",
+      "已连接" in app.connection_status_label.cget("text"),
+      app.connection_status_label.cget("text"))
+
+app.update_connection_status(ip_address='192.168.0.3',
+                             devices=['10.1.246.185:5555'])
+pump()
+check("有别的设备在线 → 徽标是「目标离线」",
+      "目标离线" in app.connection_status_label.cget("text"),
+      app.connection_status_label.cget("text"))
+check("「目标离线」带可切换台数",
+      "1" in app.connection_status_label.cget("text"),
+      app.connection_status_label.cget("text"))
+
+app.update_connection_status(ip_address='192.168.0.3', devices=[])
+pump()
+check("一台都没有 → 徽标是「无设备」",
+      "无设备" in app.connection_status_label.cget("text"),
+      app.connection_status_label.cget("text"))
+check("「无设备」不再用歧义词「未连接」",
+      "未连接" not in app.connection_status_label.cget("text"),
+      app.connection_status_label.cget("text"))
 
 root.destroy()
 

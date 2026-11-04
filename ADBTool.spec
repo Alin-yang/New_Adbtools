@@ -66,6 +66,10 @@ a = Analysis(
         'modules.perf_report',
         'modules.perf_baseline',
         'modules.perf_scenario',
+        # ⚠️ v5.4 设备切换浮层（gui/device_picker.py）
+        #    同样是「数据文件带过去了但没被 PYZ 收录」的坑，
+        #    漏掉会在运行时才报 "No module named gui.device_picker"。
+        'gui.device_picker',
     ],
     hookspath=[],
     hooksconfig={},

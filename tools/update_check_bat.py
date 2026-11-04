@@ -21,6 +21,7 @@ STEPS = [
     ('代码质量检查 (lint)', None),
     ('核心路径回归测试', 'test_core_regression.py'),
     ('设备查询与监控测试', 'test_device_query_and_monitor.py'),
+    ('设备切换与连接状态测试', 'test_device_switch.py'),
     ('安装流程测试', 'test_install_flow.py'),
     ('精简 ROM / 慢设备安装兼容测试', 'test_install_rom_compat.py'),
     ('异步与线程安全测试', 'test_async_and_fixes.py'),

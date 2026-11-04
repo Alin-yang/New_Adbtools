@@ -330,6 +330,20 @@ class LayoutModern:
 
         self.app.ip_combobox.bind('<<ComboboxSelected>>', self._on_ip_selected)
 
+        # ⚠️ 设备切换入口（v5.4）—— 与 v4 顶栏保持一致的能力：
+        #   点开是分组浮层（在线 / 离线与历史），单击即切换当前目标。
+        #   v3 顶栏空间比 v4 宽松（右侧有 status_frame），放得下。
+        try:
+            from gui.device_picker import DevicePicker
+            picker_btn = ttk.Button(
+                ip_row, text="设备 ▾", command=self._toggle_device_picker,
+                style='Secondary.TButton', width=8)
+            picker_btn.pack(side=tk.LEFT, padx=(0, 6))
+            self.app.btn_device_picker = picker_btn
+            self.device_picker = DevicePicker(self.app, self.theme, picker_btn)
+        except Exception:
+            logging.exception("[布局] v3 设备切换浮层初始化失败")
+
         # === 右侧：状态指示器 ===
         status_frame = ttk.Frame(self.top_bar, style='Card.TFrame')
         status_frame.pack(side=tk.RIGHT, padx=15)
@@ -1696,6 +1710,15 @@ class LayoutModern:
         else:
             self.app.show_current_device_status(force_display=True)
     
+    def _toggle_device_picker(self):
+        """打开/关闭设备切换浮层"""
+        try:
+            picker = getattr(self, 'device_picker', None)
+            if picker is not None:
+                picker.toggle()
+        except Exception:
+            logging.exception("[布局] v3 设备切换浮层开关失败")
+
     def setup_keyboard_shortcuts(self) -> None:
         """设置键盘快捷键"""
         shortcuts = {

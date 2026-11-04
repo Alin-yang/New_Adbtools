@@ -14,38 +14,41 @@ if not exist "%PYTHON%" set "PYTHON=python"
 set FAILED=0
 
 echo.
-echo [1/11] 代码质量检查 (lint)
+echo [1/12] 代码质量检查 (lint)
 "%PYTHON%" tools\lint.py
 if errorlevel 1 set FAILED=1
 echo.
-echo [2/11] 核心路径回归测试
+echo [2/12] 核心路径回归测试
 "%PYTHON%" tests\test_core_regression.py || set FAILED=1
 echo.
-echo [3/11] 设备查询与监控测试
+echo [3/12] 设备查询与监控测试
 "%PYTHON%" tests\test_device_query_and_monitor.py || set FAILED=1
 echo.
-echo [4/11] 安装流程测试
+echo [4/12] 设备切换与连接状态测试
+"%PYTHON%" tests\test_device_switch.py || set FAILED=1
+echo.
+echo [5/12] 安装流程测试
 "%PYTHON%" tests\test_install_flow.py || set FAILED=1
 echo.
-echo [5/11] 精简 ROM / 慢设备安装兼容测试
+echo [6/12] 精简 ROM / 慢设备安装兼容测试
 "%PYTHON%" tests\test_install_rom_compat.py || set FAILED=1
 echo.
-echo [6/11] 异步与线程安全测试
+echo [7/12] 异步与线程安全测试
 "%PYTHON%" tests\test_async_and_fixes.py || set FAILED=1
 echo.
-echo [7/11] 性能优化测试
+echo [8/12] 性能优化测试
 "%PYTHON%" tests\test_perf_improvements.py || set FAILED=1
 echo.
-echo [8/11] 性能监控 v4 解析与分析测试
+echo [9/12] 性能监控 v4 解析与分析测试
 "%PYTHON%" tests\test_perf_v4.py || set FAILED=1
 echo.
-echo [9/11] 性能实时刷新链路测试
+echo [10/12] 性能实时刷新链路测试
 "%PYTHON%" tests\test_perf_live_refresh.py || set FAILED=1
 echo.
-echo [10/11] 终端搜索功能测试
+echo [11/12] 终端搜索功能测试
 "%PYTHON%" tests\test_log_search.py || set FAILED=1
 echo.
-echo [11/11] v4 工作台布局测试
+echo [12/12] v4 工作台布局测试
 "%PYTHON%" tests\test_layout_v4.py || set FAILED=1
 
 echo.

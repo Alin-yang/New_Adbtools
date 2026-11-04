@@ -32,6 +32,7 @@ from config import Config
 from gui.theme import (ThemeManager, FONT_UI, FONT_MONO,
                       FS_XS, FS_SM, FS_MD, FS_LG, FS_XL, FS_XXL,
                       FSM_SM, FSM_MD, FSM_LG)
+from gui.device_picker import DevicePicker
 
 
 class LayoutV4:
@@ -397,10 +398,12 @@ class LayoutV4:
         # ⚠️ 用**文字「刷新」**而不是 `↻` 图标：
         #    用户反馈「刷新功能怎么没有了」—— 30px 的图标按钮在深色
         #    主题下太不显眼，等于没有。文字明确、一眼能认。
-        #    （压缩连接/断开按钮的 width 后腾出了足够空间）
+        # ⚠️ width=3：ttk.Button 的 width 单位是**字符数**，
+        #    「刷新」两个字实测约 26px，width=3 给到 44px 足够，
+        #    比 width=4（52px）省 8px —— 顶栏空间要留给包名框。
         self.app.btn_refresh_top = ttk.Button(
             right, text="刷新", command=self.app.refresh_device_list,
-            style='TopSecondary.TButton', width=4,
+            style='TopSecondary.TButton', width=3,
         )
         self.app.btn_refresh_top.pack(side=tk.LEFT, padx=(0, 6))
         self._attach_tip(self.app.btn_refresh_top, "刷新设备列表（重新扫描已连接设备）")
@@ -416,41 +419,66 @@ class LayoutV4:
         # ── 设备上下文 ────────────────────────────────────────
         self._ctx_field(bar, '设备')
 
+        # ⚠️ width=11（不是 12）：满 IP 如「10.1.246.185」是 12 字符，
+        #    但 12 时下拉框 req 127px，顶栏总需求会超 712px 可用宽度，
+        #    把包名框压到 171px（断言线 170px，只差 1px 就挂）。
+        #    11 字符时实测 119px，「10.1.246.185」仍能完整显示。
         self.app.ip_combobox = ttk.Combobox(
-            bar, width=12, font=(FONT_UI, FS_MD), style='App.TCombobox')
+            bar, width=11, font=(FONT_UI, FS_MD), style='App.TCombobox')
         self.app.ip_combobox.pack(side=tk.LEFT, padx=(0, 6))
         self.app.ip_combobox['height'] = 8
         self.app.ip_combobox.insert(0, "192.168.")
         self.app.ip_combobox.bind('<<ComboboxSelected>>', self._on_ip_selected)
 
         # 连接状态徽标：文案里带设备数，省掉一个独立标签
+        # ⚠️ padx=4（不是 6）：顶栏宽度是硬约束，省下的 4px 要给包名框。
         self.app.connection_status_label = tk.Label(
-            bar, text="● 未连接", font=(FONT_UI, FS_SM),
+            bar, text="● 无设备", font=(FONT_UI, FS_SM),
             bg=self.theme.color('fg_dim'), fg=self.theme.color('accent_fg'),
-            padx=6, anchor=tk.CENTER, height=1,
+            padx=4, anchor=tk.CENTER, height=1,
         )
-        self.app.connection_status_label.pack(side=tk.LEFT, padx=(0, 6))
+        self.app.connection_status_label.pack(side=tk.LEFT, padx=(0, 5))
         self.app.connection_status_label._badge_state = 'off'
         # 登记到主题：换肤时按当前状态重新上色
         self.theme.register(self.app.connection_status_label, 'badge')
+
+        # ⚠️ 设备切换入口（v5.4）
+        #   以前只有「IP 输入框」这一个入口，多设备在线时用户得手动敲 IP 切换，
+        #   而且刷新后完全看不出「到底有几台设备在线」。
+        #   这里加一个「设备 ▾」按钮，点开是分组浮层（在线 / 离线与历史），
+        #   单击即切换。
+        #   宽度预算：顶栏可用 712px，各控件 req 之和必须 ≤ 它，
+        #   否则包名框被挤窄（历史 bug）。已通过压缩刷新/连接/断开按钮
+        #   的 width 与徽标 padx 腾出空间。
+        self.app.btn_device_picker = ttk.Button(
+            bar, text="设备 ▾", command=self._toggle_device_picker,
+            style='TopSecondary.TButton', width=6,
+        )
+        self.app.btn_device_picker.pack(side=tk.LEFT, padx=(0, 5))
+        self._attach_tip(self.app.btn_device_picker,
+                         "切换设备（列出在线设备，单击即切换）")
+
+        # 浮层实例：懒创建（第一次点按钮时才建）
+        self.device_picker = DevicePicker(self.app, self.theme,
+                                          self.app.btn_device_picker)
 
         # ⚠️ 连接/断开用**中文文字**而不是图标：
         #    ⇄ / ⏻ 这类字符在「微软雅黑 UI」里字形缺失，会渲染成方块；
         #    文字虽然占宽一点，但用户一看就懂，不用悬停猜。
         #    宽度用 style 里的 padding 控制，不要用 width（那是字符数）。
-        # ⚠️ width=4 而不是默认：ttk.Button 的 width 单位是「字符数」，
+        # ⚠️ width=3 而不是默认 6：ttk.Button 的 width 单位是「字符数」，
         #    默认 6 会让这两个只有两个字的按钮各占 108px —— 顶栏横向
-        #    空间紧张（只剩 ~40px），必须省出位置放「刷新」按钮。
-        #    文字实际宽约 26px < 4 字符宽，不会被截断。
+        #    空间紧张，必须省出位置放「设备 ▾」按钮和让包名框保持可读。
+        #    「连接」两字实测约 26px，width=3 给到 44px 不会被截断。
         self.app.btn_connect_top = ttk.Button(
             bar, text="连接", command=self.app.connect_adb,
-            style='TopPrimary.TButton', width=4)
+            style='TopPrimary.TButton', width=3)
         self.app.btn_connect_top.pack(side=tk.LEFT, padx=(0, 4))
 
         self.app.btn_disconnect_top = ttk.Button(
             bar, text="断开", command=self.app.disconnect_adb,
-            style='TopSecondary.TButton', width=4)
-        self.app.btn_disconnect_top.pack(side=tk.LEFT, padx=(0, 10))
+            style='TopSecondary.TButton', width=3)
+        self.app.btn_disconnect_top.pack(side=tk.LEFT, padx=(0, 8))
 
         # ── 包名上下文 ────────────────────────────────────────
         self._ctx_field(bar, '包名')
@@ -1589,12 +1617,25 @@ class LayoutV4:
         else:
             self.app.show_current_device_status(force_display=True)
 
+    # ================================================================
+    # 设备切换浮层
+    # ================================================================
+
+    def _toggle_device_picker(self):
+        """打开/关闭设备切换浮层"""
+        try:
+            self.device_picker.toggle()
+        except Exception as e:
+            logging.error(f"[设备切换] 浮层开关失败: {e}", exc_info=True)
+
     def _setup_keyboard_shortcuts(self):
         """快捷键"""
         shortcuts = {
             '<Control-q>': lambda e: self.app.root.quit(),
             '<Control-c>': lambda e: self.app.connect_adb(),
             '<Control-d>': lambda e: self.app.disconnect_adb(),
+            # ⚠️ Ctrl+D 已被「断开」占用，设备切换用 Ctrl+Shift+D
+            '<Control-Shift-D>': lambda e: self._toggle_device_picker(),
             '<Control-i>': lambda e: self.app.force_install(),
             '<Control-u>': lambda e: self.app.uninstall(),
             '<Control-l>': lambda e: self.app.package_list(),
