@@ -394,10 +394,15 @@ check("单击在线设备触发切换", _picked == ['10.1.246.185:5555'], _picke
 check("切换后浮层关闭", not _picker.is_open())
 
 # 浮层宽度不超屏
-_root.update_idletasks()
-_geom = _picker.win.geometry()
-_width = int(_geom.split('x')[0])
-check("浮层宽度为 360px", _width == 360, _geom)
+# ⚠️ 浮层是 place 到主窗口内的 Frame，没有 geometry() 方法 —— 用 place_info()
+# ⚠️ 且必须在浮层**打开时**查：place_forget 后 place_info() 拿不到尺寸。
+_app.layout_instance._toggle_device_picker()
+for _ in range(3):
+    _root.update_idletasks()
+    _root.update()
+_info = _picker.win.place_info()
+_width = int(_info.get('width') or 0)
+check("浮层宽度为 360px", _width == 360, _info.get('width'))
 
 _root.destroy()
 
