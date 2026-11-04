@@ -2173,19 +2173,52 @@ class ADBToolApp:
                 )
                 time.sleep(2)
 
-            ok, message = self._install_via_push_pm(apk_path, apk_size, target_ip)
+            # 第 2 次尝试起跳过重复传输（设备端文件可能已完整）
+            ok, message = self._install_via_push_pm(
+                apk_path, apk_size, target_ip, skip_existing=(attempt > 1))
             if ok:
                 return True, message
             last_message = message
 
-            # push 方式失败（网络抖动 / 设备拒绝等）→ 换 adb install 再试一次
-            self._update_install_status(
-                f"push 方式未成功（{message}），回退到 adb install ..."
-            )
-            ok, message = self._install_via_adb_install(apk_path, apk_size, target_ip)
-            if ok:
-                return True, message
-            last_message = message
+            # ⚠️ 回退策略（实测康佳电视 Android 5.1.1）：
+            #    `adb install` 内部走的是 push-install 模式
+            #    （push 到 /data/local/tmp/./. 再执行 pm install <path>），
+            #    而这类 ROM 的 `pm install <路径>` **会挂死** ——
+            #    实测装一个根本不存在的文件也要卡 40 秒以上，
+            #    实测 pm install 持有全局安装锁，残留进程会让重试排队。
+            #    而我们自己的 push + `pm install -r -d <路径>` 实测 195 秒成功。
+            #
+            #    所以：**设备端文件还在且大小正确时，优先重试 pm install，
+            #    而不是退回 adb install**（重新推 36MB + 走一条必然失败的路）。
+            if self._remote_file_ready(target_ip, apk_size):
+                self._update_install_status(
+                    "设备端已有完整文件，直接重试设备端安装（不重新传输）..."
+                )
+                pm_out, pm_ok = self._run_pm_install(
+                    Config.INSTALL_REMOTE_TMP, target_ip,
+                    timeout=Config.install_pm_timeout(apk_size),
+                    apk_size=apk_size)
+                if pm_ok and "Success" in pm_out:
+                    self._set_progress_value(100)
+                    try:
+                        self._run_adb_capture(
+                            build_adb_command_with_device(
+                                f"adb shell rm -f {Config.INSTALL_REMOTE_TMP}",
+                                target_ip),
+                            timeout=30)
+                    except Exception:
+                        pass
+                    return True, "安装成功（重试设备端安装）"
+                last_message = f"设备端重试安装失败: {(pm_out or '').strip()[-200:]}"
+            else:
+                # push 方式失败（网络抖动 / 设备拒绝等）→ 换 adb install 再试一次
+                self._update_install_status(
+                    f"push 方式未成功（{message}），回退到 adb install ..."
+                )
+                ok, message = self._install_via_adb_install(apk_path, apk_size, target_ip)
+                if ok:
+                    return True, message
+                last_message = message
 
             # ⚠️ 命令都"失败"了，但设备端可能其实装成功了（定制 ROM 的坑）
             #    用设备端事实校验：设备上的 versionCode 是否已更新
@@ -2204,7 +2237,75 @@ class ADBToolApp:
 
         return False, last_message
 
-    def _check_remote_file_readable(self, remote_path: str, target_ip: str = None) -> Tuple[bool, str]:
+    def _remote_size(self, remote_path: str = None,
+                     target_ip: str = None) -> Optional[int]:
+        """读设备端文件大小（字节）。读不到返回 None。
+
+        ⚠️ 只用 `ls -l`：实测精简 ROM（康佳电视 Android 5.1.1）连 `head`
+           都没有，`ls` 才是真正可用的那一个。
+        """
+        from utils import build_adb_command_with_device
+
+        path = remote_path or Config.INSTALL_REMOTE_TMP
+        cmd = build_adb_command_with_device(f'adb shell "ls -l {path}"', target_ip)
+        try:
+            result = subprocess.run(
+                cmd, shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding='utf-8', errors='replace',
+                timeout=20
+            )
+        except Exception:
+            return None
+        out = (result.stdout or "").strip()
+        if not out or 'No such' in out:
+            return None
+        # -rw-rw-rw- root root 37883711 2026-11-03 18:38 x.apk
+        m = re.search(r'\s(\d+)\s+\d{4}-\d{2}-\d{2}', out)
+        if m:
+            return int(m.group(1))
+        return None
+
+    def _remote_file_ready(self, target_ip: str = None,
+                           expect_size: int = None) -> bool:
+        """检查设备端临时 APK 是否已完整存在（用于决定是否需要重新传输）
+
+        ⚠️ 只用 `ls -l`：实测精简 ROM（康佳电视 Android 5.1.1）连 `head`
+           都没有，`ls` 才是真正可用的那一个。
+
+        Args:
+            target_ip: 目标设备
+            expect_size: 期望的字节数（给了就做严格比对）
+
+        Returns:
+            文件存在且（未给期望大小 或 大小一致）时返回 True
+        """
+        from utils import build_adb_command_with_device
+
+        cmd = build_adb_command_with_device(
+            f'adb shell "ls -l {Config.INSTALL_REMOTE_TMP}"', target_ip)
+        try:
+            result = subprocess.run(
+                cmd, shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding='utf-8', errors='replace',
+                timeout=20
+            )
+        except Exception:
+            return False
+
+        out = (result.stdout or "").strip()
+        if not out or 'No such' in out:
+            return False
+        size = self._remote_size(target_ip=target_ip)
+        if not size or size <= 0:
+            return False
+        if expect_size and size != expect_size:
+            return False
+        return True
+
+    def _check_remote_file_readable(self, remote_path: str, target_ip: str = None,
+                                    expect_size: int = None) -> Tuple[bool, str]:
         """检查设备端文件是否能被 shell 读取（用于 push 安装路径的前置校验）
 
         某些定制 ROM 装了安全管控软件（如 TCL 的 com.tcl.guard），
@@ -2212,45 +2313,121 @@ class ADBToolApp:
         `adb push` 仍然显示成功，但 `pm install` 会报
         "Error: Unable to open file"，白白浪费一次完整传输。
 
+        ⚠️⚠️ 多级回退（实测康佳电视 Android 5.1.1 只有 ls/cat/dd/cp/grep/busybox，
+           **没有 head/wc/stat/sed/awk/od/toybox**）：
+             ① `head -c 4`        标准设备
+             ② `busybox head -c 4` 有 busybox 的精简 ROM
+             ③ `ls -l` 读文件大小  连 busybox 都没有时的兜底
+           早期版本只用 ①，在精简 ROM 上会误判「设备端文件不可读」，
+           白跑一趟 adb install（而 adb install 在这类 ROM 上必然失败）。
+
         Args:
             remote_path: 设备端文件路径
             target_ip: 目标设备
+            expect_size: 期望的文件大小（字节），用于 ls 回退时比对
 
         Returns:
             Tuple[bool, str]: (是否可读, 说明文字)
         """
         from utils import build_adb_command_with_device
 
-        cmd = build_adb_command_with_device(
-            f'adb shell "head -c 4 {remote_path} > /dev/null && echo READABLE"',
-            target_ip
-        )
-        try:
-            result = subprocess.run(
-                cmd, shell=True,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding='utf-8', errors='replace',
-                timeout=15
-            )
-        except subprocess.TimeoutExpired:
-            return False, "读取检查超时"
-        except Exception as e:
-            return False, f"读取检查失败: {e}"
+        def _run(cmd: str, timeout: int = 20) -> Tuple[str, bool]:
+            full = build_adb_command_with_device(
+                f'adb shell "{cmd}"', target_ip)
+            try:
+                result = subprocess.run(
+                    full, shell=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding='utf-8', errors='replace',
+                    timeout=timeout
+                )
+            except subprocess.TimeoutExpired:
+                return "读取检查超时", False
+            except Exception as e:
+                return f"读取检查失败: {e}", False
+            return (result.stdout or "").strip(), result.returncode == 0
 
-        output = (result.stdout or "").strip()
+        def _verified(how: str) -> Tuple[bool, str]:
+            """判定可读后**统一校验文件大小**
+
+            ⚠️ 大小不符 = 设备端文件是坏的/是上一次的残留，
+               后面 pm install 必然失败 —— 与其白跑一次三分钟的安装，
+               不如现在就识别出来。
+            """
+            if expect_size:
+                size = self._remote_size(remote_path, target_ip)
+                if size is not None and size != expect_size:
+                    return False, (f"设备端文件大小不符"
+                                   f"（{size} != {expect_size} 字节）")
+                if size:
+                    return True, f"{how}，大小 {size} 字节"
+            return True, how
+
+        # ── ① 标准 head ──────────────────────────────────────
+        # ⚠️ 必须带 `&& echo READABLE`：head 会把文件内容一起输出，
+        #    只看"有没有输出"无法区分「读到了内容」和「命令报错」。
+        output, _ = _run(f'head -c 4 {remote_path} && echo READABLE')
         if "READABLE" in output:
-            return True, "可读"
+            return _verified("可读")
+        # ⚠️ 文件不存在要**立刻判不可读**：
+        #    head 报 "No such file" 说明文件真的没传上去，
+        #    这时再去试 busybox / ls 都只会得到同样的结论。
+        low = output.lower()
+        if 'no such file' in low or 'no such' in low:
+            return False, (self._first_meaningful_line(output)
+                           or "设备端文件不存在")
+        # 命令本身不存在 → 换 busybox（注意：not found 是设备 shell 的报错）
+        cmd_missing = ('not found' in low and 'head' in low)
 
-        # 提取最有信息量的一行（Permission denied / No such file 等）
-        detail = ""
-        for line in output.splitlines():
+        # ── ② busybox head ───────────────────────────────────
+        if cmd_missing or not output:
+            output2, _ = _run(
+                f'busybox head -c 4 {remote_path} && echo READABLE')
+            if "READABLE" in output2:
+                return _verified("可读（经 busybox）")
+            low2 = output2.lower()
+            if 'no such file' in low2 or 'no such' in low2:
+                return False, (self._first_meaningful_line(output2)
+                               or "设备端文件不存在")
+            if output2 and 'not found' not in low2:
+                # busybox 存在但读不到 → 真正的权限问题
+                detail = self._first_meaningful_line(output2)
+                return False, detail or "设备拒绝读取"
+            output = output2 or output
+
+        # ── ③ ls -l 兜底（连 head/busybox 都没有的设备）──────
+        ls_out, ls_ok = _run(f'ls -l {remote_path}')
+        if ls_ok and ls_out and 'No such' not in ls_out:
+            size = self._remote_size(remote_path, target_ip)
+            if size:
+                return _verified(f"可读（经 ls）")
+            return True, "可读（经 ls）"
+        if 'No such file' in (ls_out or '') or 'not found' in (ls_out or '').lower():
+            return False, (self._first_meaningful_line(ls_out)
+                           or "设备缺少基础命令且文件不可读")
+
+        # 所有方式都没能确认 —— 但**不能因此判定为不可读**：
+        # 精简 ROM 上探测手段可能全部缺失，而文件其实是好的。
+        # 这种情况应该放行，让 pm install 去给出真正的结论。
+        detail = self._first_meaningful_line(output)
+        # 只有明确的权限拒绝才算不可读
+        if any(k in detail.lower() for k in
+               ('permission denied', 'not permitted', 'operation not permitted')):
+            return False, detail
+        # 其余情况（命令缺失等）→ 放行
+        return True, f"无法用探测命令确认，假定可读（{detail or '探测命令缺失'}）"
+
+    @staticmethod
+    def _first_meaningful_line(output: str) -> str:
+        """从多行输出里挑出最有信息量的一行"""
+        for line in (output or "").splitlines():
             line = line.strip()
             if line and line != "READABLE":
-                detail = line
-                break
-        return False, detail or "设备拒绝读取"
+                return line
+        return ""
 
-    def _install_via_push_pm(self, apk_path: str, apk_size: int, target_ip: str = None) -> Tuple[bool, str]:
+    def _install_via_push_pm(self, apk_path: str, apk_size: int, target_ip: str = None,
+                             skip_existing: bool = False) -> Tuple[bool, str]:
         """主安装路径：adb push 到设备临时目录 + pm install 安装。
 
         相比 `adb install` 的优势：
@@ -2261,6 +2438,16 @@ class ADBToolApp:
         from utils import build_adb_command_with_device
 
         remote_tmp = Config.INSTALL_REMOTE_TMP
+
+        # ⚠️ 重试时**不要重复传输**：36MB 在慢设备上要推 36 秒，
+        #    重复推既慢又容易与设备端正在跑的安装抢资源。
+        #    同一次安装任务内，设备端残留文件就是我们刚推上去的那个。
+        if skip_existing and self._remote_file_ready(target_ip, apk_size):
+            self._update_install_status(
+                "设备端已有完整文件，跳过重复传输，直接进入设备端安装..."
+            )
+            return self._install_on_device(remote_tmp, apk_size, target_ip)
+
         push_cmd = build_adb_command_with_device(
             f'adb push "{apk_path}" {remote_tmp}', target_ip
         )
@@ -2287,12 +2474,16 @@ class ADBToolApp:
             self._hide_progress()
             return False, f"启动传输进程失败: {e}"
 
-        deadline = time.time() + Config.INSTALL_TIMEOUT
+        # ⚠️ 超时按文件大小动态估算：实测慢设备上 36MB 要传 36+ 秒，
+        #    固定 15 秒超时会把「还在正常传输」误判成失败，
+        #    而且残留的 push 进程会与后续 adb install 抢同一个文件。
+        push_timeout = Config.install_push_timeout(apk_size)
+        deadline = time.time() + push_timeout
         try:
             while True:
                 if time.time() > deadline:
                     self._kill_process(process)
-                    return False, f"传输超时（超过 {Config.INSTALL_TIMEOUT} 秒）"
+                    return False, f"传输超时（超过 {push_timeout} 秒）"
 
                 output = process.stdout.readline()
                 if output == '':
@@ -2335,20 +2526,35 @@ class ADBToolApp:
         #    对 /data/local/tmp 的读取 —— push 显示"成功"但设备端 pm 打不开文件
         #    （"Error: Unable to open file" / "Permission denied"）。
         #    与其白跑一次 pm install 再失败，不如现在就识别出来直接走 adb install。
-        readable, read_detail = self._check_remote_file_readable(remote_tmp, target_ip)
+        readable, read_detail = self._check_remote_file_readable(
+            remote_tmp, target_ip, expect_size=apk_size)
         if not readable:
             self._update_install_status(
                 f"设备禁止 shell 读取 {remote_tmp}（{read_detail}），改用 adb install"
             )
             return False, f"设备端文件不可读: {read_detail}"
 
-        # 传输完成 → 设备端安装（要解包 + dexopt，耗时较长且没有进度输出）
+        # 传输完成 → 设备端安装
+        return self._install_on_device(remote_tmp, apk_size, target_ip)
+
+    def _install_on_device(self, remote_tmp: str, apk_size: int,
+                           target_ip: str = None) -> Tuple[bool, str]:
+        """在设备端执行 pm install（文件已在设备端）
+
+        单独抽出来是因为重试路径会复用它（跳过重复传输）。
+        """
+        from utils import build_adb_command_with_device
+
         self._set_progress_value(96)
+        pm_timeout = Config.install_pm_timeout(apk_size)
         self._update_install_status(
-            "传输完成，正在设备端安装（需要解包与优化，可能耗时 30~90 秒）..."
+            f"传输完成，正在设备端安装（需要解包与优化，"
+            f"最大约 {pm_timeout} 秒，慢设备可能需要几分钟）..."
         )
 
-        pm_out, pm_ok = self._run_pm_install(remote_tmp, target_ip)
+        pm_out, pm_ok = self._run_pm_install(remote_tmp, target_ip,
+                                             timeout=pm_timeout,
+                                             apk_size=apk_size)
 
         # 清理设备端临时文件（无论成败）
         try:
@@ -2365,26 +2571,145 @@ class ADBToolApp:
         detail = pm_out.strip() if pm_out else "无输出"
         return False, f"pm install 失败: {detail[-300:]}"
 
-    def _run_pm_install(self, remote_tmp: str, target_ip: str = None) -> Tuple[str, bool]:
-        """在设备端执行 pm install（合并 stdout/stderr，保留 Failure 原因）"""
+    def _run_pm_install(self, remote_tmp: str, target_ip: str = None,
+                        timeout: int = None, apk_size: int = None) -> Tuple[str, bool]:
+        """在设备端执行 pm install（合并 stdout/stderr，保留 Failure 原因）
+
+        ⚠️ 用 Popen + 轮询而不是 subprocess.run：
+           设备端安装要解包 + dexopt，慢设备上实测 36MB APK 要 **195 秒**，
+           期间 pm 完全不输出任何东西。用 run() 的话界面会「卡住」三分钟，
+           用户会以为程序死了。用轮询可以持续给出心跳反馈。
+
+        ⚠️ pm install 是**全局互斥**的（PackageManager 有安装锁）：
+           上一次 pm 没真正结束就发第二次，第二次会排队等锁，
+           表现为「两次都超时」。所以超时后必须确保进程真的被杀掉。
+
+        Args:
+            remote_tmp: 设备端 APK 路径
+            target_ip: 目标设备
+            timeout: 超时秒数（默认按 APK 大小估算）
+            apk_size: APK 大小（用于估算超时）
+
+        Returns:
+            Tuple[str, bool]: (合并输出, 是否成功)
+        """
         from utils import build_adb_command_with_device
+
+        if timeout is None:
+            timeout = Config.install_pm_timeout(apk_size or 0)
+
         pm_cmd = build_adb_command_with_device(
             f"adb shell pm install -r -d {remote_tmp}", target_ip
         )
         try:
-            result = subprocess.run(
+            process = subprocess.Popen(
                 pm_cmd, shell=True,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding='utf-8', errors='replace',
-                timeout=Config.INSTALL_TIMEOUT
+                text=True, encoding='utf-8', errors='replace'
             )
-        except subprocess.TimeoutExpired:
-            return "pm install 超时", False
         except Exception as e:
-            return str(e), False
+            return f"启动 pm install 失败: {e}", False
 
-        output = result.stdout or ""
-        return output, (result.returncode == 0 and "Success" in output)
+        lines = []
+        started_at = time.time()
+        last_tick = started_at
+        deadline = started_at + timeout
+        timed_out = False
+        success_seen = False
+
+        # ⚠️⚠️ 必须用**独立线程读 stdout**：
+        #    process.stdout.readline() 在没有数据时会**阻塞**，
+        #    而 pm install 在设备端解包期间是完全静默的（实测 195 秒）——
+        #    直接在主循环里 readline()，心跳代码根本没机会执行，
+        #    用户会看到界面「卡住」三分钟没有任何反馈。
+        out_queue: "queue.Queue" = queue.Queue()
+
+        def _reader():
+            try:
+                for line in process.stdout:
+                    out_queue.put(line)
+            except Exception:
+                pass
+            finally:
+                out_queue.put(None)      # 结束标记
+
+        reader = threading.Thread(target=_reader, daemon=True, name="PmInstallReader")
+        reader.start()
+
+        try:
+            while True:
+                if time.time() > deadline:
+                    timed_out = True
+                    # ⚠️ 必须杀掉进程：pm install 持锁，残留进程会让
+                    #    后续重试排队等锁 → 双重超时
+                    self._kill_process(process)
+                    break
+
+                got = None
+                try:
+                    got = out_queue.get(timeout=0.2)
+                except queue.Empty:
+                    got = ''
+
+                if got is None:          # 读取线程结束
+                    if process.poll() is not None:
+                        break
+                    continue
+
+                if got:
+                    stripped = got.strip()
+                    if stripped:
+                        lines.append(stripped)
+                        # pm 会输出 "pkg: <path>"，之后长时间静默
+                        if stripped.startswith("pkg:"):
+                            self._update_install_status(
+                                "设备端已收到安装请求，正在解包与优化..."
+                            )
+                            last_tick = time.time()
+                        # ⚠️⚠️ 收到 Success 立即判定成功，**不要等进程退出**：
+                        #    实测某些 ROM 上 pm 打完 Success 后 adb shell 会话
+                        #    仍不返回（卡在收尾），我们要是一直等到 deadline，
+                        #    会把「已经装成功」误判成超时失败 ——
+                        #    然后又去跑一遍 adb install（重新推 36MB）。
+                        if stripped == "Success" or stripped.endswith(" Success"):
+                            self._update_install_status("设备端已确认安装成功")
+                            success_seen = True
+                            break
+
+                # 心跳：无论有没有输出都定期报进度（慢设备上很关键）
+                now = time.time()
+                if now - last_tick >= Config.INSTALL_HEARTBEAT:
+                    last_tick = now
+                    used = int(now - started_at)
+                    self._update_install_status(
+                        f"设备端安装中... 已用 {used} 秒"
+                        f"（大包需要解包与优化，属正常，请耐心等待）"
+                    )
+        except Exception as e:
+            self._kill_process(process)
+            return f"pm install 异常: {e}", False
+
+        # Success 已收到 → 进程可能还挂着（某些 ROM 的收尾问题），直接收工
+        if success_seen:
+            try:
+                self._kill_process(process)
+            except Exception:
+                pass
+            return "\n".join(lines), True
+
+        try:
+            process.wait(timeout=15)
+        except Exception:
+            pass
+
+        output = "\n".join(lines)
+        if timed_out:
+            used = int(time.time() - started_at)
+            return (f"pm install 超时（{used} 秒）。"
+                    f"设备可能较慢，或存在安装确认弹窗等待确认。\n"
+                    f"⚠️ 超时后设备端的安装进程可能仍在运行，请稍候再重试，"
+                    f"否则新的安装会排队等待安装锁。\n{output}"), False
+        return output, (process.returncode == 0 and "Success" in output)
 
     def _run_adb_capture(self, cmd: str, timeout: int = 30) -> str:
         """执行一条 adb 命令并返回合并后的输出"""

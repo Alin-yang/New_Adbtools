@@ -52,6 +52,7 @@ New_Adbtools/
 │   ├── test_core_regression.py          # 核心路径回归
 │   ├── test_device_query_and_monitor.py # 设备查询与监控去抖
 │   ├── test_install_flow.py             # 安装流程（含定制 ROM 场景）
+│   ├── test_install_rom_compat.py       # 精简 ROM / 慢设备安装兼容（busybox/超时/心跳）
 │   ├── test_async_and_fixes.py          # 线程安全
 │   ├── test_perf_improvements.py        # 性能
 │   ├── test_perf_v4.py                  # 性能 v5（口径分离/卡顿率/泄漏检测…）
@@ -64,11 +65,6 @@ New_Adbtools/
 │   ├── probe_device_tab.py              # 容器树宽度溯源
 │   ├── profile_startup.py               # 启动耗时分解
 │   ├── measure_tabs_vertical.py         # 各 Tab 纵向空白量化
-│   ├── test_log_search.py               # 终端搜索/过滤功能测试（v3）
-│   ├── test_layout_v4.py                # v4 布局（主题/导航/终端/契约）
-│   ├── test_perf_v4.py                  # 性能 v4（口径分离/卡顿率/泄漏检测…）
-│   ├── test_perf_live_refresh.py        # 性能实时刷新链路（后台线程→UI 队列泵）
-│   ├── screenshot_v4.py                 # v4 自动截图（深/浅两套）
 │   └── verify_install_real_device.py    # 真机验证安装判定（需 adb）
 ├── ADBTool.spec                 # PyInstaller 打包配置（onefile）
 ├── ADBTool_onedir.spec          # PyInstaller 打包配置（onedir，启动更快）
@@ -683,7 +679,39 @@ adb shell am broadcast -a ADB_INPUT_TEXT --es msg "你好"
 
 ## 十、版本历史
 
-### v5.1（当前版本）—— 修复实时刷新失效
+### v5.2（当前版本）—— 修复精简 ROM / 慢设备上的安装失败
+用户反馈安装 36MB APK 到康佳电视（Android 5.1.1）失败，日志里同时出现
+`Command timed out after 15 seconds`、`head: not found`、
+`remote Is a directory`，还重复传了两遍 36MB。真机排查后确认是**五个问题叠加**：
+
+| # | 问题 | 根因 | 修复 |
+|---|------|------|------|
+| 1 | 可读性探测误判「设备禁止 shell 读取」 | 硬编码 `head -c 4`，而该 ROM **连 head 都没有**（只有 busybox） | 多级回退：`head` → `busybox head` → `ls -l`，并统一校验文件大小 |
+| 2 | push 15 秒超时 | 固定超时；实测该设备传 36MB 要 **45 秒** | 按文件大小动态估算（`Config.install_push_timeout`） |
+| 3 | 回退 `adb install` 必然失败 | `adb install` 内部是 push-install 模式 → `pm install <路径>`，而该 ROM 的 `pm install <路径>` **会挂死**（连不存在的文件都卡 40 秒+） | 设备端文件完好时**优先重试 pm install**，不重新传输 |
+| 4 | 界面像卡死 | `process.stdout.readline()` 在无输出时**阻塞**，心跳代码根本没机会执行 | 改用**独立读线程 + 主线程轮询**，每 10 秒报进度 |
+| 5 | 已装成功却报失败 | pm 打完 `Success` 但进程不退出（ROM 收尾慢），一直等到超时 | 收到 `Success` **立即判定成功**，不等进程退出 |
+
+另外还修了：
+- **超时后必须杀掉 pm 进程**：`pm install` 持有**全局安装锁**，
+  残留进程会让下一次安装排队等锁 → 双重超时
+- **重试不重复传输**：36MB 重推一遍既慢又抢资源
+- **文件不存在立即判不可读**（`No such file`），不再 fallback 到「假定可读」
+
+真机验证（康佳电视 10.1.246.185 / com.gitvdemo.video / 36.1MB）：
+```
+[  0.4s] 正在传输 APK 到设备（36.1 MB）...
+[ 45.2s] 传输完成，正在设备端安装（需要解包与优化，最大约 676 秒，慢设备可能需要几分钟）...
+[ 46.2s] 设备端已收到安装请求，正在解包与优化...
+[197.1s] 设备端安装中... 已用 151 秒（大包需要解包与优化，属正常，请耐心等待）
+[227.2s] 设备端已确认安装成功
+→ 228 秒一次成功，无误判、无回退、无重复传输
+```
+
+新增 `tests/test_install_rom_compat.py`（30+ 断言，全部 mock），
+把上面 5 点固化成回归；`check.bat` 扩到 11 步。
+
+### v5.1 —— 修复实时刷新失效
 用户反馈「点开始监控后没有实时显示采集数据，只有点击停止后才从报告里体现」。
 排查发现是**架构级缺陷**，静默失败：
 
@@ -900,4 +928,4 @@ GitHub：https://github.com/Alin-yang/New_Adbtools
 ---
 
 **最后更新**: 2026-10-28
-**文档版本**: v5.1
+**文档版本**: v5.2

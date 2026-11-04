@@ -1,9 +1,11 @@
-"""更新 check.bat：加入性能实时刷新测试，保持 GBK + CRLF
+"""重建 check.bat 的测试步骤（保持 GBK + CRLF）
 
 check.bat 必须保持 GBK 编码 —— cmd.exe 按 ANSI(GBK) 解码，
 UTF-8 会把命令行拆散导致脚本全坏。
 
-⚠️ 注意：新步骤必须插在 `exit /b` **之前**，否则永远不会执行。
+⚠️ 用**结构化重建**而不是正则替换：
+   正则很容易误伤（之前一次把正常的那一步也删掉了），
+   而且新步骤如果被追加到 `exit /b` 之后就永远不会执行。
 
 用法: python tools/update_check_bat.py
 """
@@ -14,39 +16,80 @@ import re
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BAT = os.path.join(ROOT, 'check.bat')
 
-with io.open(BAT, encoding='gbk') as f:
-    src = f.read()
+# (步骤标题, 测试脚本路径)  —— None 表示 lint（特殊处理）
+STEPS = [
+    ('代码质量检查 (lint)', None),
+    ('核心路径回归测试', 'test_core_regression.py'),
+    ('设备查询与监控测试', 'test_device_query_and_monitor.py'),
+    ('安装流程测试', 'test_install_flow.py'),
+    ('精简 ROM / 慢设备安装兼容测试', 'test_install_rom_compat.py'),
+    ('异步与线程安全测试', 'test_async_and_fixes.py'),
+    ('性能优化测试', 'test_perf_improvements.py'),
+    ('性能监控 v4 解析与分析测试', 'test_perf_v4.py'),
+    ('性能实时刷新链路测试', 'test_perf_live_refresh.py'),
+    ('终端搜索功能测试', 'test_log_search.py'),
+    ('v4 工作台布局测试', 'test_layout_v4.py'),
+]
 
-NEW_STEP = ('echo [10/10] 性能实时刷新链路测试\n'
-            '"%PYTHON%" tests\\test_perf_live_refresh.py || set FAILED=1\n')
+HEAD = '''@echo off
+chcp 65001 >nul
+echo ================================
+echo ADB Tool 一键检查
+echo ================================
+REM 跑 lint + 全部单元测试。任何一步失败就返回非 0。
+REM 注意：本文件是 GBK 编码（cmd.exe 按 ANSI 解码 UTF-8 会把命令行拆散）。
+REM 改这个文件时用 tools 下同目录的编码写法，或改完后用：
+REM   python tools/update_check_bat.py
 
-# 1) 清掉上一次可能追加到末尾的残段（在 exit /b 之后，永远不会执行）
-src = re.sub(r'\n*echo\.\s*\n*echo \[11/11\][^\n]*\n[^\n]*test_perf_live_refresh[^\n]*\n',
-             '\n', src)
+set "PYTHON=D://tool//python//python.exe"
+if not exist "%PYTHON%" set "PYTHON=python"
 
-# 2) 步骤总数统一为 10（当前 9 个测试 + 新增 1 个）
-src = re.sub(r'\[(\d+)/11\]', r'[\1/10]', src)
-src = re.sub(r'\[(\d+)/10\]', r'[\1/10]', src)
+set FAILED=0
+'''
 
-# 3) 把新步骤插到最后一个测试步骤之后（即 "echo ====" 之前）
-if 'test_perf_live_refresh.py' not in src:
-    anchor = '"%PYTHON%" tests\\test_layout_v4.py || set FAILED=1\n'
-    assert src.count(anchor) == 1, src.count(anchor)
-    src = src.replace(anchor, anchor + '\necho.\n' + NEW_STEP)
+TAIL = '''
+echo.
+echo ================================
+REM 必须显式 exit /b 0 或 1：
+REM "exit /b %%FAILED%%" 在 if 块里是解析时展开的，拿到的还是初始空值。
+if "%FAILED%"=="0" (
+    echo 全部通过
+    exit /b 0
+) else (
+    echo 存在失败项，请检查上面的输出
+    exit /b 1
+)
+'''
 
-# 4) 校验：步骤编号必须连续 1..N，且新测试在 exit /b 之前
+total = len(STEPS)
+body = []
+for idx, (title, script) in enumerate(STEPS, 1):
+    body.append(f'echo.\necho [{idx}/{total}] {title}')
+    if script is None:
+        body.append('"%PYTHON%" tools\\lint.py\nif errorlevel 1 set FAILED=1')
+    else:
+        body.append(f'"%PYTHON%" tests\\{script} || set FAILED=1')
+
+src = HEAD + '\n' + '\n'.join(body) + '\n' + TAIL
+
+# ── 校验：步骤编号连续、分母一致、测试都在 exit /b 之前 ──
 steps = re.findall(r'\[(\d+)/(\d+)\]', src)
 nums = [int(a) for a, b in steps]
-total = int(steps[0][1]) if steps else 0
 assert nums == list(range(1, total + 1)), f'步骤编号不连续: {nums}'
-assert 'test_perf_live_refresh.py' in src.split('exit /b')[0], \
-    '新测试必须位于 exit /b 之前'
+assert all(int(b) == total for _, b in steps), '步数分母不一致'
+before_exit = src.split('exit /b')[0]
+for _, script in STEPS:
+    if script:
+        assert script in before_exit, f'缺少测试或位置错误: {script}'
+# ⚠️ 用行首缩进匹配：注释里也有 "exit /b 0" 字样
+assert len(re.findall(r'^\s+exit /b 0\s*$', src, re.M)) == 1
+assert len(re.findall(r'^\s+exit /b 1\s*$', src, re.M)) == 1
 
 # 写回：GBK + CRLF
 out = src.replace('\r\n', '\n').replace('\n', '\r\n')
 with io.open(BAT, 'wb') as f:
     f.write(out.encode('gbk'))
 
-print('check.bat 已更新：')
+print('check.bat 已重建：')
 print('  步骤:', re.findall(r'\[\d+/\d+\]', src))
 print('  字节:', len(out.encode('gbk')))

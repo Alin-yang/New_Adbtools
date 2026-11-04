@@ -76,7 +76,9 @@ class Config:
     # v4.2 = 顶栏精简（去掉重复折叠按钮）+ 包名框加宽
     # v5.0 = 性能监控模块完全重写（口径修正 + 测试报告 + 场景阈值）
     # v5.1 = 修复实时刷新失效（UI 队列泵改为常驻，主线程启动）
-    APP_VERSION = "5.1"
+    # v5.2 = 修复精简 ROM / 慢设备上的安装失败（busybox 回退、动态超时、
+    #        pm install 心跳、Success 即时判定）
+    APP_VERSION = "5.2"
 
     # 进度条配置
     PROGRESS_BAR_LENGTH = 150
@@ -95,6 +97,40 @@ class Config:
     INSTALL_RETRIES = 2          # 安装失败后的重试次数
     INSTALL_REMOTE_TMP = "/data/local/tmp/_adbtool_install.apk"  # 设备端临时 APK 路径
     INSTALL_HEARTBEAT = 10       # 安装过程无输出时的心跳提示间隔（秒）
+
+    # ⚠️ 安装超时必须**按文件大小动态估算**，固定值在慢设备上必然超时。
+    #    实测康佳电视（Android 5.1.1，CPU/存储都慢）：
+    #      36 MB APK → adb push 约 36 秒 → pm install 约 195 秒（！）
+    #    而早期版本的 push 超时只有 15 秒 → 必然误判失败，
+    #    且残留的 push 进程还在跑，与后续 adb install 抢同一个文件，
+    #    报出 "remote Is a directory" 这种看不懂的错误。
+    #
+    #    估算口径（保守）：
+    #      传输：按 300 KB/s 折算（下限 120 秒，上限 900 秒）
+    #      设备端安装：按 100 KB/s 折算（下限 180 秒，上限 1200 秒）
+    INSTALL_PUSH_SPEED_KBPS = 300
+    INSTALL_PUSH_MIN_TIMEOUT = 120
+    INSTALL_PUSH_MAX_TIMEOUT = 900
+    # ⚠️ 设备端安装比传输慢得多：实测同一台康佳电视上同一个 36MB APK，
+    #    pm install 有时 195 秒、有时 429 秒还没返回（ROM 收尾慢）。
+    #    这里按 60 KB/s 折算，比传输保守得多，宁可多等也不要误判失败。
+    INSTALL_PM_SPEED_KBPS = 60
+    INSTALL_PM_MIN_TIMEOUT = 240
+    INSTALL_PM_MAX_TIMEOUT = 1500
+
+    @classmethod
+    def install_push_timeout(cls, apk_size: int) -> int:
+        """按 APK 大小估算 push 超时（秒）"""
+        est = int(apk_size / 1024 / cls.INSTALL_PUSH_SPEED_KBPS) + 30
+        return max(cls.INSTALL_PUSH_MIN_TIMEOUT,
+                   min(cls.INSTALL_PUSH_MAX_TIMEOUT, est))
+
+    @classmethod
+    def install_pm_timeout(cls, apk_size: int) -> int:
+        """按 APK 大小估算设备端 pm install 超时（秒）"""
+        est = int(apk_size / 1024 / cls.INSTALL_PM_SPEED_KBPS) + 60
+        return max(cls.INSTALL_PM_MIN_TIMEOUT,
+                   min(cls.INSTALL_PM_MAX_TIMEOUT, est))
     
     # 性能优化的ADB命令配置
     ADB_COMMAND_TIMEOUT = 15  # 减少ADB命令超时时间
