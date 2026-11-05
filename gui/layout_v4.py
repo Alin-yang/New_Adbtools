@@ -1103,6 +1103,39 @@ class LayoutV4:
         ttk.Button(export_row, text="导出报告", command=self.app.export_performance_report,
                    style='Secondary.TButton').pack(side=tk.LEFT, padx=(0, 12))
 
+        # ── 基线（v5.4.7）──────────────────────────────────────
+        # ⚠️ 基线功能之前**只在报告窗口里有入口**，用起来要三步：
+        #    停止 → 报告窗口 → 点「与基线对比」。
+        #    这里把入口提到面板上：选好基线，报告一打开就自带对比结果。
+        base_row = tk.Frame(content, bg=self.theme.color('bg_app'))
+        base_row.pack(fill=tk.X, pady=(8, 0))
+        self.theme.register(base_row, 'canvas')
+
+        self._label(base_row, text="基线", fg_key='fg_dim', bg_key='bg_app',
+                    font=(FONT_UI, FS_MD)).pack(side=tk.LEFT, padx=(0, 6))
+
+        # 下拉：第 0 项恒为「不对比」，其余是已有基线（时间 + 标签）
+        self.app.perf_baseline_var = tk.StringVar(value="不对比")
+        self._baseline_combo = ttk.Combobox(
+            base_row, textvariable=self.app.perf_baseline_var,
+            values=["不对比"], width=26, font=(FONT_UI, FS_SM),
+            state="readonly", style='App.TCombobox')
+        self._baseline_combo.pack(side=tk.LEFT, padx=(0, 8))
+        self._baseline_combo.bind('<<ComboboxSelected>>', self._on_baseline_selected)
+
+        ttk.Button(base_row, text="刷新基线", command=self._refresh_perf_baseline_list,
+                   style='Secondary.TButton', width=8).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(base_row, text="存为基线", command=self.app.save_perf_baseline,
+                   style='Secondary.TButton', width=8).pack(side=tk.LEFT, padx=(0, 6))
+
+        self.app.perf_baseline_label = self._label(
+            base_row, text="", fg_key='fg_dim', bg_key='bg_app',
+            font=(FONT_UI, FS_SM), anchor=tk.W)
+        self.app.perf_baseline_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # 初始列出一次
+        self._refresh_perf_baseline_list()
+
         # ⚠️ 这两个状态标签单独占一行：和导出按钮并排时会被挤出可视区。
         status_row = tk.Frame(content, bg=self.theme.color('bg_app'))
         status_row.pack(fill=tk.X, pady=(6, 0))
@@ -1227,6 +1260,64 @@ class LayoutV4:
         self._paint_tree_tags(self.app.perf_thread_tree)
 
         return holder
+
+    # ------------------------------------------------------------------
+    # 性能基线（v5.4.7）
+    # ------------------------------------------------------------------
+    def _refresh_perf_baseline_list(self):
+        """刷新基线下拉列表
+
+        ⚠️ 下拉第 0 项恒为「不对比」，其余是已有基线。
+           `app.perf_baseline_index` 记的是**去掉「不对比」后的下标**，
+           -1 表示不对比 —— app.get_selected_perf_baseline() 靠它取值。
+        """
+        try:
+            baselines = self.app.list_perf_baselines()
+            self.app._perf_baselines = baselines
+            names = ["不对比"]
+            for b in baselines:
+                _t = b.get('saved_at_text', '')
+                _lbl = b.get('label') or ''
+                cpu = (b.get('session', {}).get('stats', {})
+                       .get('cpu', {}) or {}).get('cur')
+                # ⚠️ 三元表达式里**不能**给变量赋值再在别处引用 ——
+                #    分支不成立时那个变量根本没被创建 → NameError。
+                _cpu = (f"  CPU {cpu:.0f}%"
+                        if isinstance(cpu, (int, float)) else '')
+                names.append(f"{_t}{('  [' + _lbl + ']') if _lbl else ''}{_cpu}")
+            self._baseline_combo['values'] = names
+            # 保持当前选择（刷新后不要跳回「不对比」）
+            cur = getattr(self.app, 'perf_baseline_index', -1)
+            if cur is not None and 0 <= cur < len(baselines):
+                self.app.perf_baseline_var.set(names[cur + 1])
+                self.app.perf_baseline_index = cur
+            else:
+                self.app.perf_baseline_index = -1
+                self.app.perf_baseline_var.set(names[0])
+            if hasattr(self.app, 'perf_baseline_label'):
+                n = len(baselines)
+                self.app.perf_baseline_label.config(
+                    text=(f"共 {n} 份基线" if n else "还没有基线，点「存为基线」保存本次测试"))
+        except Exception as e:
+            logging.error(f"[性能监控] 刷新基线列表失败: {e}", exc_info=True)
+
+    def _on_baseline_selected(self, event=None):
+        """选了哪份基线"""
+        try:
+            name = self.app.perf_baseline_var.get()
+            # 下拉第 0 项是「不对比」
+            idx = -1 if name == "不对比" else self._baseline_combo.current() - 1
+            self.app.perf_baseline_index = idx
+            if idx < 0:
+                if hasattr(self.app, 'perf_baseline_label'):
+                    self.app.perf_baseline_label.config(text="不与基线对比")
+            else:
+                bl = self.app._perf_baselines[idx]
+                _t = bl.get('saved_at_text', '')
+                self.app.perf_baseline_label.config(
+                    text=f"将与 {_t} 对比")
+        except Exception as e:
+            logging.error(f"[性能监控] 选择基线失败: {e}", exc_info=True)
 
     def _on_scenario_changed(self, event=None):
         """场景切换：更新提示文案与内部 key"""

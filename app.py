@@ -5476,9 +5476,16 @@ class ADBToolApp:
         return session
 
     def _open_perf_report(self, baseline=None):
-        """弹出性能测试报告窗口"""
+        """弹出性能测试报告窗口
+
+        ⚠️ v5.4.7：**自动带上性能面板上选中的基线** ——
+           用户在面板上选好「跟哪份比」，报告一打开就有对比结果，
+           不用再在报告窗口里点一次「与基线对比」。
+        """
         from modules.perf_report import PerfReportWindow
         session = self._build_perf_session()
+        if baseline is None:
+            baseline = self.get_selected_perf_baseline()
         win = PerfReportWindow(self, session, baseline)
         self._perf_report_window = win
         return win
@@ -5493,6 +5500,67 @@ class ADBToolApp:
         except Exception as e:
             logging.error(f"[性能监控] 打开报告失败: {str(e)}", exc_info=True)
             self.update_status(f"✗ 打开报告失败: {str(e)}", False)
+
+    # ------------------------------------------------------------ 基线
+    def list_perf_baselines(self):
+        """列出当前目标的全部基线（新 → 旧）
+
+        ⚠️ v5.4.7：基线功能之前**只在报告窗口里有入口**
+           （「存为基线」/「与基线对比」两个按钮），
+           用起来要「停止 → 报告窗口 → 再点对比」三步。
+           现在性能面板上直接能选，报告会自动带上选中的基线。
+        """
+        try:
+            pkg = getattr(self, 'perf_package_entry', None)
+            name = pkg.get().strip() if pkg is not None else ''
+            if not name:
+                name = self.get_package_name_from_input() or ''
+            return perf_baseline.BaselineStore().list_baselines(name)
+        except Exception as e:
+            logging.error(f"[性能监控] 列出基线失败: {str(e)}", exc_info=True)
+            return []
+
+    def get_selected_perf_baseline(self):
+        """取当前选中的基线 session（没选则返回 None）
+
+        ⚠️ **必须取 ['session']**：
+           `list_baselines()` 返回的是**存储包装**
+           （package/label/saved_at/session/_path/_file），
+           而 `compare()` 期望的是 **session 本体**（含 stats 键）。
+           少这一步 → compare 拿不到 stats，对比结果全空。
+        """
+        try:
+            idx = getattr(self, 'perf_baseline_index', -1)
+            if idx is None or idx < 0:
+                return None
+            baselines = getattr(self, '_perf_baselines', None) or []
+            if idx >= len(baselines):
+                return None
+            return baselines[idx].get('session')
+        except Exception:
+            return None
+
+    def save_perf_baseline(self):
+        """把当前这次测试存为基线"""
+        try:
+            if not self.performance_monitor.history:
+                self.update_status("⚠ 暂无采样数据，无法存为基线", False)
+                return
+            pkg = getattr(self, 'perf_package_entry', None)
+            name = pkg.get().strip() if pkg is not None else ''
+            if not name:
+                name = self.get_package_name_from_input() or ''
+            session = self._build_perf_session()
+            path = perf_baseline.BaselineStore().save(name, session)
+            if path:
+                self.update_status(f"✓ 已存为基线: {os.path.basename(path)}", True)
+                # 刷新下拉列表
+                self._refresh_perf_baseline_list()
+            else:
+                self.update_status("✗ 保存基线失败", False)
+        except Exception as e:
+            logging.error(f"[性能监控] 保存基线失败: {str(e)}", exc_info=True)
+            self.update_status(f"✗ 保存基线失败: {str(e)}", False)
 
     def _current_perf_scenario(self):
         """当前选中的场景（优先用布局层记录的 key）"""
