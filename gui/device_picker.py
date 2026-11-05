@@ -64,6 +64,14 @@ GROUP_HEIGHT = 26
 MAX_HISTORY_ROWS = 8
 # 型号缓存有效期（秒）—— 型号不会频繁变，缓存久一点省 adb 调用
 META_CACHE_TTL = 300
+# 滚动条宽度（px）—— 画在列表右侧，纯 Canvas 绘制
+# ⚠️ 4px 太细了，缩放后基本看不见（等于没有）→ 用 6px，
+#    并且滑块用较亮的 fg_muted（常态）/ accent（悬停），保证能看清。
+SCROLLBAR_WIDTH = 6
+# 滚动条滑块最小高度（px）
+SCROLLBAR_MIN_THUMB = 24
+# 列表内容宽度（px）—— 浮层宽 - 左右 padx - 滚动条宽 - 2px 余量
+CONTENT_WIDTH = POPUP_WIDTH - 12 - SCROLLBAR_WIDTH - 2
 
 
 class DevicePicker:
@@ -225,20 +233,51 @@ class DevicePicker:
         foot = tk.Frame(win, bg=bg)
         foot.pack(side=tk.BOTTOM, fill=tk.X, padx=12, pady=(3, 9))
         self.theme.register(foot, 'elev')
-        tk.Label(foot, text="点击任意一行即可切换到该设备",
-                 font=(FONT_UI, FS_XS), bg=bg,
-                 fg=self.theme.color('fg_dim')).pack(side=tk.LEFT)
+        # ⚠️ 提示文案**随内容长度变**：
+        #    内容超出视口时，光有滚动条还不够 —— 底部那半截条目
+        #    用户会以为是渲染错误。明确告诉他"下面还有，滚一下"。
+        self._hint_label = tk.Label(
+            foot, text="点击任意一行即可切换到该设备",
+            font=(FONT_UI, FS_XS), bg=bg,
+            fg=self.theme.color('fg_dim'))
+        self._hint_label.pack(side=tk.LEFT)
+        self.theme.register(self._hint_label, 'elev_label')
         self.theme.register(foot, 'elev')
 
         # ── 列表画布（纯 Canvas，不用 Frame 树）──────────────
         # ⚠️ **不能用 expand=True**：canvas 会撑满父容器的剩余空间，
         #    忽略我设的 height → 视口比预期高，滚动区对不上，
         #    底部内容看起来像被裁断。高度由 _render() 按内容算好后设置。
+        # ⚠️ 画布 + 滚动条放在同一个横向容器里（list_row）：
+        #    滚动条要贴着画布右侧，且高度与画布**严格相等**。
+        #    如果分开 pack，两者高度会各自算 → 滚动条与内容错位。
+        list_row = tk.Frame(win, bg=bg)
+        list_row.pack(fill=tk.X, padx=6, pady=4)
+        self.theme.register(list_row, 'elev')
+
+        # ⚠️ **滚动条必须先 pack（side=RIGHT）**：
+        #    pack 按调用顺序分配空间，canvas 在前的话它会把宽度吃光，
+        #    滚动条只剩 2px（实测）→ 几乎看不见，等于没有。
+        self._sbar = tk.Canvas(
+            list_row, bg=bg, highlightthickness=0, borderwidth=0,
+            height=200, width=SCROLLBAR_WIDTH)
+        self._sbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.theme.register(self._sbar, 'elev')
+        self._sbar.bind('<Button-1>', self._on_sbar_click)
+        self._sbar.bind('<B1-Motion>', self._on_sbar_drag)
+        self._sbar.bind('<Motion>', self._on_sbar_motion)
+        self._sbar.bind('<Leave>', self._on_sbar_leave)
+
         self._canvas = tk.Canvas(
-            win, bg=bg, highlightthickness=0, borderwidth=0,
-            height=200, width=POPUP_WIDTH - 12)
-        self._canvas.pack(fill=tk.X, padx=6, pady=4)
+            list_row, bg=bg, highlightthickness=0, borderwidth=0,
+            height=200, width=CONTENT_WIDTH)
+        self._canvas.pack(side=tk.LEFT, fill=tk.Y)
         self.theme.register(self._canvas, 'elev')
+
+        # 滚动条状态：滑块位置 + 拖拽偏移
+        self._sb_thumb = None      # (y0, y1) 滑块在轨道上的位置
+        self._sb_drag_off = 0      # 拖拽时鼠标相对滑块顶部的偏移
+        self._sb_hover = False
 
         # 交互
         self._canvas.bind('<Button-1>', self._on_click)
@@ -486,7 +525,10 @@ class DevicePicker:
             self._online_norm = online_norm
 
             y = 4
-            width = POPUP_WIDTH - 12
+            # ⚠️ 内容宽度要**扣掉滚动条**：
+            #    列表画布实际宽度 = CONTENT_WIDTH，
+            #    画布宽一点就会把「切换到」胶囊画到滚动条下面被盖住。
+            width = CONTENT_WIDTH
 
             # ── 在线设备分组 ──────────────────────────────
             y = self._draw_group(c, "在线设备", y, width, dim)
@@ -541,6 +583,10 @@ class DevicePicker:
             max_view = POPUP_MAX_HEIGHT - CHROME_HEIGHT
             view_h = max(60, min(self._content_height, max_view))
             c.configure(height=view_h)
+            # ⚠️ 滚动条画布高度必须与列表画布**严格相等**，
+            #    否则滑块位置算出来会整体偏移（轨道比视口短/长）。
+            if self._sbar is not None:
+                self._sbar.configure(height=view_h)
             # 记录视口高度，_place() 用它算浮层总高
             self._view_height = view_h
 
@@ -556,8 +602,153 @@ class DevicePicker:
             if hasattr(self, '_count_label') and self._count_label.winfo_exists():
                 n = len(online_devices)
                 self._count_label.config(text=f"在线 {n} 台")
+
+            # ⚠️ **最后**才画滚动条 —— 它依赖上面算好的 content_height / view_h
+            self._draw_scrollbar()
+
+            # 提示文案随「内容是否超出视口」变
+            self._update_hint(view_h)
         except Exception as e:
             logging.error(f"[设备切换] 渲染失败: {e}", exc_info=True)
+
+    def _update_hint(self, view_h):
+        """底部提示文案：内容超出视口时提示可滚动"""
+        try:
+            if not hasattr(self, '_hint_label'):
+                return
+            content_h = getattr(self, '_content_height', 0)
+            if content_h > view_h + 1:
+                self._hint_label.config(
+                    text="点击任意一行即可切换 · 右侧滑块可滚动查看更多")
+            else:
+                self._hint_label.config(
+                    text="点击任意一行即可切换到该设备")
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # 滚动条（纯 Canvas 绘制）
+    # ------------------------------------------------------------------
+
+    def _draw_scrollbar(self):
+        """画右侧滚动条
+
+        ⚠️ 为什么必须画：
+           内容超出视口时（实测 10 台设备 → 内容 550px / 视口 278px），
+           列表底部会被裁掉一半，用户**完全看不出下面还有东西**，
+           以为就这么多设备 → 根本不知道要滚。
+           滚动条是这个信息缺失的唯一视觉出口。
+        """
+        try:
+            sb = self._sbar
+            if sb is None or not sb.winfo_exists():
+                return
+            sb.delete('all')
+            self._sb_thumb = None
+
+            view_h = self._canvas.winfo_height()
+            content_h = getattr(self, '_content_height', 0)
+            if view_h <= 10 or content_h <= view_h:
+                # 内容能全放下 → 不需要滚动条
+                return
+
+            track = self.theme.color('line')
+            thumb_c = self.theme.color('accent') if self._sb_hover \
+                else self.theme.color('fg_muted')
+
+            # 轨道
+            sb.create_rectangle(1, 0, SCROLLBAR_WIDTH - 1, view_h,
+                                fill=track, outline='')
+            # 滑块：高度按内容/视口比例，位置按当前滚动偏移
+            ratio = view_h / float(content_h)
+            thumb_h = max(SCROLLBAR_MIN_THUMB, int(view_h * ratio))
+            if thumb_h > view_h:
+                thumb_h = view_h
+            # yview 返回 (first, last) 比例
+            try:
+                first = self._canvas.yview()[0]
+            except Exception:
+                first = 0.0
+            travel = view_h - thumb_h
+            thumb_y = int(travel * first)
+            sb.create_rectangle(1, thumb_y, SCROLLBAR_WIDTH - 1,
+                                thumb_y + thumb_h,
+                                fill=thumb_c, outline='')
+            self._sb_thumb = (thumb_y, thumb_y + thumb_h)
+        except Exception as e:
+            logging.debug(f"[设备切换] 绘制滚动条失败: {e}")
+
+    def _update_scrollbar(self):
+        """滚动后更新滑块位置"""
+        try:
+            if self._sbar is None:
+                return
+            self._draw_scrollbar()
+        except Exception:
+            pass
+
+    def _on_sbar_click(self, event):
+        """点击滚动条：拖到点击处（点空白处跳一屏）"""
+        try:
+            if self._sb_thumb is None:
+                return
+            view_h = self._canvas.winfo_height()
+            content_h = getattr(self, '_content_height', 0)
+            if view_h <= 0 or content_h <= 0:
+                return
+            ty0, ty1 = self._sb_thumb
+            if ty0 <= event.y <= ty1:
+                # 点在滑块上 → 准备拖拽，记录鼠标相对滑块顶部的偏移
+                self._sb_drag_off = event.y - ty0
+            else:
+                # 点在轨道空白处 → 跳到该位置
+                self._sb_drag_off = (ty1 - ty0) // 2
+                self._scroll_to_pixel(event.y - self._sb_drag_off)
+        except Exception:
+            pass
+
+    def _on_sbar_drag(self, event):
+        """拖动滑块"""
+        try:
+            self._scroll_to_pixel(event.y - self._sb_drag_off)
+        except Exception:
+            pass
+
+    def _scroll_to_pixel(self, thumb_top):
+        """把滑块顶边移到 thumb_top 对应的内容位置"""
+        try:
+            view_h = self._canvas.winfo_height()
+            content_h = getattr(self, '_content_height', 0)
+            if view_h <= 0 or content_h <= 0:
+                return
+            ratio = view_h / float(content_h)
+            thumb_h = max(SCROLLBAR_MIN_THUMB, int(view_h * ratio))
+            travel = max(1, view_h - thumb_h)
+            frac = min(1.0, max(0.0, thumb_top / float(travel)))
+            self._canvas.yview_moveto(frac)
+            self._update_scrollbar()
+        except Exception:
+            pass
+
+    def _on_sbar_motion(self, event=None):
+        """鼠标移到滚动条上 → 滑块高亮"""
+        try:
+            if self._sb_hover:
+                return
+            self._sb_hover = True
+            self._sbar.configure(cursor='hand2')
+            self._draw_scrollbar()
+        except Exception:
+            pass
+
+    def _on_sbar_leave(self, event=None):
+        """鼠标移出滚动条 → 恢复常态"""
+        try:
+            self._sb_hover = False
+            self._sbar.configure(cursor='')
+            self._draw_scrollbar()
+        except Exception:
+            pass
 
     def _draw_group(self, c, text, y, width, dim):
         """画分组小标题，返回新的 y"""
@@ -690,9 +881,11 @@ class DevicePicker:
         """滚轮滚动"""
         try:
             self._canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
+            # ⚠️ 滚轮在**列表画布**上，但滑块在**滚动条画布**上 ——
+            #    两个是独立控件，不会自动同步，必须手动重画。
+            self._update_scrollbar()
         except Exception:
             pass
-
     def _on_root_click(self, event):
         """点击主窗口其它地方 → 关闭浮层"""
         try:

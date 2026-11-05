@@ -447,6 +447,53 @@ check("在线设备不显示「已离线」",
       _picker._meta_text('10.1.246.185', True))
 _picker._meta_cache = {}
 
+# ── 5f. 滚动条（内容超出视口时必须有提示）────────────────────
+# ⚠️ v5.4.3 新增：实测 10 台设备 → 内容 570px / 视口 278px，
+#    底部半截条目让用户以为渲染坏了，且完全不知道下面还有设备。
+#    滚动条 + 底部提示文案是唯一的信息出口，必须有防回归断言。
+_app.ip_history = ['192.168.0.3', '192.168.0.8', '192.168.1.7',
+                   '192.168.1.20', '192.168.2.3', '192.168.2.44',
+                   '192.168.3.9', '10.1.246.77']
+_app.get_online_devices = lambda: ['10.1.246.185:5555', '192.168.1.99:5555']
+_picker.hide()
+_root.update()
+_picker._render(_app.get_online_devices())
+for _ in range(3):
+    _root.update_idletasks()
+    _root.update()
+
+check("内容超出视口时显示滚动条",
+      _picker._sb_thumb is not None, _picker._sb_thumb)
+check("滚动条画布宽度够看得见（>=4px）",
+      _picker._sbar.winfo_width() >= 4, _picker._sbar.winfo_width())
+check("滚动条画布高度与列表视口一致",
+      _picker._sbar.winfo_height() == _picker._canvas.winfo_height(),
+      f"sbar={_picker._sbar.winfo_height()} canvas={_picker._canvas.winfo_height()}")
+check("底部提示提到可滚动",
+      '滚动' in _picker._hint_label.cget('text'),
+      _picker._hint_label.cget('text'))
+
+# 滚动后滑块必须跟着移动（否则滑块是死的，用户会以为不能用）
+_thumb_before = _picker._sb_thumb
+_canvas.yview_scroll(5, 'units')
+_root.update()
+_picker._update_scrollbar()
+check("滚动后滑块位置跟着变",
+      _picker._sb_thumb != _thumb_before,
+      f"before={_thumb_before} after={_picker._sb_thumb}")
+
+# 内容放得下时不应该有滚动条
+_app.ip_history = ['192.168.0.3']
+_picker._render(['10.1.246.185:5555'])
+for _ in range(2):
+    _root.update_idletasks()
+    _root.update()
+check("内容能全放下时不显示滚动条",
+      _picker._sb_thumb is None, _picker._sb_thumb)
+check("内容能全放下时提示恢复为普通文案",
+      '滚动' not in _picker._hint_label.cget('text'),
+      _picker._hint_label.cget('text'))
+
 # 点击在线设备 → 应切到该设备并关闭浮层
 _picked = []
 _app.select_device = lambda dev, announce=True, devices=None: _picked.append(dev)

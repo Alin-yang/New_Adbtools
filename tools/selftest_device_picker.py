@@ -104,6 +104,82 @@ def main():
     check("30 次滚动耗时 < 200ms（纯 Canvas 不卡）", _elapsed < 200,
           "%.1fms" % _elapsed)
 
+    # 4e. 设备信息（型号）必须能显示 —— v5.4.2 的核心功能
+    # ⚠️ 这条必须守护：v5.4.1 重构时漏掉了 _load_meta_async 的调用，
+    #    副标题永远显示「在线/已离线」，浮层退化成纯 IP 列表。
+    #    打包后如果 utils.load_device_info_cache 之类没被收进去，
+    #    也会在这里暴露。
+    _loaded = []
+    _orig_meta = picker._load_meta_async
+
+    def _meta_spy(device):
+        _loaded.append(device)
+        return _orig_meta(device)
+
+    picker._load_meta_async = _meta_spy
+    # ⚠️ 浮层此刻是**打开**状态（步骤 3 打开的），toggle() 会把它**关闭**，
+    #    不会触发重渲染 → 拿不到任何加载调用。
+    #    必须先 hide 再 toggle，让它真正重新渲染一次。
+    picker.hide()
+    lay._toggle_device_picker()
+    for _ in range(3):
+        root.update_idletasks()
+        root.update()
+    check("渲染时会为在线设备拉取型号",
+          len(_loaded) > 0, _loaded)
+    # 副标题文本：注入一条缓存，验证能拼出「型号 · 版本」
+    if picker._rows:
+        _dev = picker._rows[0][0]
+        _key = picker._normalize(_dev)
+        picker._meta_cache[_key] = {'model': 'TestModel X',
+                                    'version': '13.0'}
+        _txt = picker._meta_text(_dev, True)
+        check("副标题能显示型号与系统版本",
+              'TestModel X' in _txt and '13.0' in _txt, _txt)
+        # 离线设备必须额外标出「已离线」
+        _txt_off = picker._meta_text(_dev, False)
+        check("离线设备的副标题标出「已离线」",
+              '已离线' in _txt_off, _txt_off)
+    else:
+        _out("       (无设备行，跳过型号显示测试)")
+
+    # 4f. 滚动条（内容超出视口时必须有提示）
+    # ⚠️ v5.4.3 新增：内容 570px / 视口 278px 时底部半截条目
+    #    会让用户以为渲染坏了，且不知道下面还有设备。
+    _orig_hist = app.ip_history
+    _orig_online = app.get_online_devices
+    app.ip_history = ['192.168.0.3', '192.168.0.8', '192.168.1.7',
+                      '192.168.1.20', '192.168.2.3', '192.168.2.44',
+                      '192.168.3.9', '10.1.246.77']
+    app.get_online_devices = lambda: ['10.1.246.185:5555', '192.168.1.99:5555']
+    picker.hide()
+    root.update()
+    picker._render(app.get_online_devices())
+    for _ in range(3):
+        root.update_idletasks()
+        root.update()
+    check("内容超出视口时显示滚动条",
+          picker._sb_thumb is not None, picker._sb_thumb)
+    check("滚动条宽度够看得见",
+          picker._sbar.winfo_width() >= 4, picker._sbar.winfo_width())
+    check("滚动条高度与列表视口一致",
+          picker._sbar.winfo_height() == picker._canvas.winfo_height(),
+          "sbar=%s canvas=%s" % (picker._sbar.winfo_height(),
+                                picker._canvas.winfo_height()))
+    check("底部提示提到可滚动",
+          '滚动' in picker._hint_label.cget('text'),
+          picker._hint_label.cget('text'))
+    # 内容放得下时不应有滚动条
+    app.ip_history = ['192.168.0.3']
+    picker._render(['10.1.246.185:5555'])
+    for _ in range(2):
+        root.update_idletasks()
+        root.update()
+    check("内容能全放下时不显示滚动条",
+          picker._sb_thumb is None, picker._sb_thumb)
+    app.ip_history = _orig_hist
+    app.get_online_devices = _orig_online
+
     # 5. 点选切换
     picked = []
     _orig_select = app.select_device
