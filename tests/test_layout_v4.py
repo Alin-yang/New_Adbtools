@@ -137,7 +137,12 @@ check("顶栏元素未超出可用宽度", total_req <= avail,
 # ⚠️ 回归守护：包名框必须保持可读宽度。
 #    之前像素字号让控件变宽，包名框被压到 73px（完全看不出内容）。
 # ⚠️ 包名框要能显示**完整包名**（如 com.gitvdemo.video 这类较长串）
+# ⚠️ v5.4.4：侧边栏收窄 48px 后加宽到 32 字符（≈259px），
+#    能显示 28 个字符 → 「com.example.myapp.debug」(24) 也完整可见。
 check("包名框宽度可读", app.pkg_combobox.winfo_width() >= 170,
+      f"width={app.pkg_combobox.winfo_width()}")
+check("包名框能显示 28 字符（长包名完整可见）",
+      app.pkg_combobox.winfo_width() >= 240,
       f"width={app.pkg_combobox.winfo_width()}")
 check("设备框宽度可读", app.ip_combobox.winfo_width() >= 100,
       f"width={app.ip_combobox.winfo_width()}")
@@ -418,6 +423,91 @@ check("一台都没有 → 徽标是「无设备」",
 check("「无设备」不再用歧义词「未连接」",
       "未连接" not in app.connection_status_label.cget("text"),
       app.connection_status_label.cget("text"))
+
+# ── 10. 侧边栏宽度（v5.4.4）────────────────────────────────
+# ⚠️ 回归守护：侧边栏从 188 收窄到 140（省 48px 给顶栏和工作区）。
+#    收窄的前提是「品牌区版本号改第二行 + 底部主题/设备数改堆叠」，
+#    否则「☀ 浅色模式」+「0 台」横排要 129px，会把导航项挤没。
+#    这条断言防止有人把宽度改回去、或把堆叠改回横排。
+_rf = lay.root_frame
+_side = None
+for _ch in _rf.winfo_children():
+    if str(_ch.grid_info().get('column')) == '1':
+        _side = _ch
+        break
+check("侧边栏已收窄到 <=150px（横向空间让给顶栏/工作区）",
+      _side is not None and _side.winfo_width() <= 150,
+      f"width={_side.winfo_width() if _side else 'N/A'}")
+check("侧边栏宽度不低于 130px（导航项文字要放得下）",
+      _side is not None and _side.winfo_width() >= 130,
+      f"width={_side.winfo_width() if _side else 'N/A'}")
+
+# 品牌区：版本号必须在第二行（横排会占 170px）
+# ⚠️ 标题和版本号在**嵌套的 brand_text Frame** 里（不是 brand 的直接子控件）——
+#    单独建这个 Frame 是为了让两行文字左边缘对齐到 logo 右边。
+_brand = _side.winfo_children()[0] if _side else None
+if _brand is not None:
+    _bl = []
+    for _c in _brand.winfo_children():
+        if _c.winfo_class() == 'Label':
+            _bl.append(_c)
+        else:
+            # 嵌套 Frame 里的 Label 也算
+            for _gc in _c.winfo_children():
+                if _gc.winfo_class() == 'Label':
+                    _bl.append(_gc)
+    check("品牌区有标题和版本号两个标签",
+          len(_bl) >= 2, len(_bl))
+    # 版本号标签不应与标题同排（y 相同 = 横排）
+    if len(_bl) >= 2:
+        _y0 = _bl[0].winfo_y()
+        _y1 = _bl[1].winfo_y()
+        check("版本号在标题下方（不是横排）", _y1 > _y0,
+              f"title_y={_y0} ver_y={_y1}")
+
+# 底部：主题按钮与设备数必须上下堆叠（横排要 129px）
+_foot = _side.winfo_children()[-1] if _side else None
+if _foot is not None:
+    _fl = [c for c in _foot.winfo_children() if c.winfo_class() == 'Label']
+    if len(_fl) >= 2:
+        check("底部主题与设备数上下堆叠（不是横排）",
+              _fl[1].winfo_y() > _fl[0].winfo_y(),
+              f"theme_y={_fl[0].winfo_y()} count_y={_fl[1].winfo_y()}")
+
+# ── 11. 各 tab 面板零裁切（v5.4.4）─────────────────────────
+# ⚠️ 回归守护：**控件被压到 req < act 就是被裁了**。
+#    实际踩到的两个：
+#      ① 「系统按键」6 个按钮 ttk 默认 width=20 字符 → 每个 118px，
+#         整行 756px 超出工作区 → 最后一个「静音」被压到 69px（半截）
+#      ② 投屏参数下方的提示文字挤在同一行 → req=314 被裁成半句
+#    这条断言把所有 tab 都扫一遍，任何新加控件被裁都会被抓到。
+def _find_truncated(widget, acc):
+    for ch in widget.winfo_children():
+        try:
+            _req = ch.winfo_reqwidth()
+            _act = ch.winfo_width()
+        except Exception:
+            _req = _act = 0
+        if _act > 0 and _req > _act + 2:
+            try:
+                _txt = str(ch.cget('text'))
+            except Exception:
+                _txt = ''
+            if _txt:
+                acc.append(f"{_txt!r} req={_req} act={_act}")
+        _find_truncated(ch, acc)
+    return acc
+
+
+for _tab in ['install', 'diagnose', 'device', 'perf', 'mirror', 'script']:
+    lay.switch_nav(_tab)
+    pump(4)
+    _trunc = _find_truncated(lay.workspace, [])
+    check(f"tab「{_tab}」内无被裁切的控件", not _trunc, _trunc[:3])
+
+# 回到默认 tab
+lay.switch_nav('install')
+pump(2)
 
 root.destroy()
 

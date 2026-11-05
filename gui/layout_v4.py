@@ -150,14 +150,19 @@ class LayoutV4:
         self.theme.register(side, 'side')
 
         # ── 品牌区 ────────────────────────────────────────────
-        brand = tk.Frame(side, bg=self.theme.color('bg_side'), height=54)
+        # ⚠️ **版本号放第二行**，不要和「ADB Tool」横排：
+        #    横排时 logo(22) + 「ADB Tool」(78) + 「v5.4.3」(33) + padx
+        #    合计 170px —— 侧边栏 188px 里有 90% 被这一行占掉，
+        #    而导航项只需要 ~100px（实测：图标 14 + 文字 52 + padx）。
+        #    改成上下堆叠后品牌区最宽只要 78px，侧边栏能砍到 140px。
+        brand = tk.Frame(side, bg=self.theme.color('bg_side'), height=62)
         brand.pack(fill=tk.X)
         brand.pack_propagate(False)
         self.theme.register(brand, 'side')
 
         # Logo 用色块拼一个，简单但比纯文字有辨识度
         logo = tk.Frame(brand, bg=self.theme.color('accent'), width=22, height=22)
-        logo.pack(side=tk.LEFT, padx=(14, 9), pady=16)
+        logo.pack(side=tk.LEFT, padx=(14, 9), pady=(12, 0))
         logo.pack_propagate(False)
         self.theme.register(logo, 'side')
 
@@ -166,8 +171,14 @@ class LayoutV4:
         logo_dot.pack_propagate(False)
         self.theme.register(logo_dot, 'side')
 
-        self._label(brand, text="ADB Tool", fg_key='fg', bg_key='bg_side', font=(FONT_UI, FS_XL, 'bold'), anchor=tk.W).pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self._label(brand, text=f"v{Config.APP_VERSION}", fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, FS_SM)).pack(side=tk.RIGHT, padx=12)
+        # 文字区：标题 + 版本号上下堆叠（左侧对齐到 logo 右边）
+        brand_text = tk.Frame(brand, bg=self.theme.color('bg_side'))
+        brand_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        brand_text.pack_propagate(False)
+        self.theme.register(brand_text, 'side')
+
+        self._label(brand_text, text="ADB Tool", fg_key='fg', bg_key='bg_side', font=(FONT_UI, FS_XL, 'bold'), anchor=tk.W).pack(fill=tk.X, pady=(11, 0))
+        self._label(brand_text, text=f"v{Config.APP_VERSION}", fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, FS_SM), anchor=tk.W).pack(fill=tk.X)
 
         # 分隔线
         self._hline(side)
@@ -178,20 +189,26 @@ class LayoutV4:
         self.theme.register(nav_wrap, 'side')
 
         for group_title, items in self.NAV_GROUPS:
-            self._label(nav_wrap, text=group_title, fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, FS_SM, 'bold'), anchor=tk.W).pack(fill=tk.X, padx=16, pady=(10, 4))
+            # ⚠️ 分组标题上下留白放大一点：侧边栏收窄后导航项变短，
+            #    底部会空出一大片。加点呼吸感让分布更自然。
+            self._label(nav_wrap, text=group_title, fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, FS_SM, 'bold'), anchor=tk.W).pack(fill=tk.X, padx=14, pady=(14, 6))
 
             for key, title, icon, _builder in items:
                 self._build_nav_item(nav_wrap, key, title, icon)
 
         # ── 底部：主题切换 ────────────────────────────────────
         self._hline(side)
-        foot = tk.Frame(side, bg=self.theme.color('bg_side'), height=46)
+        # ⚠️ **主题按钮和设备数上下堆叠**，不要横排：
+        #    横排要 74(「☀ 浅色模式」) + 23(「0 台」) + padx(32) = 129px，
+        #    这是侧边栏宽度的真正瓶颈（导航项只需要 ~100px）。
+        #    堆叠后最宽只要 74px + 8px padding = 82px。
+        foot = tk.Frame(side, bg=self.theme.color('bg_side'), height=62)
         foot.pack(side=tk.BOTTOM, fill=tk.X)
         foot.pack_propagate(False)
         self.theme.register(foot, 'side')
 
         self.theme_btn = self._label(foot, text="", fg_key='fg_muted', bg_key='bg_side', font=(FONT_UI, FS_MD), anchor=tk.W, cursor='hand2')
-        self.theme_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=16)
+        self.theme_btn.pack(fill=tk.X, padx=16, pady=(9, 0))
         self.theme_btn.bind('<Button-1>', lambda e: self._toggle_theme())
         self._update_theme_button()
 
@@ -199,8 +216,8 @@ class LayoutV4:
         # 放顶栏会跟设备/包名上下文抢横向空间（顶栏只有 672px）。
         self.app.device_count_label = self._label(
             foot, text="0 台", fg_key='fg_dim', bg_key='bg_side',
-            font=(FONT_UI, FS_SM), anchor=tk.E)
-        self.app.device_count_label.pack(side=tk.RIGHT, padx=(0, 16))
+            font=(FONT_UI, FS_SM), anchor=tk.W)
+        self.app.device_count_label.pack(fill=tk.X, padx=16)
 
     def _build_nav_item(self, parent, key, title, icon):
         """单个导航项：左侧 3px 高亮条 + 图标 + 文字
@@ -493,8 +510,13 @@ class LayoutV4:
         # ⚠️ 包名框要能看**完整包名**（如 com.gitvdemo.video 之类很长），
         #    所以给足宽度；顶栏的终端折叠按钮已改为折叠时才显示，
         #    常态不占空间，这里可以把宽度让出来。
+        # ⚠️ width=32（v5.4.4：侧边栏收窄 48px 后顶栏多出 111px 余量）：
+        #    实测包名框 22 字符 = 207px，只能显示 22 个字符 ——
+        #    「com.android.settings」(22) 刚好，「com.example.myapp.debug」(24)
+        #    就看不全了。32 字符 ≈ 224px，能显示 28 字符，
+        #    覆盖绝大多数真实包名。剩余余量留给顶栏右侧的刷新等按钮。
         self.app.pkg_combobox = ttk.Combobox(
-            bar, width=22, font=(FONT_UI, FS_MD), style='App.TCombobox')
+            bar, width=32, font=(FONT_UI, FS_MD), style='App.TCombobox')
         self.app.pkg_combobox.pack(side=tk.LEFT, padx=(0, 6))
         self.app.pkg_combobox['height'] = 10
         # app.py 里 pkg_entry 就是 pkg_combobox 的别名（历史遗留）
@@ -720,13 +742,21 @@ class LayoutV4:
                          command=getattr(self.app, method_name), style=style, **kw)
         return btn
 
-    def _btn_row(self, parent, specs, pady=0):
-        """一行按钮。specs = [(文本, 方法名, 类型), ...]"""
+    def _btn_row(self, parent, specs, pady=0, width=None):
+        """一行按钮。specs = [(文本, 方法名, 类型), ...]
+
+        ⚠️ **必须显式给 width**：
+           ttk.Button 的 width 默认是 20「字符」，而 Action 样式的
+           padding 是 (12, 7) → 每个按钮实测 118px。
+           「系统按键」一行 6 个按钮 = 6×118 + 6×8(padx) = 756px，
+           超出工作区可用宽度 → 最后一个「静音」被压到 69px（半截）。
+           按实际文字宽度给 width（字符数）能省下大半。
+        """
         row = tk.Frame(parent, bg=self.theme.color('bg_app'))
         row.pack(fill=tk.X, pady=pady)
         self.theme.register(row, 'canvas')
         for text, method, kind in specs:
-            btn = self._btn(row, text, method, kind)
+            btn = self._btn(row, text, method, kind, width=width)
             if btn is not None:
                 btn.pack(side=tk.LEFT, padx=(0, 8))
         return row
@@ -1199,7 +1229,13 @@ class LayoutV4:
         add_combo(opt_row, "分辨率", Config.SCRCPY_MAX_SIZE_OPTIONS,
                   Config.SCRCPY_MAX_SIZE, "scrcpy_max_size_var", width=7)
 
-        self._label(opt_row, text="卡顿时先降码率，再降分辨率（WiFi 建议 4M + 1080p）", fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, FS_SM)).pack(side=tk.LEFT)
+        # ⚠️ 提示文字**单独占一行**，不要和参数控件挤在同一行：
+        #    同排时它 req=314px，工作区窄一点就被裁成半句
+        #    （实测「…（WiFi 建议 4M + 10」后面断掉）。
+        #    独立一行后宽度自适应，任何窗口宽度下都完整可读。
+        self._label(content, text="卡顿时先降码率，再降分辨率（WiFi 建议 4M + 1080p）",
+                    fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, FS_SM),
+                    anchor=tk.W).pack(fill=tk.X, pady=(0, 8))
 
         # ── 投屏控制 ──────────────────────────────────────────
         _wrap2, content2 = self._section(body, "投屏控制")
@@ -1223,6 +1259,10 @@ class LayoutV4:
         # ── 系统按键 ──────────────────────────────────────────
         _wrap4, content4 = self._section(body, "系统按键")
 
+        # ⚠️ width=6：这一行有 6 个按钮，默认宽度（ttk 20 字符 = 118px）
+        #    放不下，最后一个「静音」会被压成半截。
+        #    「音量 +」文字实测 40px + padding 24px = 64px，
+        #    6 字符足够（不截断），整行 6×76+48 = 504px 稳稳放下。
         self._btn_row(content4, [
             ("返回", "key_back", "secondary"),
             ("主页", "key_home", "secondary"),
@@ -1230,7 +1270,7 @@ class LayoutV4:
             ("音量 +", "key_volume_up", "secondary"),
             ("音量 -", "key_volume_down", "secondary"),
             ("静音", "key_mute", "secondary"),
-        ])
+        ], width=6)
 
         # ── 电源与锁屏 ────────────────────────────────────────
         _wrap5, content5 = self._section(body, "电源与锁屏")
