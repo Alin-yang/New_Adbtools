@@ -113,9 +113,18 @@ check("设备数标签显示 3 台", d.device_count_label.text == "3 台",
       d.device_count_label.text)
 
 # 场景 E：查询失败（None）→ 保持原样不动
+# ⚠️ **必须 mock 查询函数**，不能依赖真实 adb 环境：
+#    `devices=None` 会走 `get_connected_devices_cached_safe()` 真实查询，
+#    机器上一台设备都没有时它返回 `[]`（不是 None）→ 徽标正确地显示「无设备」
+#    → 这条断言会**间歇性失败**（设备在线时过，设备离线时挂）。
+#    本条要测的是「查询**失败**（返回 None）不误报」，所以强制返回 None。
 e = make_badge_app()
-e.update_connection_status(devices=None)   # 会被当成"自行查询" → 走真实查询
-# 这里只验证：显式传 None 不会把状态改成「无设备」
+_orig_cached_safe = app_mod.get_connected_devices_cached_safe
+app_mod.get_connected_devices_cached_safe = lambda: None
+try:
+    e.update_connection_status(devices=None)
+finally:
+    app_mod.get_connected_devices_cached_safe = _orig_cached_safe
 check("查询失败时不会误报「无设备」",
       "无设备" not in e.connection_status_label.text,
       e.connection_status_label.text)

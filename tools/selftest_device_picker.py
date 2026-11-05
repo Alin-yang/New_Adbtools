@@ -117,6 +117,12 @@ def main():
         return _orig_meta(device)
 
     picker._load_meta_async = _meta_spy
+    # ⚠️ **必须 mock 在线设备列表**，不能依赖真实 adb 环境：
+    #    机器上一台设备都没有时，在线列表为空 → 没有任何设备要拉型号
+    #    → 这条断言会**间歇性失败**（设备在线时过，设备离线时挂）。
+    #    自检要的是「渲染流程会触发型号加载」这件事本身。
+    _orig_get_online = app.get_online_devices
+    app.get_online_devices = lambda: ['192.168.0.49:5555']
     # ⚠️ 浮层此刻是**打开**状态（步骤 3 打开的），toggle() 会把它**关闭**，
     #    不会触发重渲染 → 拿不到任何加载调用。
     #    必须先 hide 再 toggle，让它真正重新渲染一次。
