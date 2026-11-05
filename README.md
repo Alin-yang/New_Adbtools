@@ -685,7 +685,60 @@ adb shell am broadcast -a ADB_INPUT_TEXT --es msg "你好"
 
 ## 十、版本历史
 
-### v5.4.5（当前版本）—— 侧边栏品牌区左对齐 + 导航图标改为矢量绘制
+### v5.4.6（当前版本）—— 性能监控提速 + 开始时清空选项 + 品牌区去图标
+
+用户反馈三件事：① 性能监控缺少「清除上一次测试数据」的按钮，
+可以选择清除还是不清除；② 点「开始监控」后要等好几秒才有数据，感觉慢；
+③ ADB Tool v5.4.5 的图标不需要，只需要把字靠左或居中。
+
+#### ① 「开始时清空」选项
+
+「清空数据」按钮本来就有，但用户要的是**开始监控时**能选择是否清空上一轮数据。
+新增复选框「开始时清空」（默认勾选 = 每次都是干净的一轮）：
+
+- `app.perf_clear_on_start_var`（BooleanVar）+ `app._perf_should_clear_on_start()`
+- `start_performance_monitor()` 里按勾选状态决定是否先 `clear_performance_data()`
+- ⚠️ ttk.Checkbutton **不支持 font 参数**（报 `unknown option "-font"`），
+  字体要在 style 里配
+- ⚠️ 新样式名必须 `style.layout(name, style.layout('App.TCheckbutton'))`
+  **clone layout**，否则报 `Layout App.TCheckbuttonFlat not found`
+- 复选框底色要跟着所在面板走 → 新增 `App.TCheckbuttonFlat`（bg_app）
+
+#### ② 启动提速：8.7 秒 → 2.8 秒
+
+先量化，别凭感觉：
+
+| 阶段 | 耗时 | 是否必需 |
+|---|---|---|
+| `adb shell nproc`（核数） | **2.2s** | ❌ 只作 CPU% 上限 |
+| `adb shell getconf CLK_TCK` | 0.7s | ❌ Android USER_HZ 恒为 100 |
+| `_estimate_clk_tck`（2×/proc/stat + 1s sleep） | **2.9s** | ❌ 纯诊断值，没人读 |
+| 首轮等一个完整 interval | 2.0s | ❌ 首帧可以短窗口 |
+| **合计** | **8.7s** | |
+
+三处改动：
+1. **彻底删掉启动期 adb 探测**（`_detect_clk_tck` / `_detect_cpu_max` /
+   `_estimate_clk_tck` / `_detect_cpu_max_cached`）
+   - CLK_TCK：Android 内核 USER_HZ **恒为 100**，直接用标准值
+   - 核数：只作 CPU% 上限（核数×100），而 CPU% 天然不会超物理上限 →
+     **宽松值等价**；多核满载显示 400% 本来就该是 400%（截到 100% 反而是低估）
+2. **首帧用 0.6s 采样窗口**（`FIRST_SAMPLE_WINDOW`）而不是完整 interval
+   —— CPU% 是「增量/窗口」的比值，窗口短只是噪声略大，但数据立刻可见
+3. **状态标签加「● 启动中…」中间态** —— 数据要 2.8 秒才来，
+   之前立刻显示「采集中」但指标卡是空的 → 用户以为卡死。
+   现在**首帧到达时**才切「采集中」
+
+⚠️ **试过「把探测挪到后台」，反而更慢（首帧 5.8 秒）**：
+**adb 命令是串行的**，后台的 nproc/getconf 会和前台的 /proc/stat 采集
+**抢同一条 adb 连接**，把首帧一起拖慢。这条路走不通，只能彻底不做。
+
+#### ③ 品牌区去 logo
+
+- 移除蓝色 logo 色块（+内部白点），改成**纯文字靠左**
+- 左边缘 padx=**33**：与下方导航项的**文字**左边缘对齐
+  （导航项图标占 10+16+7=33px）→ 「ADB Tool」和「安装应用」在同一条竖线上
+
+### v5.4.5 —— 侧边栏品牌区左对齐 + 导航图标改为矢量绘制
 
 用户反馈「ADB tool v5.4.4 为什么不左对齐或者居中显示呢，为什么要靠右显示，
 很明显左边还有很多空间，tab 的表情符号感觉不清晰也不好看」。
@@ -1087,4 +1140,4 @@ GitHub：https://github.com/Alin-yang/New_Adbtools
 ---
 
 **最后更新**: 2026-11-05
-**文档版本**: v5.4.5
+**文档版本**: v5.4.6

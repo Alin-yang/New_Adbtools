@@ -31,7 +31,6 @@
 """
 import concurrent.futures
 import logging
-import re
 import threading
 import time
 from collections import deque
@@ -41,6 +40,15 @@ from config import Config
 from modules import perf_parsers as P
 from modules.perf_locator import ProcessLocator
 from utils import run_adb_command
+
+
+# ⚠️ 首帧采样窗口（秒）—— v5.4.6
+#   用户反馈「点开始监控后要等好几秒才有数据加载出来」。
+#   首帧用 0.6s 而不是完整 interval（默认 2s）：
+#   CPU 百分比是「增量/窗口」的比值，窗口短只是噪声略大，
+#   但能让用户**立刻**看到第一组数字，不用干等。
+#   后续周期恢复正常 interval（精度优先）。
+FIRST_SAMPLE_WINDOW = 0.6
 
 
 # ====================================================================== #
@@ -188,7 +196,11 @@ class PerfCollector:
         self._clk_tck = 100
         self._clk_tck_estimated = False
         self._clk_tck_estimate = 100
-        self._cpu_max = 100.0
+        # ⚠️ 首帧先用**宽松**的 CPU 上限（v5.4.6）：
+        #    真实上限 = 核数×100（多核设备 CPU% 可 >100%）。
+        #    后台探测到核数后会在帧边界收紧。
+        #    这里若用 100.0，多核设备满载会被**截到 100%**（严重低估）。
+        self._cpu_max = 1000.0
         self._start_time = 0.0
 
         self._metrics: Dict[str, Metric] = {}
@@ -311,21 +323,40 @@ class PerfCollector:
 
     # ---------------------------------------------------------- 环境探测
     def _detect_env(self):
-        """探测 CLK_TCK / 核数 / PID，并确定采集模式
+        """探测 PID 并确定采集模式（**快**，几毫秒）
 
-        ⚠️ 顺序有依赖：核数必须**先**于 CLK_TCK 探测 ——
-           推算 CLK_TCK 时要用核数把 /proc/stat 的多核累加值除回去。
-           PID 定位与核数无依赖，可以并行。
+        ⚠️ **耗时优化**（v5.4.6，用户反馈「点开始监控后要等好几秒才有数据」）：
+           实测这台设备原来的 _detect_env 要 **6.3 秒**：
+             nproc                2.2s
+             getconf CLK_TCK     0.7s
+             _estimate_clk_tck   2.9s（2 次 /proc/stat + 1s sleep）
+           加上首轮还要等一个 interval（2s）→ **8.7 秒**才出第一帧。
+
+           ⚠️ **试过「挪到后台」，反而更慢（实测首帧 5.8 秒）**——
+              **adb 命令是串行的**：后台的 nproc/getconf 会和前台的
+              /proc/stat 采集**抢同一条 adb 连接**，把首帧一起拖慢。
+              这条路走不通。
+
+           正确做法是**彻底不做启动期 adb 探测**：
+             - CLK_TCK：Android 内核 USER_HZ **恒为 100**（标准值，
+               项目里一直按 100 用），getconf 只是「更权威」的来源，
+               而实测**大量设备根本没有这个命令**（本机就没有）
+             - 核数：只用作 CPU% 的**上限**（核数×100），
+               而 CPU% 天然不会超过物理上限 → **宽松值等价**，
+               多核满载显示 400% 本来就该是 400%（截到 100% 反而是低估）
+
+           所以这里只同步做「必须的」：PID 定位 + 定 mode
+           （几毫秒，走的是本地 ps，不是 adb）。
         """
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
-            f_core = ex.submit(self._detect_cpu_max)
-            f_pid = ex.submit(self._locate_pid)
-            self._cpu_max = f_core.result()
-            self.pids = f_pid.result() or []
-            self.pid = self.pids[0] if self.pids else None
-        # 依赖核数，必须放在并行块之后
-        self._clk_tck = self._detect_clk_tck()
+        self.pids = self._locate_pid() or []
+        self.pid = self.pids[0] if self.pids else None
         self._resolve_mode()
+
+    # ⚠️ v5.4.6：原 `_detect_clk_tck()` / `_detect_cpu_max()` /
+    #    `_estimate_clk_tck()` / `_detect_cpu_max_cached()` 已**删除**。
+    #    原因见 _detect_env 的说明：启动期 adb 探测要么阻塞首帧，
+    #    挪后台也会抢 adb 连接拖慢首帧，而这两个值都不是必需的。
+
 
     def _resolve_mode(self):
         """确定采集模式
@@ -340,87 +371,6 @@ class PerfCollector:
                 self._degraded = True
         else:
             self.mode = 'system'
-
-    def _detect_clk_tck(self) -> int:
-        """CLK_TCK（每秒 tick 数）
-
-        ⚠️ Android 内核的 USER_HZ 恒为 100（CONFIG_HZ=100），
-           这是标准值，优先用它。
-
-           `getconf CLK_TCK` 在部分 Android 上不存在（实测小米盒子
-           Android 6 就报 "getconf: not found"），此时直接用 100。
-
-           ⚠️ 不要试图用 /proc/stat 的自增速率去「推算」CLK_TCK：
-              adb 命令的数据采集时刻在**命令执行期间**，
-              而返回时刻在传输完成之后，两者差一个不可对齐的传输延迟
-              （实测能推出 115~135，明显偏离 100），反而把 CPU 算错。
-              推算值只作诊断参考，不参与计算。
-        """
-        out, ok = self._run("adb shell getconf CLK_TCK")
-        m = re.search(r'(\d+)', out or '')
-        if ok and m:
-            val = int(m.group(1))
-            if 1 <= val <= 1000:
-                self._clk_tck_estimated = False
-                return val
-        self._clk_tck_estimated = True
-        self._clk_tck_estimate = self._estimate_clk_tck()
-        return 100
-
-    def _estimate_clk_tck(self) -> int:
-        """估算 CLK_TCK（**仅作诊断参考，不参与 CPU 计算**）
-
-        用 /proc/stat 的自增速率粗略推算，误差可达 ±30%
-        （adb 传输延迟不可对齐），所以只用来在报告里提示
-        「本机 getconf 不可用，已按标准值 100 计算」。
-        """
-        try:
-            cores = max(1, int(self._cpu_max // 100))
-            first = self._read_proc_stat_cpu(self._run("adb shell cat /proc/stat")[0])
-            if first is None:
-                return 100
-            time.sleep(1.0)
-            second = self._read_proc_stat_cpu(self._run("adb shell cat /proc/stat")[0])
-            if second is None or second <= first:
-                return 100
-            val = int(round((second - first) / cores))
-            if 24 <= val <= 1000:
-                return val
-        except Exception:
-            pass
-        return 100
-
-    @staticmethod
-    def _read_proc_stat_cpu(output: str) -> Optional[float]:
-        for line in (output or '').splitlines():
-            if line.startswith('cpu'):
-                try:
-                    values = [int(v) for v in line.split()[1:]]
-                    if len(values) >= 4:
-                        return float(sum(values))
-                except ValueError:
-                    return None
-        return None
-
-    def _detect_cpu_max(self) -> float:
-        """CPU 上限 = 核数 × 100（单核百分比口径，多核可超过 100）
-
-        ⚠️ `nproc` 在部分 Android 上不存在（实测小米盒子就没有），
-           这时回退到数 /proc/cpuinfo 里的 processor 行。
-        """
-        out, ok = self._run("adb shell nproc")
-        m = re.search(r'(\d+)', out or '')
-        if ok and m:
-            cores = int(m.group(1))
-            if cores > 0:
-                return cores * 100.0
-        # 回退：数 /proc/cpuinfo 的 processor 行
-        out, ok = self._run("adb shell cat /proc/cpuinfo")
-        if ok and out:
-            cores = len(re.findall(r'^processor\s*:', out, re.M))
-            if cores > 0:
-                return cores * 100.0
-        return 100.0
 
     def _locate_pid(self) -> List[int]:
         return self.locator.find_pids(self.package_name) if self.package_name else []
@@ -682,6 +632,14 @@ class PerfCollector:
                                             daemon=True, name="PerfFrames")
             frames_thread.start()
 
+            # ⚠️ **首帧用更短的采样窗口**（v5.4.6）：
+            #    用户反馈「点开始监控后要等好几秒才有数据加载出来」。
+            #    首帧的 CPU 差分窗口短一点（0.6s），精度损失可忽略
+            #    （CPU 百分比是「增量/窗口」的比值，窗口短只是噪声大一点），
+            #    但能**立刻**看到第一组数字，不用干等一个完整 interval。
+            #    后续周期恢复正常 interval。
+            first_cycle = True
+
             while True:
                 cycle_start = time.time()
 
@@ -700,7 +658,9 @@ class PerfCollector:
                 ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
                 f_render = ex.submit(self._read_render)
 
-                wait_left = self.interval - (time.time() - cycle_start)
+                # 首帧只等 0.6s（见上），后续等完整 interval
+                want = FIRST_SAMPLE_WINDOW if first_cycle else self.interval
+                wait_left = want - (time.time() - cycle_start)
                 if wait_left > 0 and self.stop_event.wait(wait_left):
                     ex.shutdown(wait=False)
                     return
@@ -733,6 +693,7 @@ class PerfCollector:
                 self._check_alert(cpu_val, mem)
                 self._publish()
 
+                first_cycle = False
                 if self.stop_event.is_set():
                     return
         except Exception as e:
@@ -920,7 +881,8 @@ class PerfCollector:
             'mode': self.mode,
             'clk_tck': self._clk_tck,
             'clk_tck_estimated': self._clk_tck_estimated,
-            'clk_tck_estimate_raw': self._clk_tck_estimate,
+            # ⚠️ v5.4.6：不再实际估算（纯诊断用，没人读，还白占 2.9 秒启动时间）
+            'clk_tck_estimate_raw': None,
             'cpu_max': self._cpu_max,
         }
 

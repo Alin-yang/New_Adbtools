@@ -323,6 +323,51 @@ check("内存持平 → better 为 None", pss_cmp['better'] is None, str(pss_cmp
 check("摘要非空", bool(B.summarize_comparison(cmp)))
 
 # ====================================================================== #
+# 6. 启动性能（v5.4.6）
+# ====================================================================== #
+# ⚠️ 用户反馈「点开始监控后要等好几秒才有数据加载出来感觉有点慢」。
+#    实测原来要 8.7 秒：_detect_env 6.3s（nproc 2.2 + getconf 0.7 +
+#    _estimate_clk_tck 2.9）+ 首轮等一个完整 interval 2s。
+#
+#    这里用**静态检查 + 行为检查**守护优化成果：
+#    ① 采集器里**不能再有**启动期的 adb 探测方法
+#       （它们要么阻塞首帧，挪后台也会抢 adb 连接拖慢首帧）
+#    ② 首帧采样窗口必须 < interval（否则还是要干等一个完整周期）
+#    ③ _detect_env 只能做 PID 定位（本地 ps，几毫秒），不能发 adb
+import inspect
+from modules import perf_collector as PC
+
+_coll = PC.PerfCollector()
+
+# ① 启动期 adb 探测方法已删除
+for _m in ('_detect_clk_tck', '_detect_cpu_max', '_estimate_clk_tck',
+           '_detect_cpu_max_cached', '_detect_env_slow'):
+    check(f"启动期 adb 探测「{_m}」已删除",
+          not hasattr(_coll, _m), "仍存在 → 会拖慢首帧")
+
+# ② 首帧窗口 < 最小 interval
+check("首帧采样窗口小于最小采样间隔",
+      PC.FIRST_SAMPLE_WINDOW < 1.0,
+      f"FIRST_SAMPLE_WINDOW={PC.FIRST_SAMPLE_WINDOW}")
+
+# ③ _detect_env 不发 adb 命令
+#    ⚠️ 只查**代码行**（注释里提到 adb 不算）——
+#    `_run(` / `self._run` 才是真正的 adb 调用入口
+_src_lines = [ln.split('#')[0].strip()
+               for ln in inspect.getsource(PC.PerfCollector._detect_env).split('\n')]
+_code = '\n'.join(_src_lines)
+check("_detect_env 不发 adb 命令（只做本地 PID 定位）",
+      '_run(' not in _code,
+      "含 adb 调用 → 首帧会被阻塞")
+
+# ④ CLK_TCK 固定用标准值 100（Android 内核 USER_HZ 恒定）
+check("CLK_TCK 固定为标准值 100", _coll._clk_tck == 100, _coll._clk_tck)
+
+# ⑤ CPU 上限用宽松值（多核满载 400% 不该被截到 100%）
+check("CPU 上限是宽松值（多核不截断）", _coll._cpu_max >= 400.0,
+      _coll._cpu_max)
+
+# ====================================================================== #
 print("=" * 68)
 print("性能监控 v4 重写版 —— 解析与分析测试")
 print("=" * 68)

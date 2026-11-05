@@ -348,28 +348,17 @@ check("每个导航图标形状都不同（可区分）", not _dup, _dup)
 #    蓝色方块变成**隐形白块**（用户以为「标题靠右」，其实是 logo 没了）。
 if _side_fr is not None:
     _brand = _side_fr.winfo_children()[0]
-    # logo 是**没有 Label 子控件**的 Frame（它里面只有一个 logo_dot 色块）
-    _logo = None
+    # ⚠️ v5.4.6：logo 色块已**移除**（用户反馈「图标不需要」），
+    #    品牌区改成**纯文字靠左**。
+    #    这里断言：① 没有 logo 色块 ② 文字紧贴左边缘 ③ 左边缘与导航项对齐
     _bt = None
     for _c in _brand.winfo_children():
-        if _c.winfo_class() != 'Frame':
-            continue
-        _has_label = any(g.winfo_class() == 'Label'
-                         for g in _c.winfo_children())
-        if _has_label:
-            _bt = _c          # 品牌文字区（含 Label）
-        elif _logo is None:
-            _logo = _c        # logo 色块（无 Label）
-    check("侧边栏有 logo 色块", _logo is not None)
-    if _logo is not None:
-        _logo_bg = str(_logo.cget('bg')).lower()
-        _side_bg = str(_side_fr.cget('bg')).lower()
-        check("logo 色块不是侧边栏底色（不能隐形）", _logo_bg != _side_bg,
-              f"logo={_logo_bg} side={_side_bg}")
-        check("logo 色块是主色", _logo_bg == str(lay.theme.color('accent')).lower(),
-              _logo_bg)
+        if _c.winfo_class() == 'Frame':
+            _bt = _c
+            break
+    check("品牌区只有文字区（logo 色块已移除）", _bt is not None)
 
-    # 品牌区文字必须**靠左**（紧贴 logo），不能被推到右边
+    # 品牌区文字必须**靠左**，不能被推到右边
     if _bt is not None:
         _tl = None
         for _c in _bt.winfo_children():
@@ -382,6 +371,18 @@ if _side_fr is not None:
         check("品牌区宽度不超过侧边栏（未撑满）",
               _bt.winfo_width() < _side_fr.winfo_width(),
               f"text_w={_bt.winfo_width()} side_w={_side_fr.winfo_width()}")
+        # ⚠️ 品牌区左边缘要和下方导航项文字左边缘对齐（视觉上成一整块）
+        _nav_text_x = None
+        for _c in lay.nav_rows.get('install', tk.Frame()).winfo_children():
+            for _g in _c.winfo_children():
+                if _g.winfo_class() == 'Label':
+                    _nav_text_x = _c.winfo_x() + _g.winfo_x()
+                    break
+            if _nav_text_x is not None:
+                break
+        check("品牌区与导航项左边缘对齐",
+              _nav_text_x is not None and abs(_bt.winfo_x() - _nav_text_x) <= 6,
+              f"brand_x={_bt.winfo_x()} nav_x={_nav_text_x}")
 
 # 主题按钮文案要更新
 check("主题按钮文案随主题变化",

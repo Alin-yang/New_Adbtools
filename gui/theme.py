@@ -559,6 +559,18 @@ class ThemeManager:
         style.map('App.TCheckbutton',
                   background=[('active', t['bg_panel'])],
                   foreground=[('active', t['fg'])])
+        # ⚠️ 复选框底色跟着**所在面板**走：
+        #   'App.TCheckbutton' 用 bg_panel（终端面板在用），
+        #   性能面板底色是 bg_app → 直接用会出现一块方形色差。
+        # ⚠️ **必须 clone layout**：clam 主题只给 TCheckbutton 配了 layout，
+        #    新样式名直接 configure 会报 "Layout App.TCheckbuttonFlat not found"。
+        style.layout('App.TCheckbuttonFlat', style.layout('App.TCheckbutton'))
+        style.configure('App.TCheckbuttonFlat', background=t['bg_app'],
+                        foreground=t['fg_muted'], font=(FONT_UI, FS_SM),
+                        focuscolor=t['bg_app'])
+        style.map('App.TCheckbuttonFlat',
+                  background=[('active', t['bg_app'])],
+                  foreground=[('active', t['fg'])])
 
         # ── 进度条 / 滚动条 ─────────────────────────────────────
         style.configure('App.Horizontal.TProgressbar',

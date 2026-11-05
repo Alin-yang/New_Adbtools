@@ -152,44 +152,30 @@ class LayoutV4:
         self.theme.register(side, 'side')
 
         # ── 品牌区 ────────────────────────────────────────────
-        # ⚠️ **版本号放第二行**，不要和「ADB Tool」横排：
-        #    横排时 logo(22) + 「ADB Tool」(78) + 「v5.4.3」(33) + padx
-        #    合计 170px —— 侧边栏 188px 里有 90% 被这一行占掉，
-        #    而导航项只需要 ~100px（实测：图标 14 + 文字 52 + padx）。
-        #    改成上下堆叠后品牌区最宽只要 78px，侧边栏能砍到 140px。
-        brand = tk.Frame(side, bg=self.theme.color('bg_side'), height=62)
+        # ⚠️ **纯文字，不要 logo 色块**（v5.4.6，用户反馈「图标不需要」）：
+        #    ① 蓝色方块 + 内部白点在小尺寸下只是个小噪点，没信息量
+        #    ② 它占 22+23=45px 横向空间，把「ADB Tool」往右推
+        #    ③ 之前它还被 theme.register(logo,'side') 刷成底色变成隐形白块，
+        #       「标题靠右」的观感其实来自这个隐形块
+        #       （教训：自定义底色必须给主题加专用角色，不能借用 'side'）
+        #
+        # ⚠️ **左边缘与下方导航项文字对齐**（都是 padx=14）：
+        #    视觉上「ADB Tool」和「安装应用」在同一条竖线上，才像一整块。
+        brand = tk.Frame(side, bg=self.theme.color('bg_side'), height=54)
         brand.pack(fill=tk.X)
         brand.pack_propagate(False)
         self.theme.register(brand, 'side')
 
-        # Logo 用色块拼一个，简单但比纯文字有辨识度
-        # ⚠️ 主题角色必须是 **'accent'** 而不是 'side'：
-        #    'side' 会把 bg 刷成侧边栏底色 → logo 变成隐形白块
-        #    （用户反馈「左边还有很多空间、标题靠右」其实是 logo 隐形了）
-        logo = tk.Frame(brand, bg=self.theme.color('accent'), width=22, height=22)
-        logo.pack(side=tk.LEFT, padx=(14, 9), pady=(12, 0))
-        logo.pack_propagate(False)
-        self.theme.register(logo, 'accent')
-
-        logo_dot = tk.Frame(logo, bg=self.theme.color('bg_side'), width=8, height=8)
-        logo_dot.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-        logo_dot.pack_propagate(False)
-        self.theme.register(logo_dot, 'side')
-
-        # 文字区：标题 + 版本号上下堆叠
-        # ⚠️ **不要 fill=tk.BOTH, expand=True**：
-        #    那会让文字区撑满侧边栏剩余宽度，Label 再 fill=tk.X 铺满 →
-        #    文字被推到右边（用户反馈「为什么要靠右显示」）。
-        #    这里让它按内容自然宽度，靠左排列。
-        #    ⚠️ pack_propagate(False) 会把宽度也固定成 1px →
-        #    必须显式给宽度（= 标题文字宽度 + 余量）。
+        # ⚠️ 左边缘 padx=**33**：与下方导航项的**文字**左边缘对齐
+        #    （导航项图标占 10+16+7=33px，文字从 33 开始）。
+        #    这样「ADB Tool」和「安装应用」在同一条竖线上，视觉成一整块。
         brand_text = tk.Frame(brand, bg=self.theme.color('bg_side'),
-                              width=86)
-        brand_text.pack(side=tk.LEFT, fill=tk.Y)
+                              width=100)
+        brand_text.pack(side=tk.LEFT, fill=tk.Y, padx=(33, 0))
         brand_text.pack_propagate(False)
         self.theme.register(brand_text, 'side')
 
-        self._label(brand_text, text="ADB Tool", fg_key='fg', bg_key='bg_side', font=(FONT_UI, FS_XL, 'bold'), anchor=tk.W).pack(anchor=tk.W, pady=(11, 0))
+        self._label(brand_text, text="ADB Tool", fg_key='fg', bg_key='bg_side', font=(FONT_UI, FS_XL, 'bold'), anchor=tk.W).pack(anchor=tk.W, pady=(9, 0))
         self._label(brand_text, text=f"v{Config.APP_VERSION}", fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, FS_SM), anchor=tk.W).pack(anchor=tk.W)
 
         # 分隔线
@@ -1056,7 +1042,23 @@ class LayoutV4:
         ttk.Button(ctrl_row, text="停止", command=self.app.stop_performance_monitor,
                    style='Danger.TButton').pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(ctrl_row, text="清空数据", command=self.app.clear_performance_data,
-                   style='Secondary.TButton').pack(side=tk.LEFT, padx=(0, 8))
+                   style='Secondary.TButton').pack(side=tk.LEFT, padx=(0, 12))
+
+        # ⚠️ v5.4.6：用户反馈「缺少清除上一次测试数据的按钮，
+        #    可以选择清除还是不清除」。
+        #    语义：「开始监控」时是否**先清空**上一轮的历史。
+        #    默认勾选（= 每次都是干净的测试，符合"测一次"的直觉）；
+        #    想连续观察/对比两轮数据时可以取消。
+        self.app.perf_clear_on_start_var = tk.BooleanVar(value=True)
+        # ⚠️ ttk.Checkbutton **不支持 font 参数**（会报 unknown option "-font"），
+        #    字体要在 style 里配（App.TCheckbuttonFlat 已设 FS_SM）
+        _chk = ttk.Checkbutton(
+            ctrl_row, text="开始时清空",
+            variable=self.app.perf_clear_on_start_var,
+            style='App.TCheckbuttonFlat')
+        _chk.pack(side=tk.LEFT, padx=(0, 10))
+        self._attach_tip(_chk, "勾选：开始监控前清空上一轮的历史数据\n"
+                               "取消：保留历史，与本轮数据连续观察")
 
         self.app.perf_status_label = self._label(ctrl_row, text="● 未开始", fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, FS_MD, 'bold'))
         self.app.perf_status_label.pack(side=tk.RIGHT)

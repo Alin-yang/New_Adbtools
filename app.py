@@ -5380,16 +5380,39 @@ class ADBToolApp:
                     interval = 2
 
             self._hide_perf_dropdown()
+            # ⚠️ v5.4.6：用户要求能**选择**开始时清不清空上一次的数据。
+            #    默认勾选（每次都是干净的一轮），取消则保留历史连续观察。
+            if self._perf_should_clear_on_start():
+                self.clear_performance_data()
             # 场景模板决定告警阈值（视频播放和界面流畅的标准不一样）
             self.performance_monitor.set_scenario(
                 self._current_perf_scenario().key)
             self.performance_monitor.update_callback = self._update_performance_ui
+            # ⚠️ 先显示「启动中…」—— 数据要 ~2.5 秒才来（见 _set_perf_status）
+            #    **不要**在这里就切「采集中」：那会把「启动中」覆盖掉，
+            #    用户只看到「采集中」但指标卡是空的 → 以为卡死。
+            #    真正切到「采集中」的时刻 = 首帧数据到达（见 _update_performance_ui）
+            self._set_perf_status(False, starting=True)
             self.performance_monitor.start(package_name, interval)
-            self._set_perf_status(True)
 
         except Exception as e:
             logging.error(f"[性能监控] 启动失败: {str(e)}", exc_info=True)
             self.update_status(f"✗ 启动性能监控失败: {str(e)}", False)
+
+    def _perf_should_clear_on_start(self) -> bool:
+        """开始监控时是否先清空上一次的数据
+
+        ⚠️ v5.4.6：用户反馈「可以选择清除还是不清除」。
+           默认 True（勾选态）—— 每次点「开始监控」都是干净的一轮，
+           符合"测一次"的直觉；取消勾选则保留历史，可连续观察。
+        """
+        var = getattr(self, 'perf_clear_on_start_var', None)
+        if var is None:
+            return True
+        try:
+            return bool(var.get())
+        except Exception:
+            return True
 
     def stop_performance_monitor(self):
         """停止性能监控
@@ -5499,12 +5522,22 @@ class ADBToolApp:
         except Exception as e:
             logging.error(f"[性能监控] 清空失败: {str(e)}", exc_info=True)
 
-    def _set_perf_status(self, running: bool):
-        """更新性能页右上角的运行状态指示"""
+    def _set_perf_status(self, running: bool, starting: bool = False):
+        """更新性能页右上角的运行状态指示
+
+        ⚠️ v5.4.6：加「启动中」中间态。
+           点「开始监控」后要等 ~2.5 秒才有第一帧数据
+           （设备探测 + 首帧采样窗口），如果状态立刻显示「采集中」，
+           指标卡却是空的 → 用户以为卡死了。
+           显示「● 启动中…」明确告诉用户程序在动。
+        """
         if not hasattr(self, 'perf_status_label'):
             return
         try:
-            if running:
+            if starting:
+                self.perf_status_label.config(text="● 启动中…",
+                                              foreground=self._perf_color('warning'))
+            elif running:
                 self.perf_status_label.config(text="● 采集中",
                                               foreground=self._perf_color('success'))
             else:
@@ -5632,6 +5665,17 @@ class ADBToolApp:
             status_msg: 非 None 表示状态消息（启动/停止/异常提示）
         """
         try:
+            # ⚠️ 首帧数据到达 → 才把状态从「启动中」切到「采集中」。
+            #    在此之前指标卡是空的，显示「采集中」会让人以为卡死。
+            if (self.performance_monitor.monitoring
+                    and stats.get('sample_count', 0) >= 1
+                    and hasattr(self, 'perf_status_label')):
+                try:
+                    if '启动中' in str(self.perf_status_label.cget('text')):
+                        self._set_perf_status(True)
+                except Exception:
+                    pass
+
             if status_msg is not None:
                 self.update_status(status_msg, not status_msg.startswith("✗"), "info")
                 self._set_perf_status(self.performance_monitor.monitoring)
