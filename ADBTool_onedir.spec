@@ -76,6 +76,8 @@ a = Analysis(
         'modules.perf_scenario',
         # ⚠️ v5.4 设备切换浮层（与 ADBTool.spec 保持一致）
         'gui.device_picker',
+        # ⚠️ v5.4.5 导航图标（与 ADBTool.spec 保持一致）
+        'gui.nav_icons',
     ],
     hookspath=[],
     hooksconfig={},

@@ -82,6 +82,23 @@ def main():
     # 4. 渲染了内容（渲染路径涉及 Canvas/主题注册）
     _out("       渲染条目数: " + str(len(picker._rows)))
 
+    # 4a. 导航图标必须真的画出来了（v5.4.5）
+    # ⚠️ 图标改成 Canvas 手绘后，如果 gui.nav_icons 没被 PYZ 收录，
+    #    打包后会在建侧边栏时就抛 ImportError —— 整个程序起不来。
+    #    这里实跑一次，确认 6 个图标都画了东西且形状互不相同。
+    _icons = [(k, v) for k, v in lay.nav_rows.items()
+              if k.endswith('_icon')]
+    check("侧边栏有 6 个导航图标", len(_icons) == 6, len(_icons))
+    _sigs = []
+    for _k, _ic in _icons:
+        _items = _ic.find_all()
+        if len(_items) < 2:
+            check("图标「%s」已绘制" % _k, False, "items=%d" % len(_items))
+        _sigs.append(tuple((round(_ic.coords(_i)[0], 1),
+                            round(_ic.coords(_i)[1], 1)) for _i in _items))
+    check("所有导航图标形状互不相同", len(set(_sigs)) == len(_sigs),
+          "%d 个唯一 / %d 个" % (len(set(_sigs)), len(_sigs)))
+
     # 4b. 浮层必须挂在主窗口内部（跟随移动，不是独立 Toplevel）
     check("浮层是主窗口的子孙（跟随主窗口移动）",
           str(picker.win).startswith(str(root)), str(picker.win))

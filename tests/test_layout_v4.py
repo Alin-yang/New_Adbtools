@@ -311,6 +311,78 @@ for c in lay.nav_rows['install'].winfo_children():
 check("导航文字可读", nav_lbl is not None and
       str(nav_lbl.cget('bg')).lower() != str(nav_lbl.cget('fg')).lower())
 
+# ⚠️ 导航**图标**是 Canvas 画的（不是 Label）——
+#    原来用 Unicode 符号（⇩ ⚕ ⌘ ◔ ▣）在微软雅黑里字形缺失，
+#    渲染成糊掉的小方块（用户反馈「表情符号不清晰也不好看」），
+#    而且 `⌘` 被两个导航项复用 → 图标完全无法区分。
+#    守护：① 图标必须真的画了东西 ② 每个图标必须**唯一**
+_side_fr = None
+for _ch in lay.root_frame.winfo_children():
+    if str(_ch.grid_info().get('column')) == '1':
+        _side_fr = _ch
+        break
+
+_icon_shapes = {}
+for _k, _ic in lay.nav_rows.items():
+    if not _k.endswith('_icon'):
+        continue
+    _items = _ic.find_all()
+    # 记录图标的形状签名（线条/矩形/弧的坐标），用来判重
+    _sig = tuple(
+        (round(_ic.coords(_it)[0], 1), round(_ic.coords(_it)[1], 1))
+        for _it in _items)
+    _icon_shapes[_k] = _sig
+    check(f"图标「{_k}」已绘制（不是空白 Canvas）", len(_items) >= 2,
+          f"items={len(_items)}")
+
+# 所有图标两两不同（签名不重复）
+_sigs = list(_icon_shapes.values())
+_dup = []
+for _i in range(len(_sigs)):
+    for _j in range(_i + 1, len(_sigs)):
+        if _sigs[_i] == _sigs[_j]:
+            _dup.append((_i, _j))
+check("每个导航图标形状都不同（可区分）", not _dup, _dup)
+
+# ⚠️ logo 主题角色：曾被注册成 'side' → 换肤时刷成侧边栏底色，
+#    蓝色方块变成**隐形白块**（用户以为「标题靠右」，其实是 logo 没了）。
+if _side_fr is not None:
+    _brand = _side_fr.winfo_children()[0]
+    # logo 是**没有 Label 子控件**的 Frame（它里面只有一个 logo_dot 色块）
+    _logo = None
+    _bt = None
+    for _c in _brand.winfo_children():
+        if _c.winfo_class() != 'Frame':
+            continue
+        _has_label = any(g.winfo_class() == 'Label'
+                         for g in _c.winfo_children())
+        if _has_label:
+            _bt = _c          # 品牌文字区（含 Label）
+        elif _logo is None:
+            _logo = _c        # logo 色块（无 Label）
+    check("侧边栏有 logo 色块", _logo is not None)
+    if _logo is not None:
+        _logo_bg = str(_logo.cget('bg')).lower()
+        _side_bg = str(_side_fr.cget('bg')).lower()
+        check("logo 色块不是侧边栏底色（不能隐形）", _logo_bg != _side_bg,
+              f"logo={_logo_bg} side={_side_bg}")
+        check("logo 色块是主色", _logo_bg == str(lay.theme.color('accent')).lower(),
+              _logo_bg)
+
+    # 品牌区文字必须**靠左**（紧贴 logo），不能被推到右边
+    if _bt is not None:
+        _tl = None
+        for _c in _bt.winfo_children():
+            if _c.winfo_class() == 'Label':
+                _tl = _c
+                break
+        check("品牌区标题靠左（不是被推到右边）",
+              _tl is not None and _tl.winfo_x() == 0,
+              f"x={_tl.winfo_x() if _tl else 'N/A'}")
+        check("品牌区宽度不超过侧边栏（未撑满）",
+              _bt.winfo_width() < _side_fr.winfo_width(),
+              f"text_w={_bt.winfo_width()} side_w={_side_fr.winfo_width()}")
+
 # 主题按钮文案要更新
 check("主题按钮文案随主题变化",
       '深色' in lay.theme_btn.cget('text') or '浅色' in lay.theme_btn.cget('text'),

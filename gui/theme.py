@@ -278,6 +278,10 @@ class ThemeManager:
                 )
             elif role == 'sep':
                 widget.config(bg=t['line'])
+            elif role == 'accent':
+                # ⚠️ 主色块（侧边栏 logo）：**不能**用 'side' 角色 ——
+                #    'side' 会把它刷成侧边栏底色，logo 就变成一个隐形白块。
+                widget.config(bg=t['accent'])
             elif role == 'side':
                 widget.config(bg=t['bg_side'])
             elif role == 'panel':

@@ -30,9 +30,10 @@ import logging
 
 from config import Config
 from gui.theme import (ThemeManager, FONT_UI, FONT_MONO,
-                      FS_XS, FS_SM, FS_MD, FS_LG, FS_XL, FS_XXL,
+                      FS_XS, FS_SM, FS_MD, FS_XL, FS_XXL,
                       FSM_SM, FSM_MD, FSM_LG)
 from gui.device_picker import DevicePicker
+from gui.nav_icons import draw_icon as draw_nav_icon, ICON_SIZE as NAV_ICON_SIZE
 
 
 class LayoutV4:
@@ -42,14 +43,14 @@ class LayoutV4:
     # (分组标题, [(导航键, 标题, 图标字符, 构建方法名), ...])
     NAV_GROUPS = [
         ('日常操作', [
-            ('install',  '安装应用', '⇩', 'build_install_panel'),
-            ('diagnose', '问题诊断', '⚕', 'build_diagnose_panel'),
-            ('device',   '设备控制', '⌘', 'build_device_panel'),
+            ('install',  '安装应用', 'install', 'build_install_panel'),
+            ('diagnose', '问题诊断', 'diagnose', 'build_diagnose_panel'),
+            ('device',   '设备控制', 'device', 'build_device_panel'),
         ]),
         ('进阶工具', [
-            ('perf',   '性能监控', '◔', 'build_perf_panel'),
-            ('mirror', '投屏控制', '▣', 'build_mirror_panel'),
-            ('script', '脚本执行', '⌘', 'build_script_panel'),
+            ('perf',   '性能监控', 'perf', 'build_perf_panel'),
+            ('mirror', '投屏控制', 'mirror', 'build_mirror_panel'),
+            ('script', '脚本执行', 'script', 'build_script_panel'),
         ]),
     ]
 
@@ -68,6 +69,7 @@ class LayoutV4:
         self.theme = None
         self.nav_buttons = {}      # nav_key -> tk.Button
         self.nav_rows = {}         # nav_key -> 承载高亮条的 Frame
+        self._icon_kind = {}       # nav_key -> 图标类型（Canvas 重绘时要用）
         self.panels = {}           # nav_key -> Frame
         self.current_nav = None
         self._terminal_collapsed = False
@@ -161,24 +163,34 @@ class LayoutV4:
         self.theme.register(brand, 'side')
 
         # Logo 用色块拼一个，简单但比纯文字有辨识度
+        # ⚠️ 主题角色必须是 **'accent'** 而不是 'side'：
+        #    'side' 会把 bg 刷成侧边栏底色 → logo 变成隐形白块
+        #    （用户反馈「左边还有很多空间、标题靠右」其实是 logo 隐形了）
         logo = tk.Frame(brand, bg=self.theme.color('accent'), width=22, height=22)
         logo.pack(side=tk.LEFT, padx=(14, 9), pady=(12, 0))
         logo.pack_propagate(False)
-        self.theme.register(logo, 'side')
+        self.theme.register(logo, 'accent')
 
         logo_dot = tk.Frame(logo, bg=self.theme.color('bg_side'), width=8, height=8)
         logo_dot.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         logo_dot.pack_propagate(False)
         self.theme.register(logo_dot, 'side')
 
-        # 文字区：标题 + 版本号上下堆叠（左侧对齐到 logo 右边）
-        brand_text = tk.Frame(brand, bg=self.theme.color('bg_side'))
-        brand_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # 文字区：标题 + 版本号上下堆叠
+        # ⚠️ **不要 fill=tk.BOTH, expand=True**：
+        #    那会让文字区撑满侧边栏剩余宽度，Label 再 fill=tk.X 铺满 →
+        #    文字被推到右边（用户反馈「为什么要靠右显示」）。
+        #    这里让它按内容自然宽度，靠左排列。
+        #    ⚠️ pack_propagate(False) 会把宽度也固定成 1px →
+        #    必须显式给宽度（= 标题文字宽度 + 余量）。
+        brand_text = tk.Frame(brand, bg=self.theme.color('bg_side'),
+                              width=86)
+        brand_text.pack(side=tk.LEFT, fill=tk.Y)
         brand_text.pack_propagate(False)
         self.theme.register(brand_text, 'side')
 
-        self._label(brand_text, text="ADB Tool", fg_key='fg', bg_key='bg_side', font=(FONT_UI, FS_XL, 'bold'), anchor=tk.W).pack(fill=tk.X, pady=(11, 0))
-        self._label(brand_text, text=f"v{Config.APP_VERSION}", fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, FS_SM), anchor=tk.W).pack(fill=tk.X)
+        self._label(brand_text, text="ADB Tool", fg_key='fg', bg_key='bg_side', font=(FONT_UI, FS_XL, 'bold'), anchor=tk.W).pack(anchor=tk.W, pady=(11, 0))
+        self._label(brand_text, text=f"v{Config.APP_VERSION}", fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, FS_SM), anchor=tk.W).pack(anchor=tk.W)
 
         # 分隔线
         self._hline(side)
@@ -226,6 +238,12 @@ class LayoutV4:
            pack + width 切换在 pack_propagate(False) 下不生效，
            grid 切列宽也压不住 Frame 自身的 width。
            place 的 relwidth/height 每次重绘都会重新计算，收放最可靠。
+
+        ⚠️ 图标用 **Canvas 手绘**（gui/nav_icons.py），不用 Unicode 符号：
+           `⇩ ⚕ ⌘ ◔ ▣` 在微软雅黑 UI 里字形缺失/严重变形，
+           渲染成糊掉的小方块（用户反馈「表情符号不清晰也不好看」），
+           而且 `⌘` 被两个导航项复用，图标完全无法区分。
+           Canvas 画线条：像素级可控、跨机器一致、颜色能跟主题。
         """
         row = tk.Frame(parent, bg=self.theme.color('bg_side'), height=34)
         row.pack(fill=tk.X)
@@ -245,19 +263,39 @@ class LayoutV4:
         self.theme.register(bar, 'side')
         self.nav_rows[key + '_bar'] = bar
 
-        icon_lbl = self._label(hl, text=icon, fg_key='fg_dim', bg_key='bg_side', font=(FONT_UI, FS_LG), width=2)
-        icon_lbl.pack(side=tk.LEFT, padx=(10, 6))
+        # 图标：Canvas 手绘（16x16），垂直居中
+        icon_canvas = tk.Canvas(
+            hl, width=NAV_ICON_SIZE, height=NAV_ICON_SIZE,
+            bg=self.theme.color('bg_side'), highlightthickness=0,
+            borderwidth=0)
+        icon_canvas.pack(side=tk.LEFT, padx=(10, 7), pady=(34 - NAV_ICON_SIZE) // 2)
+        self.nav_rows[key + '_icon'] = icon_canvas
+        # 记下图标类型：悬停/换主题时要重画
+        self._icon_kind[key] = icon
+        self._draw_nav_icon(key, icon, self.theme.color('fg_dim'))
 
         text_lbl = self._label(hl, text=title, fg_key='fg_muted', bg_key='bg_side', font=(FONT_UI, FS_MD), anchor=tk.W)
         text_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        for w in (row, hl, icon_lbl, text_lbl):
+        for w in (row, hl, icon_canvas, text_lbl):
             w.bind('<Button-1>', lambda e, k=key: self.switch_nav(k))
             w.bind('<Enter>', lambda e, k=key: self._nav_hover(k, True))
             w.bind('<Leave>', lambda e, k=key: self._nav_hover(k, False))
             w.configure(cursor='hand2')
 
         self.nav_buttons[key] = _NavButtonProxy(self, key)
+
+    def _draw_nav_icon(self, key, kind, color):
+        """重绘某个导航项的图标（换主题/悬停时调用）"""
+        canvas = self.nav_rows.get(key + '_icon')
+        if canvas is None:
+            return
+        try:
+            canvas.delete('all')
+            canvas.configure(bg=self.theme.color('bg_side'))
+            draw_nav_icon(canvas, kind, color)
+        except Exception:
+            pass
 
     def _nav_hover(self, key, entering):
         """导航项悬停反馈
@@ -287,12 +325,16 @@ class LayoutV4:
                 bar.place_configure(relx=0, rely=0, relheight=1.0,
                                     width=2 if entering else 0)
                 self.theme.register(bar, 'side')
-            # 文字与图标
-            labels = [c for c in hl.winfo_children() if c.winfo_class() == 'Label']
-            for child in labels:
-                # 第一个是图标 Label，第二个是文字 Label
-                is_icon = child is labels[0] if labels else False
-                child.configure(bg=bg, fg=icon_fg if is_icon else fg)
+            # ⚠️ 图标是 Canvas 画的，不是 Label —— 必须**重绘**才能变色。
+            #    （之前靠 `labels[0]` 判断哪个是图标的写法已随 Canvas 化失效）
+            _icon = self.nav_rows.get(key + '_icon')
+            if _icon is not None:
+                _icon.configure(bg=bg)
+                self._draw_nav_icon(key, self._icon_kind.get(key, ''), icon_fg)
+            # 文字 Label
+            for child in hl.winfo_children():
+                if child.winfo_class() == 'Label':
+                    child.configure(bg=bg, fg=fg)
         except Exception:
             pass
 
@@ -313,6 +355,16 @@ class LayoutV4:
     def _retheme_dynamic(self):
         """主题切换后，刷新那些在运行时被 app.py 改过颜色的控件"""
         t = self.theme
+        # ⚠️ 导航图标是 Canvas 画的 → 换主题必须**重绘**（线条颜色要换）
+        for _key, _kind in self._icon_kind.items():
+            _is_on = (_key == self.current_nav)
+            _ic = self.nav_rows.get(_key + '_icon')
+            if _ic is not None:
+                _ic.configure(bg=t.color('bg_active') if _is_on
+                              else t.color('bg_side'))
+            self._draw_nav_icon(
+                _key, _kind,
+                t.color('accent') if _is_on else t.color('fg_dim'))
         # 连接状态标签：app.py 里按设备状态改过 bg/fg，这里统一重刷
         label = getattr(self.app, 'connection_status_label', None)
         if label is not None:
@@ -618,18 +670,26 @@ class LayoutV4:
                                     width=3 if is_on else 0)
                 self.theme.register(bar, 'side')
 
-            # 文字与图标：选中 → 主色 + 加粗；未选中 → 次要色
+            # ⚠️ 图标是 **Canvas**（不是 Label）→ 变色靠**重绘**，不是 configure(fg)
+            _icon = self.nav_rows.get(key + '_icon')
+            if _icon is not None:
+                _icon.configure(bg=self.theme.color('bg_active') if is_on
+                                else self.theme.color('bg_side'))
+                self._draw_nav_icon(
+                    key, self._icon_kind.get(key, ''),
+                    self.theme.color('accent') if is_on
+                    else self.theme.color('fg_dim'))
+
+            # 文字 Label：选中 → 主色 + 加粗；未选中 → 次要色
             labels = [c for c in (hl.winfo_children() if hl is not None else [])
                       if c.winfo_class() == 'Label']
-            for idx, child in enumerate(labels):
-                is_icon = (idx == 0)
+            for child in labels:
                 try:
                     if is_on:
                         child.configure(fg=self.theme.color('accent'),
                                         font=(FONT_UI, FS_MD, 'bold'))
                     else:
-                        child.configure(fg=self.theme.color('fg_dim') if is_icon
-                                        else self.theme.color('fg_muted'),
+                        child.configure(fg=self.theme.color('fg_muted'),
                                         font=(FONT_UI, FS_MD))
                 except Exception:
                     pass

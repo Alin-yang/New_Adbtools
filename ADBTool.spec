@@ -70,6 +70,8 @@ a = Analysis(
         #    同样是「数据文件带过去了但没被 PYZ 收录」的坑，
         #    漏掉会在运行时才报 "No module named gui.device_picker"。
         'gui.device_picker',
+        # ⚠️ v5.4.5 导航图标（gui/nav_icons.py）—— 同上，必须显式列出来
+        'gui.nav_icons',
     ],
     hookspath=[],
     hooksconfig={},
