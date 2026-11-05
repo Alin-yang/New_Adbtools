@@ -147,14 +147,17 @@ class CpuPoint:
        「整轮采集结束后」的时刻，否则 dumpsys 的耗时会污染窗口。
     """
 
-    __slots__ = ('ts', 'group_ticks', 'threads', 'rss_mb')
+    # ⚠️ v5.4.7：加 idle —— 整机 CPU 忙碌率要用「1 - Δidle/Δtotal」
+    __slots__ = ('ts', 'group_ticks', 'threads', 'rss_mb', 'idle_ticks')
 
     def __init__(self, ts: float, group_ticks: Optional[int],
-                 threads: Dict[int, Tuple[str, int]], rss_mb: Optional[float]):
+                 threads: Dict[int, Tuple[int, int]], rss_mb: Optional[float],
+                 idle_ticks: Optional[float] = None):
         self.ts = ts
         self.group_ticks = group_ticks
         self.threads = threads
         self.rss_mb = rss_mb
+        self.idle_ticks = idle_ticks
 
 
 # ====================================================================== #
@@ -201,6 +204,9 @@ class PerfCollector:
         #    后台探测到核数后会在帧边界收紧。
         #    这里若用 100.0，多核设备满载会被**截到 100%**（严重低估）。
         self._cpu_max = 1000.0
+        # 在线核数（system 模式从 /proc/stat 的 cpuN 行数出）
+        # ⚠️ v5.4.7：整机 CPU 忙碌率必须除以它，否则恒为 100%
+        self._cores = 1
         self._start_time = 0.0
 
         self._metrics: Dict[str, Metric] = {}
@@ -408,7 +414,18 @@ class PerfCollector:
         return CpuPoint(ts, int(value * 100), {}, None)
 
     def _read_system_point(self) -> Optional[CpuPoint]:
-        """整机模式：/proc/stat 的整体 CPU 忙碌率"""
+        """整机模式：/proc/stat 的整体 CPU 忙碌率
+
+        ⚠️ **/proc/stat 的「cpu」行是所有核的累加值**
+           （实测 2 核设备：总量差值 678 ≈ cpu0 339 + cpu1 338）。
+           算整机忙碌率**必须除以核数**，否则结果必然 >= 100%。
+
+        ⚠️ 核数从**同一份 /proc/stat** 里数 cpuN 行 ——
+           `nproc` / `cat /proc/cpuinfo` 在精简 Android 上经常不存在
+           （实测本机 192.168.0.50 和小米盒子都没有），
+           而 /proc/stat 是采集 CPU 时**本来就要读的那一份** →
+           零额外 adb 往返。
+        """
         t0 = time.time()
         out, ok = self._run("adb shell cat /proc/stat")
         ts = time.time()
@@ -421,8 +438,16 @@ class PerfCollector:
         if total is None:
             self._fail_points += 1
             return None
+        # 顺手把核数记下来（同一份数据，零额外开销）
+        cores = P.parse_proc_stat_cores(out)
+        if cores > 0 and cores != self._cores:
+            self._cores = cores
+            # 整机模式下「CPU 上限」= 核数×100（多核可超过 100%）
+            self._cpu_max = float(cores * 100)
+        # ⚠️ 还要 idle —— 整机忙碌率靠它算（见 _diff_cpu）
+        fields = P.parse_proc_stat_cpu_fields(out) or {}
         self._ok_points += 1
-        return CpuPoint(ts, int(total), {}, None)
+        return CpuPoint(ts, int(total), {}, None, fields.get('idle'))
 
     def _read_proc_point(self) -> Optional[CpuPoint]:
         """读一次 /proc（进程 + 全部线程 + RSS）"""
@@ -530,15 +555,29 @@ class PerfCollector:
         # cpuinfo 模式：值本身就是绝对百分比，直接取终点值
         if self.mode == 'cpuinfo':
             return round(b.group_ticks / 100.0, 2)
-        # system 模式：整体忙碌率，按比例缩放到 0~100
+        # system 模式：整机忙碌率
+        # ⚠️ **正确公式是「1 - Δidle / Δtotal」**（v5.4.7 真机验证修的 bug）：
+        #    /proc/stat 的「cpu」行是**所有核的累加值**，且**含 idle**。
+        #    旧代码用「Δtotal / CLK_TCK × 100」再 min(...,100) →
+        #    多核设备上结果必然 >= 100% → 被截成**恒定 100%**
+        #    （真机表现：空闲时 CPU 也显示 100%）。
+        #
+        #    为什么不能改成「Δtotal / 核数 / CLK_TCK」：
+        #    Δtotal 里已经含 idle（idle 本身就隐含了「核数 × 窗口」），
+        #    再除以核数等于**重复除一次** → 结果离谱。
+        #    实测同一时刻（真机 2 核）：
+        #      Δtotal=983 Δidle=777
+        #      旧公式（÷核数）       = 491.5%   ❌
+        #      正确公式（1-idle/tot） = 21.0%    ✅ 与 top 口径一致
         if self.mode == 'system':
-            elapsed = b.ts - a.ts
-            if elapsed <= 0.2:
+            if a.idle_ticks is None or b.idle_ticks is None:
                 return None
-            delta = b.group_ticks - a.group_ticks
-            if delta <= 0:
+            d_total = b.group_ticks - a.group_ticks
+            d_idle = b.idle_ticks - a.idle_ticks
+            if d_total <= 0:
                 return None
-            return round(min(delta / elapsed / self._clk_tck * 100.0, 100.0), 2)
+            busy = (1.0 - d_idle / float(d_total)) * 100.0
+            return round(min(max(busy, 0.0), 100.0), 2)
         elapsed = b.ts - a.ts
         if elapsed <= 0.2:
             return None

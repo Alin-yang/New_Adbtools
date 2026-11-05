@@ -150,7 +150,12 @@ def parse_system_meminfo(output: str) -> Dict[str, Optional[float]]:
 
 
 def parse_proc_stat_cpu(output: str) -> Optional[float]:
-    """解析 /proc/stat 的整体 CPU jiffies 总数"""
+    """解析 /proc/stat 的整体 CPU jiffies 总数
+
+    ⚠️ **这个「总量」是所有核的累加值**（实测 2 核设备：
+       总量差值 678 ≈ cpu0 差值 339 + cpu1 差值 338，误差 0.1%）。
+       要算整机忙碌率**必须除以核数**，否则结果必然 >= 100%。
+    """
     for line in (output or '').splitlines():
         if line.startswith('cpu'):
             try:
@@ -160,6 +165,81 @@ def parse_proc_stat_cpu(output: str) -> Optional[float]:
             except ValueError:
                 return None
     return None
+
+
+def parse_proc_stat_cpu_fields(output: str) -> Optional[Dict[str, float]]:
+    """解析 /proc/stat 的 cpu 总量行的**分项** jiffies
+
+    ⚠️ **字段顺序（Linux 标准，Android 同样是这 10 个）**：
+       user nice system **idle** iowait irq softirq steal guest guest_nice
+       Android 是 10 字段（比标准少一个 guest_nice），但**前 7 个含义相同**。
+
+    ⚠️ **为什么要分项而不是只用总量**（v5.4.7 真机验证发现）：
+       整机 CPU 忙碌率的正确公式是 **1 - Δidle / Δtotal**，
+       不是「Δtotal / 核数 / CLK_TCK」。
+       原因：Δtotal 里含 idle，而 idle 已经隐含了「核数 × 窗口」的信息；
+       再除以核数会**重复除一次** → 结果离谱
+       （实测同一时刻：旧公式 491.5%，正确公式 21.0%）。
+
+       对照验证（真机 2 核）：
+         /proc/stat 增量 = User 58 + Nice 2 + Sys 145 + Idle 777 + IOW 0 + IRQ 0 + SIRQ 1 = 983
+         top  输出      = User 58 + Nice 0 + Sys 179 + Idle 189 + IOW 103 + IRQ 0 + SIRQ 59 = 563
+       （同一份内核计数器，字段一一对应）
+
+    Returns:
+        含 user/nice/system/idle/iowait/irq/softirq/total 的 dict；
+        解析失败返回 None
+    """
+    for line in (output or '').splitlines():
+        parts = line.split()
+        if not parts or parts[0] != 'cpu':
+            continue
+        try:
+            vals = [int(v) for v in parts[1:]]
+        except ValueError:
+            return None
+        if len(vals) < 4:
+            return None
+
+        def _g(i, default=0):
+            return float(vals[i]) if len(vals) > i else default
+
+        return {
+            'user': _g(0),
+            'nice': _g(1),
+            'system': _g(2),
+            'idle': _g(3),
+            'iowait': _g(4),
+            'irq': _g(5),
+            'softirq': _g(6),
+            'total': float(sum(vals)),
+        }
+    return None
+
+
+def parse_proc_stat_cores(output: str) -> int:
+    """从 /proc/stat 数出**在线核数**（数 cpuN 行的个数）
+
+    ⚠️ **为什么从 /proc/stat 数而不用 `nproc`**：
+       - `nproc` 在精简 Android 上**经常不存在**
+         （实测小米盒子 Android 5.1.1 和本机 192.168.0.50 都没有）
+       - `cat /proc/cpuinfo` 在某些 ROM 上也没有 cat
+       - 而 /proc/stat 是**采集 CPU 时本来就要读的那一份数据** →
+         数它的 cpuN 行 = **零额外 adb 往返**
+
+    Returns:
+        核数；解析不出来时返回 0（调用方应回退到 1）
+    """
+    n = 0
+    for line in (output or '').splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        name = parts[0]
+        # cpu0 / cpu1 …（排除总量行 "cpu" 和其它 "cpuXxx"）
+        if name.startswith('cpu') and name[3:].isdigit():
+            n += 1
+    return n
 
 
 def parse_cpuinfo_line(output: str, package_name: str) -> Optional[float]:
