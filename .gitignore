@@ -97,3 +97,6 @@ logs/
 anr_files/
 screenshots/
 records/
+
+# 临时验证输出（脚本遗留）
+verify_bl.txt
