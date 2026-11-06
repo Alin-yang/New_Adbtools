@@ -100,3 +100,10 @@ records/
 
 # 临时验证输出（脚本遗留）
 verify_bl.txt
+
+# 临时验证输出（脚本遗留）
+verify_bl.txt
+verify_final.txt
+verify_an.txt
+verify_diag.txt
+vf2.txt
