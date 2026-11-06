@@ -32,6 +32,7 @@ STEPS = [
     ('性能基线入口回归', 'test_perf_baseline_entry.py'),
     ('终端搜索功能测试', 'test_log_search.py'),
     ('终端导出跟随过滤', 'test_log_export_filter.py'),
+    ('连接状态判定回归', 'test_connect_state.py'),
     ('日志错误聚类测试', 'test_log_analyzer.py'),
     ('一键诊断包测试', 'test_diagnostic_package.py'),
     ('v4 工作台布局测试', 'test_layout_v4.py'),

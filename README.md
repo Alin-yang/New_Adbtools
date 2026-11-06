@@ -685,7 +685,76 @@ adb shell am broadcast -a ADB_INPUT_TEXT --es msg "你好"
 
 ## 十、版本历史
 
-### v5.4.8（当前版本）—— 日志错误聚类 + 一键诊断包 + 导出跟随过滤
+### v5.4.9（当前版本）—— 修复「输出连接成功但实际没连上」
+
+用户反馈：点「连接」，终端输出 `already connected to 192.168.0.50:5555`
+并显示「✓ 连接成功」，但**实际并没有连上**（浮层显示「在线 0 台」、
+该设备标记「已离线」）。
+
+#### 根因一：判定连接成功的依据错了
+
+`app.py` 旧代码：
+```python
+if "connected" in output.lower():   # ← 旧判定
+```
+`adb connect` 有三种输出，而 **`already connected to X` 也含 "connected"**：
+
+| adb connect 输出 | 真实含义 | 旧判定 |
+|---|---|---|
+| `connected to X` | 握手成功 | ✓ 成功 |
+| `already connected to X` | **adb server 里已有这个条目**（transport 还在） | ✓ 成功 ← **误报** |
+| `failed to connect to X` | 真失败 | ✗ 失败 |
+
+设备端 adbd 卡住时（网络通、5555 端口可达、但握手失败），
+`adb connect` 返回的就是 `already connected`，而设备实际是 offline。
+
+**修法**：connect 之后**必须查实际状态**才报成功。
+
+#### 根因二：状态判定用错了命令
+
+⚠️ **`adb devices` 和 `adb -s X get-state` 对同一设备会给出不同答案**（实测）：
+
+```
+adb devices        → 192.168.0.50:5555  offline
+adb -s X get-state → error: device 'X' not found
+```
+两者查 transport 的路径不同 —— `adb devices` 列出 adb server 里**所有**已知条目
+（含未完成握手的），`get-state` 按当前连接查找 → 找不到就报 not found。
+
+**所以状态判定必须用 `adb devices` 的第二列**（新增 `DeviceQuery.get_device_state()`）。
+
+#### 附带修的三个问题
+
+1. **后台线程读 Tk 控件** → `main thread is not in main loop`
+   - `run_adb_with_target()` 内部调 `get_ip_address()`（读 combobox）
+   - `update_connection_status()` 直接操作 `device_count_label.config`
+   - 旧代码异常被外层 `except` 吞掉 → 表现为「连接失败但界面不更新」，很难查
+   - 修法：`run_adb_with_target` 支持显式传 `target_ip`；
+     `update_connection_status` 加主线程判断 + `_run_in_ui` 转投
+2. **状态解析没考虑 `adb devices -l` 的长格式**
+   - `192.168.0.50:5555	offline transport_id:12` → 状态后面还跟着额外信息
+   - 必须**只取第一个词**当状态
+3. **connect 等太久** —— 默认 `timeout=15s × retries=2` = 最坏 30 秒
+   - 设备端不响应时实测 `adb connect` 要 10~15 秒才失败
+   - 修法：connect 用 `retries=1, timeout=6` + 整体时间预算（12 秒）
+   - 超预算就不再做徒劳的 disconnect 重连
+
+#### 失败提示现在会指导下一步
+
+区分三种原因，各自给出可操作建议：
+- `offline` → 「网络可达，但设备上的 adbd 无响应 → 重启设备上的 adbd」
+- `unauthorized` → 「请在设备屏幕上确认『允许 USB 调试』」
+- `notfound` → 「请确认 IP 正确 / 已开启网络调试 / 设备端 adbd 正在运行」
+
+#### 新增防回归测试（check.bat 17 → 18 步）
+`tests/test_connect_state.py`（43 条），用**真实抓到的 adb devices 输出**守护：
+- 旧判定对 `already connected` 会误判（核心断言）
+- `get_device_state` 必须用 `adb devices` 而非 `get-state`
+- `adb devices -l` 长格式的状态解析（含 `transport_id:`）
+- AST 精确匹配「没有 `'connected' in X.lower()` 这种判定」
+- 线程安全：显式传 target_ip、`update_connection_status` 有主线程判断
+
+### v5.4.8 —— 日志错误聚类 + 一键诊断包 + 导出跟随过滤
 
 针对 TV 测试的真实工作流（刷机 → 装 APK → 操作 → 出问题 → **抓日志发同事**），
 补上「加工」这一环 —— 之前只有「采集」完整，日志拿到手还得自己看。
@@ -1237,4 +1306,4 @@ GitHub：https://github.com/Alin-yang/New_Adbtools
 ---
 
 **最后更新**: 2026-11-05
-**文档版本**: v5.4.8
+**文档版本**: v5.4.9

@@ -189,6 +189,101 @@ class DeviceQuery:
     def is_validation_paused(cls) -> bool:
         return cls._pause_count > 0
 
+    # ------------------------------------------------------------------ 单设备状态
+    @classmethod
+    def get_device_state(cls, device_id: str) -> Optional[str]:
+        """查**指定设备**的连接状态
+
+        ⚠️ **为什么必须用 `adb devices` 而不是 `adb get-state`**（v5.4.9 实测）：
+           同一个设备、同一个时刻，两者的答案会**不一致**：
+
+             - `adb devices`      → `192.168.0.50:5555  offline`
+             - `adb -s X get-state` → `error: device 'X' not found`
+
+           原因：两者查 transport 的路径不同 —— `adb devices` 列出的是
+           adb server 里**所有**已知条目（含未完成握手的），
+           而 `get-state` 走的是按当前连接查找 → 找不到就报 not found。
+
+           **设备端 adbd 卡住时正是这种状态**：
+           条目还在（`offline`），但已建立不了连接。
+           所以 `adb devices` 的第二列才是权威判据。
+
+        ⚠️ **为什么需要这个**（v5.4.9 修的 bug）：
+           `adb connect` 的输出**不能用来判断连接是否真的成功**：
+
+             - `connected to 192.168.0.50:5555`         → 握手成功
+             - `already connected to 192.168.0.50:5555` → **只表示 adb server
+               里已有这个条目**，**不代表设备可用**。
+               设备端 adbd 卡住时，adb connect 就返回这一条。
+             - `failed to connect to ...`                 → 真失败
+
+           旧代码用 `if "connected" in output.lower()` 判定成功
+           → `already connected` 里也含 "connected" → **误报连接成功**。
+
+        Returns:
+            'device' / 'offline' / 'unauthorized' / 'unknown'；
+            设备列表里**根本没有**这个设备 → 返回 'notfound'；
+            查询失败（adb server 异常）→ 返回 None
+        """
+        if not device_id:
+            return None
+        try:
+            r = subprocess.run(
+                "adb devices", shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=Config.DEVICE_QUERY_TIMEOUT
+            )
+            if r.returncode != 0:
+                return None
+            output = r.stdout.decode('utf-8', errors='ignore')
+        except Exception:
+            return None
+
+        # 归一化：去掉端口，方便匹配用户输入的纯 IP
+        target = device_id.strip()
+        target_nop = target.split(':')[0] if ':' in target else target
+
+        found_any = False
+        for line in output.splitlines()[1:]:  # 跳过标题行
+            if '\t' not in line:
+                continue
+            parts = line.split('\t')
+            if len(parts) < 2:
+                continue
+            dev_id = parts[0].strip()
+            # ⚠️ `adb devices -l` 的格式是 `设备  状态  额外信息`，
+            #    状态后面还跟着 ` transport_id:12` / ` product:x model:y`。
+            #    必须**只取第一个词**当状态，否则
+            #    'offline transport_id:12' 会被当成状态名 → 匹配不上。
+            state = parts[1].strip().split()[0] if parts[1].strip() else ''
+            if not dev_id or dev_id == 'List':
+                continue
+            # 匹配：完整标识 / 带端口 / 纯 IP 都算
+            if dev_id != target and dev_id != target_nop \
+                    and dev_id.split(':')[0] != target_nop:
+                continue
+            found_any = True
+            if state == 'device':
+                return 'device'
+            if state == 'offline':
+                return 'offline'
+            if state == 'unauthorized':
+                return 'unauthorized'
+            return state or 'unknown'
+
+        # 设备列表里没有它
+        return 'notfound' if not found_any else 'unknown'
+
+    @classmethod
+    def is_device_ready(cls, device_id: str) -> bool:
+        """设备是否真正可用（状态为 device）"""
+        return cls.get_device_state(device_id) == 'device'
+
+    @classmethod
+    def is_device_ready(cls, device_id: str) -> bool:
+        """设备是否真正可用（get-state 返回 device）"""
+        return cls.get_device_state(device_id) == 'device'
+
     @classmethod
     def reset_cache(cls) -> None:
         """清空缓存（设备重启/重连后调用）"""

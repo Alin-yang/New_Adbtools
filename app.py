@@ -88,6 +88,17 @@ class ADBToolApp:
     status_text:tk.Text
     progress: ttk.Progressbar # 进度条声明
 
+    # ⚠️ 连接流程的**时间预算**（v5.4.9）
+    #    设备端 adbd 卡死时，`adb connect` 要等满超时才失败
+    #    （实测这台网络设备 10~15 秒）→ 用户点一次「连接」要干等十几秒。
+    #    超过这个预算就直接告诉用户「设备无响应」，不再做徒劳的重置。
+    CONNECT_TOTAL_BUDGET = 12.0   # 秒（整个连接流程的上限）
+    # ⚠️ 单次 adb connect 的超时：**6 秒**。
+    #    设备端 adbd 卡死时 adb 要等满超时才失败（实测这台网络设备
+    #    10~15 秒）→ 用户点一次「连接」要干等十几秒。
+    #    6 秒足够判定「连不上」，剩下的时间用来给明确提示更值。
+    CONNECT_CMD_TIMEOUT = 6
+
     def __init__(self, root: tk.Tk, layout_module) -> None:
         """
         初始化ADB工具应用
@@ -613,20 +624,29 @@ class ADBToolApp:
             return self.pkg_entry.get().strip()
         return None
 
-    def run_adb_with_target(self, command: str, retries: int = None, timeout: int = None) -> Tuple[str, bool]:
+    def run_adb_with_target(self, command: str, retries: int = None,
+                            timeout: int = None,
+                            target_ip: Optional[str] = None) -> Tuple[str, bool]:
         """执行ADB命令（支持多设备）
-        
+
         自动从IP输入框获取目标设备IP，并传递给底层命令执行函数
-        
+
         Args:
             command: ADB命令字符串
             retries: 重试次数
             timeout: 超时时间
-            
+            target_ip: **显式指定**目标设备IP。
+
+                ⚠️ v5.4.9：**后台线程里必须传这个参数**。
+                   不传会去读 Tk 控件（`get_ip_address()` 读 combobox）
+                   → 在工作线程里读控件会抛
+                   **"main thread is not in main loop"**。
+
         Returns:
             Tuple[str, bool]: (输出结果, 是否成功)
         """
-        target_ip = self.get_ip_address()
+        if target_ip is None:
+            target_ip = self.get_ip_address()
         return run_adb_command(command, retries=retries, timeout=timeout, target_device=target_ip)
     
     def on_ip_changed(self, event=None):
@@ -652,6 +672,16 @@ class ADBToolApp:
             devices: 已知的在线设备列表；传 None 时自行查询
                      （查询失败返回 None → 保持现有显示不变，避免误报断连）
         """
+        # ⚠️ **线程安全**（v5.4.9 修）：本方法会直接操作 Tk 控件
+        #    （device_count_label.config / _set_connection_badge），
+        #    而连接流程是**在后台线程**跑的 → 直接调会抛
+        #    "main thread is not in main loop"。
+        #    旧代码在后台线程也调它，异常被外层 except 吞掉 →
+        #    表现为「连接失败但界面状态不更新」，很难查。
+        if threading.current_thread() is not threading.main_thread():
+            self._run_in_ui(lambda: self.update_connection_status(ip_address, devices))
+            return
+
         if not hasattr(self, 'connection_status_label'):
             return
 
@@ -1866,45 +1896,223 @@ class ADBToolApp:
         logging.info(f"[异步线程] 线程已启动，线程 ID: {thread.ident}")
         
     def _connect_adb_async(self, ip_address: str):
-        """异步执行 ADB 连接"""
+        """异步执行 ADB 连接
+
+        ⚠️ **不能只看 `adb connect` 的输出判断成功**（v5.4.9 修的 bug）：
+           用户反馈「点击了连接，输出连接成功，实际并没有连接上」。
+
+           根因：`adb connect` 有三种输出，旧代码用
+           `if "connected" in output.lower()` 判定 —— 而
+           **`already connected to X` 也含 "connected"** → 误报成功。
+
+           `already connected` 的真实含义是「adb server 里已有这个条目」
+           （transport 还在），**不代表设备可用**。
+           设备端 adbd 卡住时（网络通、5555 端口可达、但握手失败），
+           `adb connect` 就是返回这一条，而 `adb devices` 里它是 **offline**。
+
+           ✅ 正确流程：**connect → 用 get-state 验证实际状态 → 才报成功**。
+        """
         import logging
+        import time as _time
+        _t_start = _time.time()
         logging.info(f"[后台线程] _connect_adb_async 开始执行，IP: {ip_address}")
-        
+
         try:
             logging.info(f"[ADB 命令] 执行 adb connect {ip_address}")
-            output, success = self.run_adb_with_target(f"adb connect {ip_address}")
+            # ⚠️ 显式传 target_ip —— 后台线程不能读 Tk 控件
+            # ⚠️ **connect 要短超时 + 不重试**：
+            #    默认是 timeout=15s × retries=2 → 最坏 30 秒。
+            #    而 connect 连不上时 adb 本身就要等满超时（实测 14.7 秒），
+            #    再重试一次 = 30 秒白等，用户干瞪眼。
+            #    设备连不上的原因很快就知道了（连不上就是连不上），
+            #    不值得等第二遍 —— 失败后立刻给明确提示更有用。
+            output, success = self.run_adb_with_target(
+                f"adb connect {ip_address}",
+                retries=1, timeout=self.CONNECT_CMD_TIMEOUT,
+                target_ip=ip_address)
             logging.info(f"[ADB 命令] 执行完成，成功:{success}, 输出长度:{len(output)}")
-                
-            # 在 UI 线程中更新结果
-            if "connected" in output.lower():
-                logging.info("[后台线程] 连接成功，准备更新 UI")
-                # 保存新的 IP 到历史记录（统一格式不带端口）
-                # 统一格式：如果是IP地址则去除端口号，USB设备序列号直接保存
-                normalized_ip = ip_address
-                if ':' in ip_address and '.' in ip_address:  # IP地址格式（包含冒号和点号）
-                    normalized_ip = ip_address.split(':')[0]  # 只保留IP部分
-                
-                if normalized_ip not in self.ip_history:
-                    self.ip_history.insert(0, normalized_ip)
-                    # 调度保存（防抖）
-                    self._schedule_history_save()
-                    # ✅ 直接更新，不使用 after
-                    if hasattr(self, 'ip_combobox'):
-                        logging.info("[后台线程] 更新 IP 下拉框")
-                        self.ip_combobox['values'] = self.ip_history
-                # ✅ 直接更新状态，不使用 after
-                logging.info("[后台线程] 调用 update_status")
-                self.update_status(output, True)
-                logging.info("[后台线程] 调用 update_connection_status")
+
+            low = (output or '').lower()
+
+            # ── 明确的失败：failed to connect ──────────────────
+            # ⚠️ connect 失败**不要再跑一次 connect**（重试）：
+            #    实测这台设备 `adb connect` 要 14.7 秒才超时（设备端不响应），
+            #    再跑一次就是 30 秒 —— 用户等不起。
+            #    这里只做**轻量**的状态查询（adb devices 约 0.6 秒），
+            #    把失败原因报准（offline / 未授权 / 不在列表）。
+            if 'failed to connect' in low or 'cannot connect' in low \
+                    or 'unable to connect' in low:
+                logging.info("[后台线程] connect 明确失败")
+                state = self._verify_device_state(ip_address)
+                self.update_status(
+                    self._build_connect_failure_msg(ip_address, state, output),
+                    False)
                 self.update_connection_status(ip_address)
-                logging.info("[后台线程] UI 更新完成")
-            else:
-                logging.info("[后台线程] 连接失败，准备更新 UI")
-                self.update_status(output, False)
-                self.update_connection_status(ip_address)
+                return
+
+            # ── 可能是成功，也可能是 "already connected" ────────
+            # ⚠️ 两种情况都要**验证实际状态**，不能只看输出
+            logging.info("[后台线程] 验证设备实际状态（get-state）")
+            state = self._verify_device_state(ip_address)
+
+            if state == 'device':
+                logging.info("[后台线程] 验证通过：设备真的在线")
+                self._on_device_connected(ip_address, output)
+                return
+
+            # ── offline：adb server 里有条目但设备实际不可用 ──────
+            # ⚠️ 这种情况下 `adb connect` 会一直返回 "already connected"，
+            #    光报错没用 —— 必须**先 disconnect 清掉陈旧条目再重连**。
+            #    （实测：不 disconnect 直接重连永远连不上）
+            if state == 'offline':
+                # ⚠️ **先看时间预算**（v5.4.9）：
+                #    设备端 adbd 卡死时，disconnect+connect 是**徒劳**的
+                #    （实测这台设备 disconnect 后 connect 依然失败，
+                #    而两次加起来要 18 秒）。已经耗掉大部分预算就别再试了。
+                elapsed = _time.time() - _t_start
+                if elapsed > self.CONNECT_TOTAL_BUDGET * 0.6:
+                    logging.info(
+                        f"[后台线程] 已耗时 {elapsed:.1f}s，跳过重置（预算 "
+                        f"{self.CONNECT_TOTAL_BUDGET}s）")
+                    self.update_status(
+                        self._build_connect_failure_msg(ip_address, state, output),
+                        False)
+                    self.update_connection_status(ip_address)
+                    return
+                logging.info("[后台线程] 设备 offline，尝试 disconnect 后重连")
+                self.update_status(
+                    f"⏳ {ip_address} 处于 offline，正在重置连接...", True, "info")
+                recovered = self._reconnect_offline_device(ip_address)
+                if recovered:
+                    logging.info("[后台线程] 重置后连接成功")
+                    self._on_device_connected(
+                        ip_address,
+                        f"connected to {ip_address}")
+                    return
+                state = self._verify_device_state(ip_address)
+                if state == 'device':
+                    self._on_device_connected(
+                        ip_address, f"connected to {ip_address}")
+                    return
+
+            # ── 状态不对 → 报真实原因，给可操作的提示 ──────────
+            logging.info(f"[后台线程] 验证未通过：state={state}")
+            self.update_status(
+                self._build_connect_failure_msg(ip_address, state, output),
+                False)
+            self.update_connection_status(ip_address)
+
         except Exception as e:
             logging.error(f"[后台线程] 异常：{str(e)}")
             self.update_status(f"连接失败：{str(e)}", False)
+
+    @staticmethod
+    def _build_connect_failure_msg(ip_address: str, state, output: str) -> str:
+        """生成连接失败的提示（**要能指导用户下一步动作**）
+
+        ⚠️ v5.4.9：光说「failed to connect」用户不知道怎么做 ——
+           要区分「设备不在列表」和「设备 offline」这两种完全不同的原因。
+        """
+        raw = (output or '').strip()
+        if state == 'offline':
+            return (f"✗ 连接失败：{ip_address} 处于 offline 状态\n"
+                    f"  网络可达，但设备上的 adbd 无响应（卡住或已退出）\n"
+                    f"  解决：重启设备上的 adbd，或重启设备 / 重新插拔网线后重试")
+        if state == 'unauthorized':
+            return ("✗ 连接失败：设备未授权 USB 调试\n"
+                    "  请在设备屏幕上确认「允许 USB 调试」")
+        if state == 'notfound':
+            return (f"✗ 连接失败：{ip_address} 未出现在 adb 设备列表中\n"
+                    f"  adb 返回：{raw or '(无输出)'}\n"
+                    f"  请确认：① IP 地址正确 ② 设备已开启网络调试（5555 端口）"
+                    f" ③ 设备端 adbd 正在运行")
+        if state is None:
+            return (f"✗ 连接失败：无法确认设备状态\n"
+                    f"  adb 返回：{raw or '(无输出)'}")
+        return (f"✗ 连接失败：设备状态为 {state}\n"
+                f"  adb 返回：{raw or '(无输出)'}")
+
+    def _reconnect_offline_device(self, ip_address: str) -> bool:
+        """设备 offline 时：disconnect 清掉陈旧条目 → 再 connect
+
+        ⚠️ **为什么必须先 disconnect**（v5.4.9 实测）：
+           adb server 里还留着那个 transport 条目（transport_id:N），
+           此时 `adb connect` 会**直接返回 "already connected" 而不做任何事**
+           → 永远连不上。实测：先 `adb disconnect` 再 `adb connect`，
+           设备端 adbd 没卡死的话就能恢复。
+
+        ⚠️ 设备端 adbd **真的卡死**时（网络通、5555 端口可达、但握手失败），
+           disconnect + reconnect 也救不回来 —— 那种情况只能重启设备上的 adbd。
+           这时返回 False，让上层报明确的 offline 提示。
+        """
+        import logging
+        import time
+        try:
+            # ① 先断开（清掉 adb server 里的陈旧条目）
+            # ⚠️ 显式传 target_ip —— 后台线程不能读 Tk 控件
+            self.run_adb_with_target(f"adb disconnect {ip_address}",
+                                     target_ip=ip_address)
+            time.sleep(1.5)
+            # ② 再连（同样短超时、不重试）
+            out, _ = self.run_adb_with_target(
+                f"adb connect {ip_address}",
+                retries=1, timeout=self.CONNECT_CMD_TIMEOUT,
+                target_ip=ip_address)
+            time.sleep(1.5)
+            low = (out or '').lower()
+            if 'failed to connect' in low or 'cannot connect' in low:
+                logging.info(f"[后台线程] 重置后仍连不上: {out}")
+                return False
+            # ③ 用 get-state 确认（不能信输出，同上）
+            return self._verify_device_state(ip_address) == 'device'
+        except Exception as e:
+            logging.error(f"[后台线程] 重置连接异常: {e}")
+            return False
+
+    def _verify_device_state(self, ip_address: str):
+        """验证设备的**实际**连接状态（connect 之后调用）
+
+        ⚠️ **必须验证，不能信 `adb connect` 的输出** ——
+           `already connected` 只说明 adb server 里有这个条目，
+           设备本身可能是 offline（adb server 重启后不自动重连的老毛病）。
+        """
+        from modules.device_query import DeviceQuery
+        # 带端口的标识优先（adb devices 里就是这种形式）
+        candidates = [ip_address]
+        if ':' not in ip_address:
+            candidates.append(f"{ip_address}:5555")
+        else:
+            candidates.append(ip_address.split(':')[0])
+
+        for cid in candidates:
+            try:
+                st = DeviceQuery.get_device_state(cid)
+            except Exception:
+                st = None
+            if st is not None:
+                return st
+        return None
+
+    def _on_device_connected(self, ip_address: str, output: str):
+        """确认连接成功后：记历史 + 更新 UI"""
+        import logging
+        logging.info("[后台线程] 连接成功，准备更新 UI")
+
+        # 保存新的 IP 到历史记录（统一格式不带端口）
+        normalized_ip = ip_address
+        if ':' in ip_address and '.' in ip_address:  # IP地址格式
+            normalized_ip = ip_address.split(':')[0]  # 只保留IP部分
+
+        if normalized_ip not in self.ip_history:
+            self.ip_history.insert(0, normalized_ip)
+            self._schedule_history_save()
+            if hasattr(self, 'ip_combobox'):
+                self.ip_combobox['values'] = self.ip_history
+
+        # ✅ 直接更新状态，不使用 after
+        self.update_status(output, True)
+        self.update_connection_status(ip_address)
+        logging.info("[后台线程] UI 更新完成")
 
 
     @require_device_connected
