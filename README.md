@@ -685,7 +685,69 @@ adb shell am broadcast -a ADB_INPUT_TEXT --es msg "你好"
 
 ## 十、版本历史
 
-### v5.4.11（当前版本）—— 修复「存为基线失败」+ 性能页滚动提速
+### v5.4.12（当前版本）—— 修复「底部固定区跨页面残留」
+
+用户反馈：**「性能监控和投屏和脚本执行全都是采样明细了」**。
+
+#### 根因：底部固定区挂到了 workspace（所有页面共享的容器）
+
+v5.4.11 为了解决滚动卡顿，把两个表格从滚动 Canvas 里挪出来做「底部固定区」。
+实现方式是「调用方先 new 一个 Frame，再传给 `_panel`」：
+
+```python
+# ❌ v5.4.11 的写法（父容器错了）
+_fixed = tk.Frame(self.workspace, ...)   # ← workspace 不是 holder！
+holder, body = self._panel(..., fixed_bottom=_fixed)
+```
+
+而 `_panel` 里做的是 `_bottom.grid(row=1, column=0, sticky=NSEW)` ——
+**`grid()` 作用于控件自己的父容器**，所以它挂到了 **workspace 的第 1 行**。
+
+关键在于：
+- `workspace` 是**所有页面共享**的容器
+- 各页面面板都 grid 在 workspace 的 **第 0 行**（靠 `tkraise()` 切换前后顺序）
+
+于是这个「采样明细」表格变成了**所有页面共用的底部条** ——
+切到投屏页、脚本执行页它也在下面显示。
+
+#### 修法：接口从「传 Frame」改成「传标志」
+
+```python
+# ✅ v5.4.12
+holder, body = self._panel(..., with_fixed_bottom=True)
+# _panel 内部把 bottom 建在 holder 里：
+bottom = tk.Frame(holder, ...)
+bottom.grid(row=1, column=0, sticky=tk.NSEW)
+```
+
+**规则：固定区的父容器必须是 holder** —— holder 才会跟着 `switch_nav`
+一起被 `tkraise()`，也才会被别的页面正确盖住。
+
+#### 顺带修：底部区把上方内容挤成 1px
+
+改对父容器后暴露了第二个问题：底部区里的表格容器用了
+`pack_propagate(False)`，尺寸不再随内容收缩 → 它按**内容请求高度**
+（实测 **680px**）去抢空间，把上方的滚动 Canvas 挤到只剩 **1px**
+→ 采样控制区和指标卡**整块消失**。
+
+修法：
+- `_fixed` 显式 `height=300` + `pack_propagate(False)`
+  （⚠️ 是 **pack** 不是 grid —— `_fixed` 的子控件是用 pack 放的）
+- 去掉 `_tables.pack_propagate(False)`（尺寸交给外层统一控制）
+
+实测：Canvas 从 **1px → 334px**，底部区固定 300px，指标卡滚动可见。
+
+#### 新增防回归测试（`test_perf_scroll_baseline.py` 37 → 50 项）
+
+- 表格**不是 workspace 的直接子控件**（跨页残留的直接证据）
+- 表格在 perf holder 的子树内
+- **workspace 里没有挂在非 0 行的独立子控件**
+- 切到 mirror/script 页后表格仍属于 perf 面板（递归查子树）
+- 性能页滚动区高度 > 150px（防「被挤成 1px」）
+- 源码级：`_fixed = tk.Frame(holder,...)` 且**不含** `self.workspace`
+- `_panel` 有 `with_fixed_bottom`、不再有旧的 `fixed_bottom`
+
+### v5.4.11 —— 修复「存为基线失败」+ 性能页滚动提速
 
 用户反馈两件事：① 点「存为基线」报**保存基线失败**；
 ② **性能监控页整体上下滚动时加载卡卡的**。
@@ -1443,4 +1505,4 @@ GitHub：https://github.com/Alin-yang/New_Adbtools
 ---
 
 **最后更新**: 2026-11-05
-**文档版本**: v5.4.11
+**文档版本**: v5.4.12

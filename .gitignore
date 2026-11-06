@@ -123,3 +123,6 @@ scroll_diag.txt
 scroll2.txt
 scroll3.txt
 scroll4.txt
+
+# 布局验证截图（临时）
+tests/_shots_v4/chk_*.png

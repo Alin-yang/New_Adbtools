@@ -687,19 +687,34 @@ class LayoutV4:
     # ================================================================
     # 面板构建辅助
     # ================================================================
-    def _panel(self, title, subtitle, fixed_bottom=None):
+    def _panel(self, title, subtitle, with_fixed_bottom=False):
         """创建一个面板容器，返回 (外框, 内容区)
 
         ⚠️ 面板整体放进一个可滚动的 Canvas：
         小窗口下内容不会顶出窗口（v3 的投屏页就是这么被裁掉的）。
 
         Args:
-            fixed_bottom: **固定在底部的容器**（不进入 Canvas）。
-                用于装原生控件（Treeview 等）——
-                Canvas 滚动时会重绘窗口项，
-                而**原生控件每次都要整个重绘**。
-                实测（v5.4.11）：表格在 Canvas 内时滚动
-                耗时 14.5~21 ms，移出后降到 0.2 ms（**70 倍**）。
+            with_fixed_bottom: True 时**预留底部固定区**：
+                holder 的第 0 行放滚动 Canvas，第 1 行留给调用方
+                放**不进 Canvas** 的原生控件（表格等）。
+
+                为什么需要：Canvas 滚动时会重绘窗口项，
+                而**原生控件每次都要整个重绘** → 重绘成本 ∣ 控件高度。
+                实测（v5.4.11）：表格在 Canvas 内时滚动 14.5~21 ms，
+                移出后降到 0.2 ms（**70 倍**）。
+
+        ⚠️⚠️ **v5.4.12 修的严重 bug —— 固定区必须挂在 holder 里**：
+           之前的实现是「调用方先 new 一个 Frame 传给 _panel」，
+           而那个 Frame 的父容器是 **self.workspace**
+           （不是 holder）→ `grid(row=1)` 挂到了 **workspace 的第 1 行**。
+           workspace 是**所有页面共享**的容器（各页面面板都在第 0 行），
+           → 固定区变成**所有页面共用的底部条**
+           → 用户反馈「性能监控和投屏和脚本执行全都是采样明细了」。
+
+           **规则：固定区的父容器必须是 holder**
+           （holder 才会跟着 switch_nav 一起被别的页面盖住）。
+           所以现在由 `_panel` 建 holder，调用方拿到 holder 后
+           再把底部 Frame 建到 **holder 里**（见 build_perf_panel）。
         """
         holder = tk.Frame(self.workspace, bg=self.theme.color('bg_app'))
         self.theme.register(holder, 'canvas')
@@ -707,8 +722,7 @@ class LayoutV4:
         # ⚠️ 有底部固定区时，上半部用 grid 占位，
         #    固定区在下方——这样滚动 Canvas 时
         #    底部的原生控件**不会被重绘**。
-        _bottom = None
-        if fixed_bottom is not None:
+        if with_fixed_bottom:
             holder.grid_rowconfigure(0, weight=1)
             holder.grid_columnconfigure(0, weight=1)
 
@@ -716,19 +730,14 @@ class LayoutV4:
                            highlightthickness=0, bd=0)
         self.theme.register(canvas, 'canvas')
 
-        if fixed_bottom is not None:
-            canvas.grid(row=0, column=0, sticky=tk.NSEW)
-            _bottom = fixed_bottom
-            _bottom.grid(row=1, column=0, sticky=tk.NSEW)
-            self.theme.register(_bottom, 'canvas')
-        else:
-            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
         vsb = ttk.Scrollbar(holder, orient=tk.VERTICAL, command=canvas.yview,
                             style='App.Vertical.TScrollbar')
-        if fixed_bottom is not None:
+
+        if with_fixed_bottom:
+            canvas.grid(row=0, column=0, sticky=tk.NSEW)
             vsb.grid(row=0, column=1, sticky=tk.NS)
         else:
+            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
             vsb.pack(side=tk.RIGHT, fill=tk.Y)
 
         inner = tk.Frame(canvas, bg=self.theme.color('bg_app'))
@@ -1067,13 +1076,32 @@ class LayoutV4:
            而重绘成本 ∣ 表格高度。
            将它放到 Canvas **之外**就完全不受滚动影响。
         """
-        # 底部固定区（两个表格并排）
-        _fixed = tk.Frame(self.workspace, bg=self.theme.color('bg_app'))
-        self.theme.register(_fixed, 'canvas')
-
+        # ⚠️ v5.4.12：**底部固定区的父容器必须是 holder**（本页专属），
+        #    绝不能 new Frame 挂到 self.workspace —— 那样它会变成
+        #    **所有页面共享**的底部条（用户反馈「投屏和脚本执行页
+        #    也都显示采样明细」）。
         holder, body = self._panel(
             "性能监控", "采样 CPU / 内存 / 帧率，定位卡顿与内存泄漏",
-            fixed_bottom=_fixed)
+            with_fixed_bottom=True)
+
+        # 底部固定区（两个表格上下排列）—— 建在 holder 里
+        #
+        # ⚠️ **必须显式给高度**（v5.4.12 修）：
+        #    底部区里的表格容器用了 pack_propagate(False)，
+        #    尺寸不再随内容收缩 → 它会按**内容请求高度**（实测 680px）
+        #    去抢空间，把上方的滚动 Canvas 挤到只剩 1px
+        #    → 采样控制区和指标卡**整块消失**。
+        #    显式 height 后：底部区固定 300px，Canvas 拿剩余空间。
+        _fixed = tk.Frame(holder, bg=self.theme.color('bg_app'),
+                          height=300)
+        self.theme.register(_fixed, 'canvas')
+        _fixed.grid(row=1, column=0, sticky=tk.NSEW)
+        # ⚠️ **pack_propagate(False)**（不是 grid_propagate）：
+        #    _fixed 的子控件是**用 pack 放的**（_tables.pack(...)），
+        #    所以要关的是 pack 的尺寸传播 —— 关掉后
+        #    _fixed 的请求高度 = 上面显式给的 300px，
+        #    不会被子控件的请求高度（实测 680px）顶开。
+        _fixed.pack_propagate(False)
 
         # ── 采样控制 ──────────────────────────────────────────
         _wrap, content = self._section(body, "采样控制")
@@ -1275,7 +1303,9 @@ class LayoutV4:
         _tables = tk.Frame(_fixed, bg=self.theme.color('bg_app'))
         _tables.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 10))
         self.theme.register(_tables, 'canvas')
-        _tables.pack_propagate(False)
+        # ⚠️ v5.4.12：**去掉 pack_propagate(False)**。
+        #    它会让容器不随内容收缩 → 尺寸失控（实测底部区请求 680px，
+        #    把 Canvas 挤到 1px）。现在由外层 _fixed 的 height 统一控制。
         _tables.grid_columnconfigure(0, weight=1)
         _tables.grid_rowconfigure(0, weight=3)
         _tables.grid_rowconfigure(1, weight=2)
