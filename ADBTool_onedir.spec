@@ -81,6 +81,8 @@ a = Analysis(
         # ⚠️ v5.4.8 日志错误聚类 + 分析结果窗口（与 ADBTool.spec 保持一致）
         'modules.log_analyzer',
         'gui.log_analysis_window',
+        # ⚠️ v5.4.11 性能页虚拟化表格（与 ADBTool.spec 保持一致）
+        'gui.fast_table',
     ],
     hookspath=[],
     hooksconfig={},

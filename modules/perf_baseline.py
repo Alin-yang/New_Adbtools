@@ -37,6 +37,14 @@ class BaselineStore:
             os.makedirs(d, exist_ok=True)
             stamp = time.strftime('%Y%m%d_%H%M%S')
             path = os.path.join(d, f'{stamp}.json')
+            # ⚠️ **同一秒内保存两次会互相覆盖**（v5.4.11）：
+            #    文件名只到秒 → 连点两次「存为基线」就丢一份。
+            #    重复时自动加序号。
+            if os.path.exists(path):
+                _n = 1
+                while os.path.exists(os.path.join(d, f'{stamp}_{_n}.json')):
+                    _n += 1
+                path = os.path.join(d, f'{stamp}_{_n}.json')
             payload = {
                 'package': package_name,
                 'label': label,

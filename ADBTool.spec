@@ -77,6 +77,8 @@ a = Analysis(
         #    PyInstaller 静态分析抓不到 → 必须显式列出
         'modules.log_analyzer',
         'gui.log_analysis_window',
+        # ⚠️ v5.4.11 性能页虚拟化表格（Canvas 绘制，滚动不重绘全表）
+        'gui.fast_table',
     ],
     hookspath=[],
     hooksconfig={},

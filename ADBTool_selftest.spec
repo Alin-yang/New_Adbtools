@@ -53,6 +53,7 @@ a = Analysis(
         'gui.nav_icons',
         'modules.log_analyzer',
         'gui.log_analysis_window',
+        'gui.fast_table',
     ],
     hookspath=[],
     hooksconfig={},

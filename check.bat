@@ -14,62 +14,65 @@ if not exist "%PYTHON%" set "PYTHON=python"
 set FAILED=0
 
 echo.
-echo [1/19] 代码质量检查 (lint)
+echo [1/20] 代码质量检查 (lint)
 "%PYTHON%" tools\lint.py
 if errorlevel 1 set FAILED=1
 echo.
-echo [2/19] 核心路径回归测试
+echo [2/20] 核心路径回归测试
 "%PYTHON%" tests\test_core_regression.py || set FAILED=1
 echo.
-echo [3/19] 设备查询与监控测试
+echo [3/20] 设备查询与监控测试
 "%PYTHON%" tests\test_device_query_and_monitor.py || set FAILED=1
 echo.
-echo [4/19] 设备切换与连接状态测试
+echo [4/20] 设备切换与连接状态测试
 "%PYTHON%" tests\test_device_switch.py || set FAILED=1
 echo.
-echo [5/19] 安装流程测试
+echo [5/20] 安装流程测试
 "%PYTHON%" tests\test_install_flow.py || set FAILED=1
 echo.
-echo [6/19] 精简 ROM / 慢设备安装兼容测试
+echo [6/20] 精简 ROM / 慢设备安装兼容测试
 "%PYTHON%" tests\test_install_rom_compat.py || set FAILED=1
 echo.
-echo [7/19] 异步与线程安全测试
+echo [7/20] 异步与线程安全测试
 "%PYTHON%" tests\test_async_and_fixes.py || set FAILED=1
 echo.
-echo [8/19] 性能优化测试
+echo [8/20] 性能优化测试
 "%PYTHON%" tests\test_perf_improvements.py || set FAILED=1
 echo.
-echo [9/19] 性能监控 v4 解析与分析测试
+echo [9/20] 性能监控 v4 解析与分析测试
 "%PYTHON%" tests\test_perf_v4.py || set FAILED=1
 echo.
-echo [10/19] 性能实时刷新链路测试
+echo [10/20] 性能实时刷新链路测试
 "%PYTHON%" tests\test_perf_live_refresh.py || set FAILED=1
 echo.
-echo [11/19] 整机 CPU 忙碌率公式回归
+echo [11/20] 整机 CPU 忙碌率公式回归
 "%PYTHON%" tests\test_perf_cpu_formula.py || set FAILED=1
 echo.
-echo [12/19] 性能报告与图表回归
+echo [12/20] 性能报告与图表回归
 "%PYTHON%" tests\test_perf_report_chart.py || set FAILED=1
 echo.
-echo [13/19] 性能基线入口回归
+echo [13/20] 性能页滚动与基线保存回归
+"%PYTHON%" tests\test_perf_scroll_baseline.py || set FAILED=1
+echo.
+echo [14/20] 性能基线入口回归
 "%PYTHON%" tests\test_perf_baseline_entry.py || set FAILED=1
 echo.
-echo [14/19] 终端搜索功能测试
+echo [15/20] 终端搜索功能测试
 "%PYTHON%" tests\test_log_search.py || set FAILED=1
 echo.
-echo [15/19] 终端导出跟随过滤
+echo [16/20] 终端导出跟随过滤
 "%PYTHON%" tests\test_log_export_filter.py || set FAILED=1
 echo.
-echo [16/19] 连接状态判定回归
+echo [17/20] 连接状态判定回归
 "%PYTHON%" tests\test_connect_state.py || set FAILED=1
 echo.
-echo [17/19] 日志错误聚类测试
+echo [18/20] 日志错误聚类测试
 "%PYTHON%" tests\test_log_analyzer.py || set FAILED=1
 echo.
-echo [18/19] 一键诊断包测试
+echo [19/20] 一键诊断包测试
 "%PYTHON%" tests\test_diagnostic_package.py || set FAILED=1
 echo.
-echo [19/19] v4 工作台布局测试
+echo [20/20] v4 工作台布局测试
 "%PYTHON%" tests\test_layout_v4.py || set FAILED=1
 
 echo.
