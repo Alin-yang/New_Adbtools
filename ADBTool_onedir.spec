@@ -78,6 +78,9 @@ a = Analysis(
         'gui.device_picker',
         # ⚠️ v5.4.5 导航图标（与 ADBTool.spec 保持一致）
         'gui.nav_icons',
+        # ⚠️ v5.4.8 日志错误聚类 + 分析结果窗口（与 ADBTool.spec 保持一致）
+        'modules.log_analyzer',
+        'gui.log_analysis_window',
     ],
     hookspath=[],
     hooksconfig={},

@@ -27,6 +27,7 @@ v4 改为「左侧固定导航 + 顶栏全局上下文 + 右侧可折叠终端�
 import tkinter as tk
 from tkinter import ttk
 import logging
+import re
 
 from config import Config
 from gui.theme import (ThemeManager, FONT_UI, FONT_MONO,
@@ -920,6 +921,31 @@ class LayoutV4:
             ("原始命令速查", "show_all_adb_commands", "secondary"),
         ])
 
+        # ── 智能分析（v5.4.8）─────────────────────────────────
+        # ⚠️ 「错误分析」把日志里的错误**聚类 + 按频次排序** ——
+        #    同一个异常刷 500 次仍是 500 行，人工翻找成本极高，
+        #    而且看不出哪个错误最频繁（那才是优先要修的）。
+        _wrap3b, content3b = self._section(
+            body, "智能分析", "错误聚类排序 / 一键打包现场")
+
+        self._btn_row(content3b, [
+            ("错误分析", "analyze_log_errors", "primary"),
+            ("一键诊断包", "collect_diagnostic_package", "secondary"),
+        ])
+
+        self._label(
+            content3b,
+            text="错误分析：把相同异常折叠并统计频次，直接告诉你哪个错得最多"
+                 "（分析终端内容，终端为空时读日志文件）",
+            fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, FS_SM),
+            anchor=tk.W).pack(fill=tk.X, pady=(4, 0))
+        self._label(
+            content3b,
+            text="一键诊断包：logcat + dumpsys + 设备属性打成 zip，"
+                 "直接发给同事或贴问题单",
+            fg_key='fg_dim', bg_key='bg_app', font=(FONT_UI, FS_SM),
+            anchor=tk.W).pack(fill=tk.X, pady=(2, 0))
+
         # ── 屏幕取证 ──────────────────────────────────────────
         _wrap4, content4 = self._section(body, "屏幕取证")
 
@@ -1564,10 +1590,21 @@ class LayoutV4:
 
         # ⚠️ 用紧凑样式：终端只有 340px 宽，Action.TButton 的 padding 会把
         #    按钮文字挤掉。
-        ttk.Button(foot, text="导出", command=self._export_log,
-                   style='Compact.TButton').pack(side=tk.RIGHT, padx=(6, 0))
-        ttk.Button(foot, text="复制", command=self._copy_all_output,
-                   style='Compact.TButton').pack(side=tk.RIGHT)
+        _btn_export = ttk.Button(foot, text="导出", command=self._export_log,
+                                 style='Compact.TButton')
+        _btn_export.pack(side=tk.RIGHT, padx=(6, 0))
+        # ⚠️ v5.4.8：导出/复制**跟着「只看错误」过滤** ——
+        #    提示里说明，避免用户以为导出的一定是全量
+        self._attach_tip(_btn_export,
+                         "导出终端内容到文件\\n"
+                         "勾选「只看错误」时只导出错误行")
+
+        _btn_copy = ttk.Button(foot, text="复制", command=self._copy_all_output,
+                               style='Compact.TButton')
+        _btn_copy.pack(side=tk.RIGHT)
+        self._attach_tip(_btn_copy,
+                         "复制终端内容到剪贴板\\n"
+                         "勾选「只看错误」时只复制错误行")
 
         # 进度条：app.py 用 pack/pack_forget 控制显隐
         prog_wrap = tk.Frame(self.terminal, bg=self.theme.color('bg_side'))
@@ -1733,16 +1770,13 @@ class LayoutV4:
             self.app.log_search_count.configure(text="")
             return
 
-        error_markers = ("✗", "error", "Error", "ERROR", "FAIL", "Exception",
-                         "failed", "Failed", "失败", "Traceback")
-
         content = text.get("1.0", tk.END)
         lines = content.split("\n")
         hidden = 0
         for i, line in enumerate(lines):
             if not line.strip():
                 continue
-            if not any(m in line for m in error_markers):
+            if not self._is_error_line(line):
                 # 区间留出间隙：相邻行若分别标记会被 Tk 合并成一段
                 start = f"{i + 1}.0"
                 end = f"{i + 1}.end - 1c"
@@ -1753,8 +1787,107 @@ class LayoutV4:
         self.app.log_search_count.configure(
             text=f"隐藏 {hidden}/{len(lines)} 行", fg=self.theme.color('warning'))
 
+    @staticmethod
+    def _error_markers():
+        """错误行的判定关键字（显示过滤与导出过滤**必须同一份**）
+
+        ⚠️ v5.4.8 补了一批**实际会漏掉**的关键字：
+           原来的表只有 `Exception`（首字母大写），
+           而 Android logcat 里最典型的崩溃行是
+           **`FATAL EXCEPTION`**（**全大写**）→ 漏掉！
+           同类漏掉的还有 `Fatal signal`（native 崩溃）、
+           `ANR in`（卡死）、`crashed`。
+
+           这类关键字表必须覆盖 logcat 的**真实格式**，
+           不能凭印象写 —— 实测漏了 4 类最关键的。
+
+        ⚠️ v5.4.8 二次补充：
+           - **中文**错误词补全（原来只有「失败」，
+             漏了「出错」「错误」「异常」—— 国内 App 日志常见）
+           - 日志里**没有**英文错误词、只有中文时也能识别
+        """
+        return (
+            # 应用自身标记
+            "✗", "失败",
+            # ⚠️ 中文错误词（原来只有「失败」，实测漏了「出错」「错误」「异常」）
+            "出错", "错误", "异常",
+            # 通用英文（三种大小写都要 —— logcat 里三种都出现过）
+            "error", "Error", "ERROR",
+            "fail", "Fail", "FAIL",
+            "failed", "Failed", "FAILED",
+            # Java 异常
+            "Exception", "exception", "EXCEPTION",
+            "Throwable", "Error", "OutOfMemory",
+            # Android 特有
+            "FATAL", "Fatal", "fatal",
+            "ANR", "anr",
+            "signal", "SIGSEGV", "SIGABRT",
+            "crashed", "crash", "Crash",
+            # ⚠️ logcat 里进程崩溃的实际措辞是 **"has died"**（不是 crashed）
+            "has died", "has crashed",
+            "Traceback", "traceback",
+            "abort", "Abort",
+        )
+
+    # ⚠️ logcat 的**级别前缀** —— 这是最可靠的错误信号，
+    #    比关键字表可靠得多（关键字表永远会有漏的词）。
+    #    格式： `E/Tag( 1234): msg` / `F/libc    ( 1234): msg`
+    #    E=Error  F=Fatal  W=Warning（警告不算错误）
+    _ERROR_LEVEL_RE = re.compile(r'^[EF]\s*/')
+
+    @classmethod
+    def _is_error_line(cls, line):
+        """判断一行是否是错误行
+
+        ⚠️ **显示过滤与导出过滤必须用同一个判定** ——
+           否则会出现「界面上只显示错误行，导出的却是全量」
+           这种「UI 说了、实际没做」的问题（v5.4.8 修的缺陷）。
+
+        判定顺序：
+          ① **logcat 级别前缀 E/ 或 F/** —— 最可靠
+             （哪怕消息里一个错误词都没有，它也是错误行）
+          ② 关键字表命中（覆盖中文日志和工具自身输出的行）
+        """
+        if not line.strip():
+            return False
+        # ① 级别前缀
+        if cls._ERROR_LEVEL_RE.match(line):
+            return True
+        # ② 关键字
+        return any(m in line for m in cls._error_markers())
+
+    def _get_log_content(self, respect_filter=True):
+        """取终端内容
+
+        ⚠️ v5.4.8 修的缺陷：**「只看错误」之前只影响显示，导出仍是全量**。
+           `tag_configure(elide=True)` 只是把行**画出来时**省略，
+           `text.get("1.0", tk.END)` 拿到的仍是**全部文本** ——
+           用户勾了「只看错误」再导出，导出的却是完整日志，
+           以为导了错误日志其实没导。
+
+           现在导出按当前过滤状态重新过滤一遍，
+           且**与显示过滤共用同一份关键字**（`_error_markers()`），
+           避免两处判定不一致。
+        """
+        text = self.app.status_text
+        content = text.get("1.0", tk.END)
+        if not respect_filter:
+            return content
+        try:
+            only_error = bool(self.app.log_error_only_var.get())
+        except Exception:
+            only_error = False
+        if not only_error:
+            return content
+        kept = [ln for ln in content.split("\n")
+                if not ln.strip() or self._is_error_line(ln)]
+        return "\n".join(kept)
+
     def _export_log(self):
-        """把终端输出导出到文件"""
+        """把终端输出导出到文件
+
+        ⚠️ 导出内容**跟着「只看错误」过滤**（见 `_get_log_content`）
+        """
         if not hasattr(self.app, 'status_text'):
             return
         try:
@@ -1768,21 +1901,36 @@ class LayoutV4:
             if not path:
                 return
 
-            content = self.app.status_text.get("1.0", tk.END)
+            content = self._get_log_content()
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
 
-            self.app.update_status(f"已导出到: {path}", True)
+            # 提示里说明导的是全量还是过滤后的（避免又产生误解）
+            _filtered = self._is_error_only()
+            _what = "（仅错误行）" if _filtered else "（全部内容）"
+            self.app.update_status(f"已导出到: {path} {_what}", True)
         except Exception as e:
             self.app.update_status(f"导出失败: {e}", False)
 
-    def _copy_all_output(self):
-        """复制终端全部内容到剪贴板"""
+    def _is_error_only(self):
+        """当前是否处于「只看错误」状态"""
         try:
+            return bool(self.app.log_error_only_var.get())
+        except Exception:
+            return False
+
+    def _copy_all_output(self):
+        """复制终端内容到剪贴板
+
+        ⚠️ v5.4.8：**跟着「只看错误」过滤**（与导出一致）
+           之前是硬取全量文本 —— 勾了「只看错误」复制出来的还是完整日志。
+        """
+        try:
+            content = self._get_log_content()
             self.app.status_text.clipboard_clear()
-            self.app.status_text.clipboard_append(
-                self.app.status_text.get("1.0", tk.END))
-            self.app.update_status("已复制终端内容到剪贴板", True)
+            self.app.status_text.clipboard_append(content)
+            _what = "（仅错误行）" if self._is_error_only() else "（全部内容）"
+            self.app.update_status(f"已复制终端内容到剪贴板 {_what}", True)
         except Exception as e:
             self.app.update_status(f"复制失败: {e}", False)
 

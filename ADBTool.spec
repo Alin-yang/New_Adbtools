@@ -72,6 +72,11 @@ a = Analysis(
         'gui.device_picker',
         # ⚠️ v5.4.5 导航图标（gui/nav_icons.py）—— 同上，必须显式列出来
         'gui.nav_icons',
+        # ⚠️ v5.4.8 日志错误聚类 + 分析结果窗口
+        #    app.py 里是**函数体内** import（延迟加载，失败不拖垮启动），
+        #    PyInstaller 静态分析抓不到 → 必须显式列出
+        'modules.log_analyzer',
+        'gui.log_analysis_window',
     ],
     hookspath=[],
     hooksconfig={},

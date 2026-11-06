@@ -31,6 +31,9 @@ STEPS = [
     ('整机 CPU 忙碌率公式回归', 'test_perf_cpu_formula.py'),
     ('性能基线入口回归', 'test_perf_baseline_entry.py'),
     ('终端搜索功能测试', 'test_log_search.py'),
+    ('终端导出跟随过滤', 'test_log_export_filter.py'),
+    ('日志错误聚类测试', 'test_log_analyzer.py'),
+    ('一键诊断包测试', 'test_diagnostic_package.py'),
     ('v4 工作台布局测试', 'test_layout_v4.py'),
 ]
 

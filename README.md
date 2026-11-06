@@ -685,7 +685,64 @@ adb shell am broadcast -a ADB_INPUT_TEXT --es msg "你好"
 
 ## 十、版本历史
 
-### v5.4.7（当前版本）—— 整机 CPU 公式修正 + 性能面板加基线入口
+### v5.4.8（当前版本）—— 日志错误聚类 + 一键诊断包 + 导出跟随过滤
+
+针对 TV 测试的真实工作流（刷机 → 装 APK → 操作 → 出问题 → **抓日志发同事**），
+补上「加工」这一环 —— 之前只有「采集」完整，日志拿到手还得自己看。
+
+#### ① 「只看错误」的导出/复制跟随过滤（修缺陷）
+
+`layout_v4.py` 的「只看错误」用 `tag_configure(elide=True)` 隐藏非错误行，
+但 **elide 只影响显示**。而导出/复制取的是 `status_text.get("1.0", tk.END)`
+—— **拿到的是全部文本**。用户勾了「只看错误」再导出，导出的还是全量。
+
+修法：抽出共用方法 `_error_markers()` + `_visible_log_text()`，
+显示过滤与导出过滤**共用同一份判定逻辑**，杜绝两处不一致。
+
+顺带发现**错误关键字表漏了关键格式**（实测 logcat 样本）：
+`FATAL EXCEPTION`（全大写，原表只有首字母大写的 `Exception`）、
+`Fatal signal`、`ANR`、`has died` 全部漏判 —— 而这些恰恰是最关键的错误行。
+已扩充关键字表并加「覆盖度」测试（真实 logcat 行 + 反向的正常行）。
+
+#### ② 错误聚类与异常栈提取（新增 `modules/log_analyzer.py`）
+
+**解决的痛点**：一个 `NullPointerException` 刷 500 次，仍是 500 行 —— 你还是得自己数。
+
+能力：
+- 解析 logcat（`级别/标签( PID): 内容` 格式）→ 结构化行
+- 提取 5 类事件：`fatal`（FATAL EXCEPTION 崩溃链）/ `java`（Java 异常）/
+  `native`（signal 崩溃）/ `anr`（卡死）/ `died`（进程死亡）
+- **归一化聚类**：去掉行号、地址、时间戳、对象 hash →
+  行号不同的两次 NPE 聚成同一类，统计频次，Top N 排序
+- 保留完整栈帧 + `Caused by` 链
+- 一句话摘要（纯中文）
+
+UI：诊断页新增「智能分析」分区 → 「错误分析」按钮 → 弹窗展示
+（摘要 + 按频次排序的列表 + 完整栈帧），可导出报告文本。
+
+⚠️ 关键实现点：`FATAL EXCEPTION: main` 里的 "FATAL EXCEPTION" **不是 Java 类名**
+（没有包前缀、也不以 Exception/Error 结尾），异常正则匹配不到 → 要单独识别，
+否则整条崩溃链（异常类型 + 栈帧 + Caused by）都识别不出来。
+
+#### ③ 一键诊断包（新增）
+
+以前要一个一个导（导出 ANR、导出 Monkey…），发给同事得手动凑一堆文件。
+现在一次打包成 zip：设备属性 / 系统日志(logcat) / dumpsys 三件套(meminfo、cpuinfo、
+window) / 已安装包列表 / ANR 追踪。
+
+⚠️ **每项收集失败不影响其它项** —— 设备可能没 root（拉不到 ANR）、
+某个 dumpsys 不支持……**部分失败也要能出包**，并在包内 README 里说明缺了什么。
+
+⚠️ 踩到的坑：`run_adb_command` 的参数名是 **`target_device`**（不是 `target`）；
+`get_ip_address()` 读 Tk 控件，**必须在主线程取**，后台线程读控件会抛
+"main thread is not in main loop"。
+
+#### 新增防回归测试（check.bat 14 → 17 步）
+- `tests/test_log_export_filter.py` —— 导出/复制跟随过滤 + 关键字覆盖度
+- `tests/test_log_analyzer.py` —— 聚类算法（含「行号不同聚成同类」核心断言）
+- `tests/test_diagnostic_package.py` —— 打包逻辑（mock adb）
+
+### v5.4.7 —— 整机 CPU 公式修正 + 性能面板加基线入口
 
 #### ① 整机 CPU 占用恒为 100%（真机验证发现的严重 bug）
 
@@ -1180,4 +1237,4 @@ GitHub：https://github.com/Alin-yang/New_Adbtools
 ---
 
 **最后更新**: 2026-11-05
-**文档版本**: v5.4.7
+**文档版本**: v5.4.8

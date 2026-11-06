@@ -3197,6 +3197,155 @@ class ADBToolApp:
 
         self.run_in_background(_work)
 
+    # ------------------------------------------------------------ 错误分析
+    def analyze_log_errors(self):
+        """分析终端日志里的错误，聚类并按频次排序
+
+        ⚠️ v5.4.8 新增。解决「同一个异常刷 500 次仍是 500 行」的问题：
+           把相同异常折叠成一条 + 统计频次 + Top N 排序，
+           一眼看出**哪个错误最频繁**（那才是优先要修的）。
+
+        数据来源：
+           ① 当前终端里的内容（实时分析刚抓的日志）
+           ② 若终端为空 → 读磁盘上的 logcat 文件
+        """
+        try:
+            from modules import log_analyzer as LA
+            content = ''
+            # 优先用终端里的实时内容
+            if hasattr(self, 'status_text'):
+                content = self.status_text.get("1.0", tk.END)
+            if not content.strip():
+                # 终端空 → 读磁盘上的日志文件
+                _p = getattr(self, 'log_file_path', None)
+                if _p and os.path.exists(_p):
+                    with open(_p, 'r', encoding='utf-8', errors='replace') as f:
+                        content = f.read()
+            if not content.strip():
+                self.update_status("⚠ 没有可分析的日志（先捕获日志或导出到文件）", False)
+                return
+
+            rep = LA.analyze(content)
+            if not rep['clusters']:
+                self.update_status(
+                    f"未发现错误（共分析 {rep['total_lines']} 行）", True)
+                return
+
+            # 弹窗展示
+            try:
+                self._open_log_analysis(rep)
+            except Exception as e:
+                logging.error(f"[错误分析] 弹窗失败: {e}", exc_info=True)
+                self.update_status(f"⚠ 分析结果弹窗失败: {e}", False)
+        except Exception as e:
+            logging.error(f"[错误分析] 失败: {str(e)}", exc_info=True)
+            self.update_status(f"✗ 错误分析失败: {str(e)}", False)
+
+    def _open_log_analysis(self, report):
+        """弹出错误分析结果窗口"""
+        from gui.log_analysis_window import LogAnalysisWindow
+        win = LogAnalysisWindow(self, report)
+        return win
+
+    # ------------------------------------------------------------ 诊断包
+    def collect_diagnostic_package(self):
+        """一键收集诊断包（logcat + ANR + dumpsys + 设备属性）
+
+        ⚠️ v5.4.8 新增。以前要一个一个导（导出 ANR、导出 Monkey…），
+           发给同事或贴问题单时得手动凑一堆文件。
+           现在一次打包成 zip。
+
+        ⚠️ **每项收集失败不影响其它项** ——
+           设备可能没有 root（拉不到 ANR）、某个 dumpsys 不支持……
+           部分失败也要能出包，并在摘要里说明缺了什么。
+        """
+        # ⚠️ **设备标识必须在主线程取**（get_ip_address 读 Tk 控件，
+        #    后台线程读控件会抛 "main thread is not in main loop"）
+        _target = self.get_ip_address()
+
+        def _work():
+            import zipfile
+            from utils import (get_user_defined_log_path, ensure_directory,
+                               run_adb_command, timestamp_time)
+
+            base = get_user_defined_log_path(self)
+            stamp = timestamp_time()
+            out_dir = ensure_directory(os.path.join(base, "diagnostic"))
+            pkg_dir = ensure_directory(os.path.join(out_dir, f"diag_{stamp}"))
+            collected = []
+            failed = []
+
+            def _collect(name, cmd, filename, timeout=25):
+                """收集一项；失败只记录不中断"""
+                try:
+                    # ⚠️ 参数名是 **target_device**（不是 target）
+                    out, ok = run_adb_command(cmd, timeout=timeout,
+                                              target_device=_target)
+                    if out and out.strip():
+                        p = os.path.join(pkg_dir, filename)
+                        with open(p, "w", encoding="utf-8", errors="replace") as f:
+                            f.write(out)
+                        collected.append((name, filename, len(out)))
+                        return True
+                    failed.append((name, "无输出" if ok else "命令失败"))
+                except Exception as e:
+                    failed.append((name, str(e)))
+                return False
+
+            # ① 设备属性（最快、最有用）
+            _collect("设备属性", "adb shell getprop", "getprop.txt")
+            # ② logcat 全量
+            _collect("系统日志", "adb shell logcat -d -v threadtime",
+                     "logcat.txt", timeout=40)
+            # ③ dumpsys 三件套
+            _collect("内存信息", "adb shell dumpsys meminfo", "dumpsys_meminfo.txt")
+            _collect("CPU 信息", "adb shell dumpsys cpuinfo", "dumpsys_cpuinfo.txt")
+            _collect("窗口信息", "adb shell dumpsys window windows",
+                     "dumpsys_window.txt")
+            # ④ 已安装包列表
+            _collect("已安装应用", "adb shell pm list packages -3",
+                     "packages.txt")
+            # ⑤ ANR（需要权限，可能失败）
+            _collect("ANR 追踪", "adb shell ls -t /data/anr", "anr_ls.txt")
+
+            # ⑥ 汇总说明（即使全失败也要有）
+            summary = ["ADB Tool 诊断包", "=" * 40,
+                       f"生成时间: {stamp}",
+                       f"目标设备: {_target or '(未指定)'}",
+                       f"成功收集 {len(collected)} 项，失败 {len(failed)} 项", ""]
+            if collected:
+                summary.append("── 已收集 ──")
+                for n, fn, sz in collected:
+                    summary.append(f"  ✓ {n}  ({fn}, {sz} 字节)")
+            if failed:
+                summary.append("")
+                summary.append("── 未收集（不影响其余内容）──")
+                for n, why in failed:
+                    summary.append(f"  ✗ {n}: {why}")
+            summary_path = os.path.join(pkg_dir, "README.txt")
+            with open(summary_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(summary))
+
+            # ⑦ 打包
+            zip_path = os.path.join(out_dir, f"diagnostic_{stamp}.zip")
+            try:
+                with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for root, _dirs, files in os.walk(pkg_dir):
+                        for fn in files:
+                            full = os.path.join(root, fn)
+                            zf.write(full, os.path.relpath(full, pkg_dir))
+            except Exception as e:
+                self._update_status_safe(f"✗ 打包失败: {e}", False)
+                return
+
+            _msg = f"诊断包已生成: {zip_path}"
+            if failed:
+                _msg += f"（{len(failed)} 项未收集，详见包内 README）"
+            self._update_status_safe(_msg, True)
+            self.update_status(_msg, True)
+
+        self.run_in_background(_work)
+
     @require_device_connected
     def remount(self):
         """重新挂载分区"""
