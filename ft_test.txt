@@ -1,4 +1,0 @@
-FastTable 30行滚动: 5.42 ms
-FastTable 60行滚动: 12.24 ms
-set_rows(60行) 耗时: 18.38 ms/次
-表头点击后表头文案: ['时间', 'CPU % ▲', 'PSS MB']

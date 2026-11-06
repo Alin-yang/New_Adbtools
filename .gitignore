@@ -107,3 +107,19 @@ verify_final.txt
 verify_an.txt
 verify_diag.txt
 vf2.txt
+
+# 临时验证输出（脚本遗留）
+verify_bl.txt
+verify_final.txt
+verify_an.txt
+verify_diag.txt
+vf2.txt
+ft_test.txt
+tv_rows.txt
+tv_iso.txt
+tv_iso3.txt
+perf_ui.txt
+scroll_diag.txt
+scroll2.txt
+scroll3.txt
+scroll4.txt
