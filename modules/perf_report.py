@@ -174,7 +174,10 @@ class PerfReportWindow:
         self.metric_buttons: Dict[str, ttk.Button] = {}
         self._trend_metric = 'cpu'
 
+        # ⚠️ v5.4.10：补上 **Java Heap / Native Heap** 两个趋势指标 ——
+        #    原来只有 CPU/PSS/RSS/帧率/卡顿率，想看 java heap 的趋势都没入口。
         metrics = [('cpu', 'CPU 占用'), ('pss', '内存 PSS'),
+                   ('java', 'Java Heap'), ('native', 'Native Heap'),
                    ('rss', 'RSS 内存'), ('fps', '帧率'), ('jank', '卡顿率')]
         for key, label in metrics:
             btn = ttk.Button(bar, text=label, style='Secondary.TButton',
@@ -200,12 +203,22 @@ class PerfReportWindow:
         history = self.session.get('history', [])
         key = self._trend_metric
         points = []
+        # ⚠️ v5.4.10：**收集时间标签**（用户反馈「连时间标示都没有」）
+        #   x 轴要显示每个点对应哪一刻，而不是光秃秃的序号
+        x_labels = {}
         for i, row in enumerate(history):
             v = row.get(key)
             if v is not None:
                 points.append((float(i), float(v)))
+                _ts = row.get('ts')
+                if _ts:
+                    x_labels[i] = str(_ts)
         if not points:
             self.trend_chart.set_series([{'name': key, 'points': []}])
+            self.trend_chart.x_labels = {}
+            # ⚠️ 区分「设备不支持」和「没采到」
+            self.trend_chart.empty_hint = self._empty_reason(key)
+            self.trend_chart.redraw()
             return
 
         color = self.palette.accent
@@ -224,13 +237,68 @@ class PerfReportWindow:
         self.trend_chart.set_series(series)
         self.trend_chart.set_baseline(base)
         self.trend_chart.y_label = self._metric_label(key)
+        # ⚠️ v5.4.10：X 轴时间标签 + Y 轴单位
+        self.trend_chart.x_labels = x_labels
+        self.trend_chart.y_unit = self._metric_unit(key)
+        self.trend_chart.x_label = '时间'
+        self.trend_chart.empty_hint = ''
+        self.trend_chart.redraw()
+
+    def _metric_unit(self, key):
+        """指标的显示单位（v5.4.10）
+
+        ⚠️ 原来 Y 轴只有裸数字 → 看不出 30 是 MB 还是 %。
+        """
+        if key in ('cpu',):
+            return '%'
+        if key in ('pss', 'rss', 'java', 'native'):
+            return 'MB'
+        if key == 'fps':
+            return 'fps'
+        if key in ('jank',):
+            return '%'
+        if key in ('p95_frame', 'p99_frame'):
+            return 'ms'
+        return ''
+
+    def _empty_reason(self, key):
+        """没有数据时说明原因（v5.4.10）
+
+        ⚠️ **区分两种「没数据」**：
+          - 设备**不支持**这个指标（如老设备没有渲染统计）
+          - 支持但**本次没采到**（如没填包名 / 采样太短）
+        不区分的话用户会以为是工具坏了。
+        """
+        # 设备不支持的指标（采集命令本身就没有统计段）
+        unsupported = {
+            'fps': '该设备未提供渲染统计（dumpsys gfxinfo 无统计数据）\n'
+                   '部分 Android 5~7 的电视盒子不支持帧率采集',
+            'jank': '该设备未提供渲染统计（dumpsys gfxinfo 无统计数据）',
+            'p95_frame': '该设备未提供渲染统计',
+            'p99_frame': '该设备未提供渲染统计',
+        }
+        if key in unsupported:
+            return unsupported[key]
+        # 需要包名才有意义的指标
+        if key in ('java', 'native') and not self.session.get('package'):
+            return ('需要指定包名才能采集进程级内存\n'
+                    '（整机模式只能看总内存）')
+        if key in ('java', 'native'):
+            return ('本次未采集到该指标\n'
+                    '（部分设备用 Dalvik Heap 而非 Java Heap）')
+        return '本次采样未产生该指标的数据'
 
     def _on_trend_hover(self, info):
         if not info:
             self.hover_label.configure(text="")
             return
+        # ⚠️ v5.4.10：**显示时间**（不只是序号）
+        _ts = self.trend_chart.x_labels.get(int(info['x']))
+        _when = f"  {_ts}" if _ts else f"  采样#{int(info['x']) + 1}"
+        _unit = self.trend_chart.y_unit
+        _val = f"{info['y']:.2f}" + (f" {_unit}" if _unit else "")
         self.hover_label.configure(
-            text=f"{info['name']}  采样#{int(info['x'])}   {info['y']:.2f}")
+            text=f"{info['name']}  {_when}   {_val}")
 
     # ------------------------------------------------------------ 线程页
     def _build_threads_page(self):
@@ -418,18 +486,27 @@ class PerfReportWindow:
         stats = self.session.get('stats', {})
         conclusions = self.session.get('conclusions', [])
 
+        # ⚠️ v5.4.10：补上 **Java Heap / Native Heap** 两张卡 ——
+        #    原来只有 CPU / PSS / FPS 三张，用户问「java heap native
+        #    为什么没有数据」—— 因为**根本没有这两张卡**。
         cards = [
             ('cpu', 'CPU 占用', '%'),
             ('pss', '内存 PSS', ' MB'),
+            ('java', 'Java Heap', ' MB'),
+            ('native', 'Native Heap', ' MB'),
             ('fps', '帧率', ''),
         ]
         for key, label, unit in cards:
             m = stats.get(key, {})
             cur = m.get('cur')
             sub = self._compare_sub(key)
-            self._card(label,
-                       '--' if cur is None else f"{cur:.1f}{unit}",
-                       sub, self._metric_color(key, cur))
+            if cur is None:
+                # ⚠️ 没数据时**说明原因**，而不是光一个 '--'
+                sub = self._empty_reason(key).split('\n')[0]
+                self._card(label, '无数据', sub, self.palette.text_dim)
+            else:
+                self._card(label, f"{cur:.1f}{unit}", sub,
+                           self._metric_color(key, cur))
 
         # 结论卡
         if conclusions:

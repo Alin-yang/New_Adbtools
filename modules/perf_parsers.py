@@ -128,13 +128,35 @@ def parse_meminfo(output: str) -> Dict[str, Optional[float]]:
     if m:
         pss = int(m.group(1))
 
+    # ── Java Heap ────────────────────────────────────────
+    # ⚠️ **两种命名**（v5.4.10 真机验证发现）：
+    #    Android 8+  ：`Java Heap:   12345`            （App Summary 格式）
+    #    Android 7-  ：`  Dalvik Heap    32257    32056`（表格格式）
+    #    老版本把 Java 堆叫 **Dalvik**（ART 之前的时代）。
+    #    只认 `Java Heap` → 老设备上 java 永远是 None。
     m = re.search(r'(?i)java\s+heap:\s+(\d+)', output or '')
+    if not m:
+        m = re.search(r'(?i)^\s*dalvik\s+heap\s+(\d+)', output or '', re.M)
     if m:
         java = int(m.group(1))
 
+    # ── Native Heap ──────────────────────────────────────
+    # ⚠️ 表格格式是 `  Native Heap    22261    22204 ...`（无冒号，第一列即 PSS）
     m = re.search(r'(?i)native\s+heap:\s+(\d+)', output or '')
+    if not m:
+        m = re.search(r'(?i)^\s*native\s+heap\s+(\d+)', output or '', re.M)
     if m:
         native = int(m.group(1))
+
+    # ── 表格格式的 TOTAL 行 ──────────────────────────────
+    # ⚠️ 表格格式里没有 `Total PSS:`，PSS 在 `        TOTAL    70309    58856` 那行
+    # ⚠️ **两种 TOTAL 写法都要认**：
+    #    表格格式 `  TOTAL    70309    58856`（无冒号）
+    #    App Summary `  TOTAL:   70309`（有冒号）
+    if pss is None:
+        m = re.search(r'(?i)^\s*total\s*:?\s+(\d+)', output or '', re.M)
+        if m:
+            pss = int(m.group(1))
 
     return {'pss': to_mb(pss), 'java': to_mb(java), 'native': to_mb(native)}
 

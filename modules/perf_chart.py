@@ -148,6 +148,13 @@ class LineChart(ChartBase):
         self.baseline: Optional[Dict[str, Any]] = None
         self.y_label = ''
         self.x_label = ''
+        # ⚠️ v5.4.10：**X 轴的时间标签**（用户反馈「连时间标示都没有」）
+        #   {序号: 'HH:MM:SS'} —— 与 points 的 x（序号）对应
+        self.x_labels: Dict[int, str] = {}
+        # 单位（如 'MB' / '%' / 'fps'）—— 显示在 Y 轴刻度旁
+        self.y_unit = ''
+        # 空数据时的提示（区分「设备不支持」和「没采到」）
+        self.empty_hint = ''
         self._hover_points: List[Tuple[float, Dict[str, Any]]] = []
 
     def set_series(self, series: List[Dict[str, Any]]):
@@ -168,15 +175,15 @@ class LineChart(ChartBase):
         if self.baseline:
             all_pts += list(self.baseline.get('points', []))
         if not all_pts:
-            c.create_text(x0 + w / 2, y0 + h / 2, text="暂无数据",
-                          fill=p.text_dim, font=('Microsoft YaHei UI', 9))
+            # ⚠️ v5.4.10：**区分「为什么没数据**」——
+            #    「设备不支持」和「没采到」对用户是完全不同的两件事。
+            self._draw_empty(x0, y0, w, h)
             return
 
         xs = [pt[0] for pt in all_pts]
         ys = [pt[1] for pt in all_pts if pt[1] is not None]
         if not ys:
-            c.create_text(x0 + w / 2, y0 + h / 2, text="暂无数据",
-                          fill=p.text_dim, font=('Microsoft YaHei UI', 9))
+            self._draw_empty(x0, y0, w, h)
             return
 
         x_min, x_max = min(xs), max(xs)
@@ -197,16 +204,31 @@ class LineChart(ChartBase):
             yv = y_min + (y_max - y_min) * i / 4
             yy = py(yv)
             # 顶部刻度下移 4px，避免与绘图区上方的标签撞在一起
+            # ⚠️ v5.4.10：**带上单位**（原来只有裸数字 → 看不出是 MB 还是 %）
+            _txt = f"{yv:.0f}"
+            # ⚠️ v5.4.10：**单位只标在顶部刻度** ——
+            #    原来 0 和 4 都标 → 左下角「0 %」与坐标轴文字撞在一起。
+            #    单位在顶部更醒目（那里是最大值），且不与 X 轴标签打架。
+            if self.y_unit and i == 4:
+                _txt += f" {self.y_unit}"
             c.create_text(x0 - 6, yy + (4 if i == 0 else 0),
-                          text=f"{yv:.0f}", anchor='e',
+                          text=_txt, anchor='e',
                           fill=p.text_dim, font=('Microsoft YaHei UI', 8))
         # 坐标轴
         c.create_line(x0, y0, x0, y0 + h, fill=p.axis, width=1)
         c.create_line(x0, y0 + h, x0 + w, y0 + h, fill=p.axis, width=1)
-        # 纵轴单位（放在轴线左侧，不与图例重叠）
+        # 纵轴标题（放在绘图区**左上角内侧**）
+        # ⚠️ v5.4.10：原来放在 y0-8（绘图区上方），会与顶部刻度标签、
+        #    图例挤在一起 → 视觉重叠。移到左上角内侧更清爽。
         if self.y_label:
-            c.create_text(4, y0 - 8, text=self.y_label, anchor='w',
+            # ⚠️ v5.4.10：下移 2px —— 原来贴得太紧，会与顶部刻度标签重叠
+            c.create_text(x0 + 4, y0 + 5, text=self.y_label, anchor='nw',
                           fill=p.text_dim, font=('Microsoft YaHei UI', 8))
+
+        # ── X 轴刻度（v5.4.10）──────────────────────────────
+        # ⚠️ 用户反馈「连时间标示都没有」——原来 X 轴**完全空白**，
+        #    只有一条横线，看不出每个点对应哪一刻。
+        self._draw_x_axis(x0, y0, w, h, px, x_min, x_max)
 
         # 基线（虚线）
         if self.baseline and self.baseline.get('points'):
@@ -223,6 +245,15 @@ class LineChart(ChartBase):
                 color = s.get('color') or p.series[idx % len(p.series)]
                 c.create_line([v for pt in pts for v in (px(pt[0]), py(pt[1]))],
                               fill=color, width=2, smooth=True)
+                # ⚠️ v5.4.10：**画数据点标记** ——
+                #    光一条平滑曲线看不出「实际采样了多少个点」、
+                #    「点之间是不是有跳变」。小圆点让采样点一目了然。
+                #    点太多时（>60）会糊成一片 → 跳过。
+                if len(pts) <= 60:
+                    for x, y in pts:
+                        c.create_oval(px(x) - 2, py(y) - 2,
+                                       px(x) + 2, py(y) + 2,
+                                       fill=color, outline=p.bg, width=1)
                 for x, y in pts:
                     self._hover_points.append((px(x), {'name': s.get('name', ''),
                                                        'x': x, 'y': y}))
@@ -234,6 +265,79 @@ class LineChart(ChartBase):
             c.create_line(lx, y0 - 8, lx + 14, y0 - 8, fill=color, width=2)
             c.create_text(lx + 19, y0 - 8, text=name, anchor='w',
                           fill=p.text, font=('Microsoft YaHei UI', 8))
+
+    def _draw_x_axis(self, x0, y0, w, h, px, x_min, x_max):
+        """画 X 轴刻度 + **时间标签**（v5.4.10）
+
+        ⚠️ 用户反馈「连时间标示都没有」——
+           原来 X 轴只有一条横线，完全看不出数据对应哪一刻。
+
+        做法：
+          - 最多 6 个刻度（多了会挤在一起）
+          - 优先用 `x_labels`（{序号: 'HH:MM:SS'}）里的真实时间戳
+          - 没有时间戳时退回序号（1、2、3…）
+        """
+        c = self.canvas
+        p = self.palette
+        span = x_max - x_min
+        if span <= 0:
+            return
+        # 刻度数量：按宽度决定，最多 6 个
+        n = max(2, min(6, int(w // 70) + 2))
+        # 取整到"好看"的间隔
+        raw = span / (n - 1)
+        step = max(1, int(raw))
+        # 从第一个有标签的点开始
+        start = int(x_min)
+        ticks = []
+        v = start
+        while v <= x_max and len(ticks) < n:
+            ticks.append(v)
+            v += step
+        if not ticks:
+            return
+
+        for tv in ticks:
+            tx = px(tv)
+            if tx < x0 - 2 or tx > x0 + w + 2:
+                continue
+            # 刻度线（短竖线）
+            c.create_line(tx, y0 + h, tx, y0 + h + 3, fill=p.axis, width=1)
+            # 标签：有时间戳用时间戳，否则用序号
+            lbl = self.x_labels.get(tv)
+            if lbl is None:
+                lbl = f"{int(tv) + 1}"
+            # 首尾标签靠边对齐，避免超出画布
+            anchor = 'center'
+            if tx - x0 < 24:
+                anchor = 'w'
+            elif x0 + w - tx < 24:
+                anchor = 'e'
+            c.create_text(tx, y0 + h + 6, text=lbl, anchor=anchor,
+                          fill=p.text_dim, font=('Microsoft YaHei UI', 7))
+
+        # X 轴标题（右下角，不与刻度打架）
+        if self.x_label:
+            c.create_text(x0 + w, y0 + h + 16, text=self.x_label, anchor='e',
+                          fill=p.text_dim, font=('Microsoft YaHei UI', 7))
+
+    def _draw_empty(self, x0, y0, w, h):
+        """画「没有数据」时的提示
+
+        ⚠️ v5.4.10：**要说明原因** ——
+           「设备不支持该指标」和「本次没采到数据」是完全不同的两件事，
+           都写「暂无数据」会让用户以为是工具坏了。
+        """
+        c = self.canvas
+        p = self.palette
+        c.create_text(x0 + w / 2, y0 + h / 2 - 10,
+                      text="暂无数据", fill=p.text_dim,
+                      font=('Microsoft YaHei UI', 9))
+        if self.empty_hint:
+            c.create_text(x0 + w / 2, y0 + h / 2 + 8,
+                          text=self.empty_hint, fill=p.text_dim,
+                          font=('Microsoft YaHei UI', 8),
+                          width=w - 20, justify='center')
 
     def _hover_info(self, event) -> Optional[Dict[str, Any]]:
         best = None

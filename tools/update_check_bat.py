@@ -29,6 +29,7 @@ STEPS = [
     ('性能监控 v4 解析与分析测试', 'test_perf_v4.py'),
     ('性能实时刷新链路测试', 'test_perf_live_refresh.py'),
     ('整机 CPU 忙碌率公式回归', 'test_perf_cpu_formula.py'),
+    ('性能报告与图表回归', 'test_perf_report_chart.py'),
     ('性能基线入口回归', 'test_perf_baseline_entry.py'),
     ('终端搜索功能测试', 'test_log_search.py'),
     ('终端导出跟随过滤', 'test_log_export_filter.py'),
